@@ -1,10 +1,11 @@
 import { useRef, useMemo, useState, useEffect } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Sphere } from "@react-three/drei";
+import { Canvas, useFrame, extend } from "@react-three/fiber";
+import { OrbitControls, Sphere, shaderMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { EffectComposer, Bloom, ChromaticAberration, Noise } from "@react-three/postprocessing";
 import { BlendFunction } from "postprocessing";
 import { type AudioData } from "@/hooks/use-audio-analyzer";
+import { type ImageFilterId } from "@/lib/visualizer-presets";
 
 interface AudioVisualizerProps {
   getAudioData: () => AudioData;
@@ -13,6 +14,7 @@ interface AudioVisualizerProps {
     speed: number;
     colorPalette: string[];
     presetName: string;
+    imageFilter?: ImageFilterId;
   };
   backgroundImage?: string | null;
 }
@@ -608,17 +610,222 @@ function CosmicWeb({ getAudioData, settings }: { getAudioData: () => AudioData, 
   );
 }
 
-// Background plane for thumbnail
-function BackgroundImage({ imageUrl }: { imageUrl: string }) {
+// Psy trance shader material for background image
+const PsyFilterMaterial = shaderMaterial(
+  {
+    uTexture: null,
+    uTime: 0,
+    uIntensity: 1.0,
+    uFilterType: 0,
+    uEnergy: 0,
+  },
+  // Vertex shader
+  `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  // Fragment shader
+  `
+    uniform sampler2D uTexture;
+    uniform float uTime;
+    uniform float uIntensity;
+    uniform int uFilterType;
+    uniform float uEnergy;
+    varying vec2 vUv;
+    
+    #define PI 3.14159265359
+    
+    vec2 kaleidoscope(vec2 uv, float segments) {
+      vec2 centered = uv - 0.5;
+      float angle = atan(centered.y, centered.x);
+      float radius = length(centered);
+      float segmentAngle = PI * 2.0 / segments;
+      angle = mod(angle, segmentAngle);
+      angle = abs(angle - segmentAngle * 0.5);
+      return vec2(cos(angle), sin(angle)) * radius + 0.5;
+    }
+    
+    vec2 mirror(vec2 uv) {
+      vec2 centered = uv - 0.5;
+      float angle = atan(centered.y, centered.x) + uTime * 0.3;
+      float radius = length(centered);
+      vec2 mirrored = vec2(abs(centered.x), abs(centered.y));
+      float wave = sin(angle * 4.0 + uTime) * 0.1 * uIntensity;
+      return mirrored + 0.5 + wave;
+    }
+    
+    vec3 colorShift(vec3 color, float shift) {
+      float r = color.r;
+      float g = color.g;
+      float b = color.b;
+      float angle = shift * PI * 2.0;
+      mat3 rotation = mat3(
+        0.299 + 0.701 * cos(angle), 0.587 - 0.587 * cos(angle), 0.114 - 0.114 * cos(angle),
+        0.299 - 0.299 * cos(angle), 0.587 + 0.413 * cos(angle), 0.114 - 0.114 * cos(angle),
+        0.299 - 0.299 * cos(angle), 0.587 - 0.587 * cos(angle), 0.114 + 0.886 * cos(angle)
+      );
+      return rotation * color;
+    }
+    
+    vec2 wave(vec2 uv) {
+      float waveX = sin(uv.y * 10.0 + uTime * 2.0) * 0.02 * uIntensity;
+      float waveY = cos(uv.x * 10.0 + uTime * 2.0) * 0.02 * uIntensity;
+      return uv + vec2(waveX, waveY);
+    }
+    
+    vec2 pixelate(vec2 uv, float pixels) {
+      float dx = 1.0 / pixels;
+      float dy = 1.0 / pixels;
+      return vec2(dx * floor(uv.x / dx), dy * floor(uv.y / dy));
+    }
+    
+    void main() {
+      vec2 uv = vUv;
+      vec3 color;
+      float opacity = 0.35;
+      
+      // Filter type 0: None
+      if (uFilterType == 0) {
+        color = texture2D(uTexture, uv).rgb;
+      }
+      // Filter type 1: Kaleidoscope
+      else if (uFilterType == 1) {
+        float segments = 6.0 + uEnergy * 6.0;
+        vec2 kUv = kaleidoscope(uv, segments);
+        kUv = fract(kUv + uTime * 0.05);
+        color = texture2D(uTexture, kUv).rgb;
+        opacity = 0.5;
+      }
+      // Filter type 2: Mirror Fractal
+      else if (uFilterType == 2) {
+        vec2 mUv = mirror(uv);
+        mUv = fract(mUv);
+        color = texture2D(uTexture, mUv).rgb;
+        color = mix(color, colorShift(color, uTime * 0.1), 0.3);
+        opacity = 0.45;
+      }
+      // Filter type 3: Color Shift
+      else if (uFilterType == 3) {
+        color = texture2D(uTexture, uv).rgb;
+        float shift = uTime * 0.2 + uEnergy * 0.5;
+        color = colorShift(color, shift);
+        color = mix(color, vec3(1.0) - color, sin(uTime) * 0.2 + 0.2);
+        opacity = 0.4;
+      }
+      // Filter type 4: Invert Pulse
+      else if (uFilterType == 4) {
+        color = texture2D(uTexture, uv).rgb;
+        float pulse = (sin(uTime * 2.0) * 0.5 + 0.5) * uEnergy;
+        color = mix(color, vec3(1.0) - color, pulse);
+        opacity = 0.4;
+      }
+      // Filter type 5: Pixelate
+      else if (uFilterType == 5) {
+        float pixels = 100.0 - uEnergy * 80.0;
+        vec2 pUv = pixelate(uv, max(pixels, 10.0));
+        color = texture2D(uTexture, pUv).rgb;
+        opacity = 0.45;
+      }
+      // Filter type 6: RGB Split
+      else if (uFilterType == 6) {
+        float offset = 0.01 * uIntensity * (1.0 + uEnergy);
+        float r = texture2D(uTexture, uv + vec2(offset, 0.0)).r;
+        float g = texture2D(uTexture, uv).g;
+        float b = texture2D(uTexture, uv - vec2(offset, 0.0)).b;
+        color = vec3(r, g, b);
+        opacity = 0.4;
+      }
+      // Filter type 7: Wave Distort
+      else if (uFilterType == 7) {
+        vec2 wUv = wave(uv);
+        color = texture2D(uTexture, wUv).rgb;
+        float pulse = sin(uTime * 3.0) * 0.5 + 0.5;
+        color *= 0.8 + pulse * 0.4;
+        opacity = 0.45;
+      }
+      // Filter type 8: Zoom Pulse
+      else if (uFilterType == 8) {
+        float zoom = 1.0 + sin(uTime * 2.0) * 0.1 * uIntensity * (1.0 + uEnergy);
+        vec2 centered = (uv - 0.5) / zoom + 0.5;
+        color = texture2D(uTexture, centered).rgb;
+        opacity = 0.4;
+      }
+      else {
+        color = texture2D(uTexture, uv).rgb;
+      }
+      
+      gl_FragColor = vec4(color, opacity);
+    }
+  `
+);
+
+extend({ PsyFilterMaterial });
+
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      psyFilterMaterial: any;
+    }
+  }
+}
+
+const filterIdToType: Record<string, number> = {
+  none: 0,
+  kaleidoscope: 1,
+  mirror: 2,
+  colorshift: 3,
+  invert: 4,
+  pixelate: 5,
+  rgbsplit: 6,
+  wave: 7,
+  zoompulse: 8,
+};
+
+// Background plane for thumbnail with psy trance filters
+function BackgroundImage({ 
+  imageUrl, 
+  filterId = "none", 
+  intensity = 1, 
+  getAudioData 
+}: { 
+  imageUrl: string; 
+  filterId?: string;
+  intensity?: number;
+  getAudioData?: () => AudioData;
+}) {
+  const materialRef = useRef<any>(null);
+  
   const texture = useMemo(() => {
     const loader = new THREE.TextureLoader();
-    return loader.load(imageUrl);
+    const tex = loader.load(imageUrl);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    return tex;
   }, [imageUrl]);
+
+  useFrame((state) => {
+    if (materialRef.current) {
+      materialRef.current.uTime = state.clock.getElapsedTime();
+      materialRef.current.uFilterType = filterIdToType[filterId] || 0;
+      materialRef.current.uIntensity = intensity;
+      
+      if (getAudioData) {
+        const { energy } = getAudioData();
+        materialRef.current.uEnergy = energy;
+      }
+    }
+  });
 
   return (
     <mesh position={[0, 0, -30]} scale={[60, 40, 1]}>
       <planeGeometry />
-      <meshBasicMaterial map={texture} transparent opacity={0.3} />
+      <psyFilterMaterial 
+        ref={materialRef}
+        uTexture={texture}
+        transparent
+      />
     </mesh>
   );
 }
@@ -645,7 +852,14 @@ function ThreeScene({ getAudioData, settings, backgroundImage }: AudioVisualizer
       <color attach="background" args={['#050508']} />
       <OrbitControls makeDefault enableZoom={false} enablePan={false} />
       
-      {backgroundImage && <BackgroundImage imageUrl={backgroundImage} />}
+      {backgroundImage && (
+        <BackgroundImage 
+          imageUrl={backgroundImage} 
+          filterId={settings.imageFilter || "none"}
+          intensity={settings.intensity}
+          getAudioData={getAudioData}
+        />
+      )}
       
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} intensity={1} />

@@ -10,7 +10,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Play, Pause, Upload, Save, Disc, Activity, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, X, Settings } from "lucide-react";
-import { colorPalettes, presets, type PresetName } from "@/lib/visualizer-presets";
+import { colorPalettes, presets, imageFilters, type PresetName, type ImageFilterId } from "@/lib/visualizer-presets";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface UIControlsProps {
@@ -22,6 +22,7 @@ interface UIControlsProps {
     speed: number;
     colorPalette: string[];
     presetName: PresetName;
+    imageFilter: ImageFilterId;
   };
   setSettings: (s: any) => void;
   isRecording: boolean;
@@ -321,6 +322,26 @@ export function UIControls({
                     )}
                   </div>
                   
+                  {/* Image Filter Selector */}
+                  <div className="space-y-3">
+                    <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Artwork Filter</Label>
+                    <Select
+                      value={settings.imageFilter}
+                      onValueChange={(val) => setSettings({ ...settings, imageFilter: val as ImageFilterId })}
+                    >
+                      <SelectTrigger className="bg-black/50 border-white/10 font-mono h-12 text-base" data-testid="select-image-filter-mobile">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-background border-white/10">
+                        {imageFilters.map((filter) => (
+                          <SelectItem key={filter.id} value={filter.id} className="font-mono focus:bg-primary/20 py-3">
+                            {filter.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
                   {/* Action Buttons */}
                   <div className="grid grid-cols-2 gap-3">
                     <Button 
@@ -499,6 +520,27 @@ export function UIControls({
               </Button>
             </motion.div>
           )}
+          
+          {/* Image Filter Selector */}
+          <div className="space-y-2 pt-4">
+            <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Artwork Filter</Label>
+            <Select
+              value={settings.imageFilter}
+              onValueChange={(val) => setSettings({ ...settings, imageFilter: val as ImageFilterId })}
+            >
+              <SelectTrigger className="bg-black/50 border-white/10 font-mono h-11" data-testid="select-image-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-background border-white/10">
+                {imageFilters.map((filter) => (
+                  <SelectItem key={filter.id} value={filter.id} className="font-mono focus:bg-purple-500/20">
+                    {filter.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">Applies psy trance effects to artwork</p>
+          </div>
         </div>
 
         <div className="h-px bg-white/10" />

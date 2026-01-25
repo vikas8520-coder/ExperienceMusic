@@ -22,3 +22,17 @@ export const presets = [
 ] as const;
 
 export type PresetName = typeof presets[number];
+
+export const imageFilters = [
+  { name: "None", id: "none" },
+  { name: "Kaleidoscope", id: "kaleidoscope" },
+  { name: "Mirror Fractal", id: "mirror" },
+  { name: "Color Shift", id: "colorshift" },
+  { name: "Invert Pulse", id: "invert" },
+  { name: "Pixelate", id: "pixelate" },
+  { name: "RGB Split", id: "rgbsplit" },
+  { name: "Wave Distort", id: "wave" },
+  { name: "Zoom Pulse", id: "zoompulse" },
+] as const;
+
+export type ImageFilterId = typeof imageFilters[number]["id"];
