@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { Play, Pause, Upload, Save, Disc, Activity } from "lucide-react";
+import { Play, Pause, Upload, Save, Disc, Activity, ImagePlus, Sparkles, Loader2 } from "lucide-react";
 import { colorPalettes, presets, type PresetName } from "@/lib/visualizer-presets";
 import { motion } from "framer-motion";
 
@@ -26,6 +27,15 @@ interface UIControlsProps {
   isRecording: boolean;
   onToggleRecording: () => void;
   onSavePreset: () => void;
+  onThumbnailAnalysis?: (analysis: ThumbnailAnalysis) => void;
+  thumbnailUrl?: string | null;
+}
+
+export interface ThumbnailAnalysis {
+  colorPalette: string[];
+  theme: string;
+  mood: string;
+  visualSuggestions: string[];
 }
 
 export function UIControls({
@@ -37,17 +47,62 @@ export function UIControls({
   isRecording,
   onToggleRecording,
   onSavePreset,
+  onThumbnailAnalysis,
+  thumbnailUrl,
 }: UIControlsProps) {
-  
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<ThumbnailAnalysis | null>(null);
+  const [localThumbnailUrl, setLocalThumbnailUrl] = useState<string | null>(null);
+
+  const displayThumbnail = thumbnailUrl || localThumbnailUrl;
+
   const currentPaletteName = colorPalettes.find(
     (p) => JSON.stringify(p.colors) === JSON.stringify(settings.colorPalette)
-  )?.name || "Custom";
+  )?.name || (analysis ? `AI: ${analysis.theme}` : "Custom");
+
+  const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = (event.target?.result as string).split(',')[1];
+      const previewUrl = URL.createObjectURL(file);
+      setLocalThumbnailUrl(previewUrl);
+      setIsAnalyzing(true);
+
+      try {
+        const response = await fetch('/api/analyze-thumbnail', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64 })
+        });
+
+        if (response.ok) {
+          const data: ThumbnailAnalysis = await response.json();
+          setAnalysis(data);
+          onThumbnailAnalysis?.(data);
+        }
+      } catch (error) {
+        console.error('Thumbnail analysis failed:', error);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const applyAIPalette = () => {
+    if (analysis?.colorPalette) {
+      setSettings({ ...settings, colorPalette: analysis.colorPalette });
+    }
+  };
 
   return (
     <motion.div 
       initial={{ x: 100, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
-      className="absolute top-0 right-0 h-full w-80 p-6 glass-panel z-10 flex flex-col gap-8 overflow-y-auto"
+      className="absolute top-0 right-0 h-full w-80 p-6 glass-panel z-10 flex flex-col gap-6 overflow-y-auto"
     >
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold font-display text-primary text-glow tracking-widest">
@@ -64,6 +119,7 @@ export function UIControls({
           <Button 
             onClick={onPlayPause} 
             className="flex-1 bg-primary hover:bg-primary/80 font-bold tracking-wider"
+            data-testid="button-play"
           >
             {isPlaying ? <><Pause className="mr-2 h-4 w-4" /> PAUSE</> : <><Play className="mr-2 h-4 w-4" /> PLAY</>}
           </Button>
@@ -73,12 +129,92 @@ export function UIControls({
               accept="audio/*"
               onChange={onFileUpload}
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              data-testid="input-audio-upload"
             />
             <Button variant="outline" size="icon" className="border-primary/50 text-primary hover:bg-primary/10">
               <Upload className="h-4 w-4" />
             </Button>
           </div>
         </div>
+      </div>
+
+      {/* Thumbnail Upload Section */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <Label className="text-xs uppercase tracking-widest text-accent font-bold">Artwork Analysis</Label>
+          <Sparkles className="w-3 h-3 text-accent/50" />
+        </div>
+        
+        <div className="relative aspect-video rounded-lg border border-white/10 bg-black/50 overflow-hidden group">
+          {displayThumbnail ? (
+            <img 
+              src={displayThumbnail} 
+              alt="Thumbnail" 
+              className="w-full h-full object-cover"
+              data-testid="img-thumbnail"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+              <ImagePlus className="w-8 h-8 opacity-30" />
+            </div>
+          )}
+          
+          {isAnalyzing && (
+            <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 text-primary animate-spin" />
+            </div>
+          )}
+          
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleThumbnailUpload}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            data-testid="input-thumbnail-upload"
+          />
+          
+          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+            <p className="text-xs text-white/80">Drop artwork to analyze</p>
+          </div>
+        </div>
+
+        {analysis && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} 
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-2"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">AI Theme</span>
+              <span className="text-xs font-mono text-accent" data-testid="text-ai-theme">{analysis.theme}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Mood</span>
+              <span className="text-xs font-mono text-secondary" data-testid="text-ai-mood">{analysis.mood}</span>
+            </div>
+            <div className="flex gap-1 mt-2">
+              {analysis.colorPalette.slice(0, 7).map((color, i) => (
+                <div
+                  key={i}
+                  className="flex-1 aspect-square rounded-sm"
+                  style={{ backgroundColor: color }}
+                  title={color}
+                  data-testid={`color-swatch-${i}`}
+                />
+              ))}
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="w-full mt-2 text-xs border-accent/50 text-accent hover:bg-accent/10"
+              onClick={applyAIPalette}
+              data-testid="button-apply-ai-palette"
+            >
+              <Sparkles className="mr-2 h-3 w-3" />
+              Apply AI Palette
+            </Button>
+          </motion.div>
+        )}
       </div>
 
       <div className="h-px bg-white/10" />
@@ -94,7 +230,7 @@ export function UIControls({
             value={settings.presetName}
             onValueChange={(val) => setSettings({ ...settings, presetName: val as PresetName })}
           >
-            <SelectTrigger className="bg-black/50 border-white/10 font-mono">
+            <SelectTrigger className="bg-black/50 border-white/10 font-mono" data-testid="select-preset">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-background border-white/10">
@@ -117,6 +253,7 @@ export function UIControls({
             value={[settings.intensity]}
             onValueChange={([val]) => setSettings({ ...settings, intensity: val })}
             className="[&>.absolute]:bg-primary"
+            data-testid="slider-intensity"
           />
         </div>
 
@@ -130,6 +267,7 @@ export function UIControls({
             value={[settings.speed]}
             onValueChange={([val]) => setSettings({ ...settings, speed: val })}
             className="[&>.absolute]:bg-secondary"
+            data-testid="slider-speed"
           />
         </div>
 
@@ -147,10 +285,11 @@ export function UIControls({
                 }`}
                 style={{ background: `linear-gradient(135deg, ${palette.colors[0]}, ${palette.colors[1]})` }}
                 title={palette.name}
+                data-testid={`button-palette-${palette.name.toLowerCase().replace(/\s/g, '-')}`}
               />
             ))}
           </div>
-          <p className="text-[10px] text-right text-muted-foreground pt-1">{currentPaletteName}</p>
+          <p className="text-[10px] text-right text-muted-foreground pt-1" data-testid="text-palette-name">{currentPaletteName}</p>
         </div>
       </div>
 
@@ -159,6 +298,7 @@ export function UIControls({
           variant="outline" 
           className={`w-full border-destructive/50 hover:bg-destructive/10 text-destructive ${isRecording ? 'animate-pulse bg-destructive/20' : ''}`}
           onClick={onToggleRecording}
+          data-testid="button-record"
         >
           <Disc className={`mr-2 h-4 w-4 ${isRecording ? 'animate-spin' : ''}`} />
           {isRecording ? "STOP RECORDING" : "RECORD SESSION"}
@@ -168,6 +308,7 @@ export function UIControls({
           variant="ghost" 
           className="w-full text-xs text-muted-foreground hover:text-white"
           onClick={onSavePreset}
+          data-testid="button-save-preset"
         >
           <Save className="mr-2 h-3 w-3" /> Save Preset
         </Button>

@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { AudioVisualizer } from "@/components/AudioVisualizer";
-import { UIControls } from "@/components/UIControls";
+import { UIControls, type ThumbnailAnalysis } from "@/components/UIControls";
 import { useAudioAnalyzer } from "@/hooks/use-audio-analyzer";
 import { colorPalettes, type PresetName } from "@/lib/visualizer-presets";
 import { useCreatePreset } from "@/hooks/use-presets";
@@ -11,6 +11,7 @@ export default function Home() {
   const audioRef = useRef<HTMLAudioElement>(new Audio());
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   
   // Media Recorder refs
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -68,6 +69,13 @@ export default function Home() {
       onSuccess: () => {
         toast({ title: "Preset Saved", description: "Your visual settings have been saved." });
       }
+    });
+  };
+
+  const handleThumbnailAnalysis = (analysis: ThumbnailAnalysis) => {
+    toast({
+      title: "AI Analysis Complete",
+      description: `Detected theme: ${analysis.theme} | Mood: ${analysis.mood}`,
     });
   };
 
@@ -135,6 +143,8 @@ export default function Home() {
         isRecording={isRecording}
         onToggleRecording={toggleRecording}
         onSavePreset={handleSavePreset}
+        onThumbnailAnalysis={handleThumbnailAnalysis}
+        thumbnailUrl={thumbnailUrl}
       />
       
       {/* Playback Progress Indicator (minimal) */}
