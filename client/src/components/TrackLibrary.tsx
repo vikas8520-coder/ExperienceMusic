@@ -18,7 +18,7 @@ export function TrackLibrary({ tracks, onLoadTrack, onDeleteTrack, onClose }: Tr
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: -400, opacity: 0 }}
       transition={{ type: "spring", damping: 25, stiffness: 200 }}
-      className="absolute top-0 left-0 h-full w-96 glass-panel z-20 flex flex-col"
+      className="absolute top-0 left-0 h-full w-full max-w-96 glass-panel z-30 flex flex-col"
     >
       <div className="flex items-center justify-between p-6 border-b border-white/10">
         <div className="flex items-center gap-3">
@@ -99,7 +99,7 @@ export function TrackLibrary({ tracks, onLoadTrack, onDeleteTrack, onClose }: Tr
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-1 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 p-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                       <Button
                         variant="ghost"
                         size="icon"
