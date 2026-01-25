@@ -32,6 +32,17 @@ Preferred communication style: Simple, everyday language.
 - **Frequency Bands**: Bass (20-140Hz), Mid (140-2000Hz), High (2000Hz+) extracted from FFT data
 - **Recording**: MediaRecorder API for WebM/Opus audio capture
 - **Playback**: AudioWorklet for streaming PCM16 audio playback
+- **Source Management**: Audio analyzer hook tracks MediaElementSource to avoid recreation errors and properly reconnects on source changes
+
+### Track Library
+- **Storage**: Client-side localStorage for saving tracks with audio URLs, thumbnails, and color palettes
+- **Interface**: Slide-out panel with visual track cards showing thumbnails and color swatches
+- **Operations**: Save new tracks, load saved tracks, delete tracks from library
+
+### WebGL Fallback
+- **Detection**: Proactive WebGL support check before rendering Canvas component
+- **Fallback**: 2D animated visualization with pulsing rings using the selected color palette
+- **Thumbnail Integration**: Background image works in both WebGL and fallback modes
 
 ### Data Flow
 1. User uploads audio file → stored as blob URL
