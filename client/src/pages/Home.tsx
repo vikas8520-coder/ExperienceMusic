@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { AudioVisualizer } from "@/components/AudioVisualizer";
 import { UIControls, type ThumbnailAnalysis } from "@/components/UIControls";
 import { TrackLibrary } from "@/components/TrackLibrary";
@@ -17,6 +17,8 @@ export interface SavedTrack {
   createdAt: Date;
 }
 
+const LIBRARY_STORAGE_KEY = "auralvis-track-library";
+
 export default function Home() {
   const [audioFile, setAudioFile] = useState<string | null>(null);
   const [audioFileName, setAudioFileName] = useState<string>("");
@@ -25,7 +27,29 @@ export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
-  const [savedTracks, setSavedTracks] = useState<SavedTrack[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [visualizationZoom, setVisualizationZoom] = useState(1);
+  
+  const [savedTracks, setSavedTracks] = useState<SavedTrack[]>(() => {
+    try {
+      const stored = localStorage.getItem(LIBRARY_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return parsed.map((t: any) => ({ ...t, createdAt: new Date(t.createdAt) }));
+      }
+    } catch (e) {
+      console.error("Failed to load saved tracks:", e);
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(savedTracks));
+    } catch (e) {
+      console.error("Failed to save tracks:", e);
+    }
+  }, [savedTracks]);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
@@ -38,8 +62,78 @@ export default function Home() {
     speed: 0.5,
     colorPalette: colorPalettes[0].colors,
     presetName: "Energy Rings" as PresetName,
-    imageFilter: "none" as ImageFilterId,
+    imageFilters: ["none"] as ImageFilterId[],
   });
+
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+      }).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => {
+        setIsFullscreen(false);
+      }).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    let lastTouchY = 0;
+    let isZooming = false;
+    
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        const target = e.target as HTMLElement;
+        const isOnCanvas = target.tagName === 'CANVAS' || target.closest('canvas');
+        const isOnUI = target.closest('.glass-panel') || target.closest('button') || target.closest('input');
+        
+        if (isOnCanvas && !isOnUI) {
+          isZooming = true;
+          const touch1 = e.touches[0];
+          const touch2 = e.touches[1];
+          lastTouchY = (touch1.clientY + touch2.clientY) / 2;
+        }
+      }
+    };
+    
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && isZooming) {
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const currentY = (touch1.clientY + touch2.clientY) / 2;
+        const deltaY = lastTouchY - currentY;
+        
+        setVisualizationZoom(prev => {
+          const newZoom = prev + deltaY * 0.008;
+          return Math.max(0.5, Math.min(3, newZoom));
+        });
+        
+        lastTouchY = currentY;
+      }
+    };
+    
+    const handleTouchEnd = () => {
+      isZooming = false;
+    };
+    
+    document.addEventListener("touchstart", handleTouchStart, { passive: true });
+    document.addEventListener("touchmove", handleTouchMove, { passive: true });
+    document.addEventListener("touchend", handleTouchEnd, { passive: true });
+    
+    return () => {
+      document.removeEventListener("touchstart", handleTouchStart);
+      document.removeEventListener("touchmove", handleTouchMove);
+      document.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, []);
 
   const { getAudioData, destNode } = useAudioAnalyzer(audioRef.current, audioFile);
 
@@ -237,6 +331,7 @@ export default function Home() {
         getAudioData={getAudioData}
         settings={settings}
         backgroundImage={thumbnailUrl}
+        zoom={visualizationZoom}
       />
 
       {/* UI Overlay */}
@@ -255,6 +350,10 @@ export default function Home() {
         onSaveToLibrary={handleSaveToLibrary}
         onToggleLibrary={() => setShowLibrary(!showLibrary)}
         trackName={audioFileName}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+        zoom={visualizationZoom}
+        onZoomChange={setVisualizationZoom}
       />
       
       {/* Track Library Panel */}

@@ -9,7 +9,8 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { Play, Pause, Upload, Save, Disc, Activity, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, X, Settings } from "lucide-react";
+import { Play, Pause, Upload, Save, Disc, Activity, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, X, Settings, Maximize, Minimize, ZoomIn } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { colorPalettes, presets, imageFilters, type PresetName, type ImageFilterId } from "@/lib/visualizer-presets";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -22,7 +23,7 @@ interface UIControlsProps {
     speed: number;
     colorPalette: string[];
     presetName: PresetName;
-    imageFilter: ImageFilterId;
+    imageFilters: ImageFilterId[];
   };
   setSettings: (s: any) => void;
   isRecording: boolean;
@@ -34,6 +35,10 @@ interface UIControlsProps {
   onSaveToLibrary?: () => void;
   onToggleLibrary?: () => void;
   trackName?: string;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
 }
 
 export interface ThumbnailAnalysis {
@@ -58,6 +63,10 @@ export function UIControls({
   onSaveToLibrary,
   onToggleLibrary,
   trackName,
+  isFullscreen,
+  onToggleFullscreen,
+  zoom,
+  onZoomChange,
 }: UIControlsProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ThumbnailAnalysis | null>(null);
@@ -161,6 +170,17 @@ export function UIControls({
         data-testid="button-library-mobile"
       >
         <Library className="h-5 w-5" />
+      </Button>
+      
+      {/* Fullscreen Button */}
+      <Button 
+        variant="secondary"
+        size="lg"
+        className="h-12 w-12 rounded-full shadow-lg"
+        onClick={onToggleFullscreen}
+        data-testid="button-fullscreen-mobile"
+      >
+        {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
       </Button>
     </div>
   );
@@ -322,24 +342,37 @@ export function UIControls({
                     )}
                   </div>
                   
-                  {/* Image Filter Selector */}
+                  {/* Image Filter Selector - Multiple */}
                   <div className="space-y-3">
-                    <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Artwork Filter</Label>
-                    <Select
-                      value={settings.imageFilter}
-                      onValueChange={(val) => setSettings({ ...settings, imageFilter: val as ImageFilterId })}
-                    >
-                      <SelectTrigger className="bg-black/50 border-white/10 font-mono h-12 text-base" data-testid="select-image-filter-mobile">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-background border-white/10">
-                        {imageFilters.map((filter) => (
-                          <SelectItem key={filter.id} value={filter.id} className="font-mono focus:bg-primary/20 py-3">
+                    <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Artwork Filters (Layer Multiple)</Label>
+                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                      {imageFilters.filter(f => f.id !== "none").map((filter) => {
+                        const isActive = settings.imageFilters.includes(filter.id);
+                        return (
+                          <button
+                            key={filter.id}
+                            onClick={() => {
+                              const newFilters = isActive
+                                ? settings.imageFilters.filter(f => f !== filter.id)
+                                : [...settings.imageFilters.filter(f => f !== "none"), filter.id];
+                              setSettings({ 
+                                ...settings, 
+                                imageFilters: newFilters.length === 0 ? ["none"] : newFilters 
+                              });
+                            }}
+                            className={`text-xs py-2 px-3 rounded-lg border transition-all ${
+                              isActive 
+                                ? "border-purple-500 bg-purple-500/20 text-purple-300" 
+                                : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
+                            }`}
+                            data-testid={`filter-toggle-mobile-${filter.id}`}
+                          >
                             {filter.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Tap to toggle multiple filters</p>
                   </div>
                   
                   {/* Action Buttons */}
@@ -521,25 +554,37 @@ export function UIControls({
             </motion.div>
           )}
           
-          {/* Image Filter Selector */}
+          {/* Image Filter Selector - Multiple */}
           <div className="space-y-2 pt-4">
-            <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Artwork Filter</Label>
-            <Select
-              value={settings.imageFilter}
-              onValueChange={(val) => setSettings({ ...settings, imageFilter: val as ImageFilterId })}
-            >
-              <SelectTrigger className="bg-black/50 border-white/10 font-mono h-11" data-testid="select-image-filter">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-background border-white/10">
-                {imageFilters.map((filter) => (
-                  <SelectItem key={filter.id} value={filter.id} className="font-mono focus:bg-purple-500/20">
+            <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Artwork Filters</Label>
+            <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+              {imageFilters.filter(f => f.id !== "none").map((filter) => {
+                const isActive = settings.imageFilters.includes(filter.id);
+                return (
+                  <button
+                    key={filter.id}
+                    onClick={() => {
+                      const newFilters = isActive
+                        ? settings.imageFilters.filter(f => f !== filter.id)
+                        : [...settings.imageFilters.filter(f => f !== "none"), filter.id];
+                      setSettings({ 
+                        ...settings, 
+                        imageFilters: newFilters.length === 0 ? ["none"] : newFilters 
+                      });
+                    }}
+                    className={`text-xs py-2 px-2 rounded-lg border transition-all ${
+                      isActive 
+                        ? "border-purple-500 bg-purple-500/20 text-purple-300" 
+                        : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
+                    }`}
+                    data-testid={`filter-toggle-${filter.id}`}
+                  >
                     {filter.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[10px] text-muted-foreground">Applies psy trance effects to artwork</p>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-muted-foreground">Click to layer multiple psy effects</p>
           </div>
         </div>
 
@@ -650,6 +695,24 @@ export function UIControls({
             <FolderPlus className="mr-2 h-3 w-3" /> Save to Library
           </Button>
         </div>
+        
+        <Button 
+          variant="outline" 
+          className="w-full h-11 border-white/20"
+          onClick={onToggleFullscreen}
+          data-testid="button-fullscreen"
+        >
+          {isFullscreen ? <Minimize className="mr-2 h-4 w-4" /> : <Maximize className="mr-2 h-4 w-4" />}
+          {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+        </Button>
+        
+        {zoom !== undefined && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <ZoomIn className="h-3 w-3" />
+            <span>Zoom: {(zoom * 100).toFixed(0)}%</span>
+            <span className="text-[10px]">(2-finger swipe)</span>
+          </div>
+        )}
       </div>
     </motion.div>
   );

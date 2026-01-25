@@ -14,9 +14,10 @@ interface AudioVisualizerProps {
     speed: number;
     colorPalette: string[];
     presetName: string;
-    imageFilter?: ImageFilterId;
+    imageFilters?: ImageFilterId[];
   };
   backgroundImage?: string | null;
+  zoom?: number;
 }
 
 // Check WebGL support
@@ -789,12 +790,14 @@ function BackgroundImage({
   imageUrl, 
   filterId = "none", 
   intensity = 1, 
-  getAudioData 
+  getAudioData,
+  layerOffset = 0
 }: { 
   imageUrl: string; 
   filterId?: string;
   intensity?: number;
   getAudioData?: () => AudioData;
+  layerOffset?: number;
 }) {
   const materialRef = useRef<any>(null);
   
@@ -807,7 +810,7 @@ function BackgroundImage({
 
   useFrame((state) => {
     if (materialRef.current) {
-      materialRef.current.uTime = state.clock.getElapsedTime();
+      materialRef.current.uTime = state.clock.getElapsedTime() + layerOffset;
       materialRef.current.uFilterType = filterIdToType[filterId] || 0;
       materialRef.current.uIntensity = intensity;
       
@@ -818,20 +821,43 @@ function BackgroundImage({
     }
   });
 
+  const opacity = layerOffset > 0 ? 0.4 : 1;
+
   return (
-    <mesh position={[0, 0, -30]} scale={[60, 40, 1]}>
+    <mesh position={[0, 0, -30 + layerOffset * 0.1]} scale={[60, 40, 1]}>
       <planeGeometry />
       <psyFilterMaterial 
         ref={materialRef}
         uTexture={texture}
         transparent
+        opacity={opacity}
       />
     </mesh>
   );
 }
 
-function ThreeScene({ getAudioData, settings, backgroundImage }: AudioVisualizerProps) {
+function ZoomableScene({ 
+  zoom = 1, 
+  children 
+}: { 
+  zoom?: number; 
+  children: React.ReactNode;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  
+  useFrame(() => {
+    if (groupRef.current) {
+      groupRef.current.scale.lerp(new THREE.Vector3(zoom, zoom, zoom), 0.1);
+    }
+  });
+  
+  return <group ref={groupRef}>{children}</group>;
+}
+
+function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: AudioVisualizerProps) {
   const [hasError, setHasError] = useState(false);
+  
+  const activeFilters = settings.imageFilters || ["none"];
 
   if (hasError) {
     return <FallbackVisualizer settings={settings} backgroundImage={backgroundImage} />;
@@ -852,26 +878,30 @@ function ThreeScene({ getAudioData, settings, backgroundImage }: AudioVisualizer
       <color attach="background" args={['#050508']} />
       <OrbitControls makeDefault enableZoom={false} enablePan={false} />
       
-      {backgroundImage && (
+      {backgroundImage && activeFilters.map((filterId, index) => (
         <BackgroundImage 
+          key={`filter-${filterId}-${index}`}
           imageUrl={backgroundImage} 
-          filterId={settings.imageFilter || "none"}
+          filterId={filterId}
           intensity={settings.intensity}
           getAudioData={getAudioData}
+          layerOffset={index * 0.5}
         />
-      )}
+      ))}
       
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} intensity={1} />
       <pointLight position={[-10, -10, -10]} intensity={0.5} color="#ff00ff" />
       
-      {settings.presetName === "Energy Rings" && <EnergyRings getAudioData={getAudioData} settings={settings} />}
-      {settings.presetName === "Psy Tunnel" && <PsyTunnel getAudioData={getAudioData} settings={settings} />}
-      {settings.presetName === "Particle Field" && <ParticleField getAudioData={getAudioData} settings={settings} />}
-      {settings.presetName === "Waveform Sphere" && <WaveformSphere getAudioData={getAudioData} settings={settings} />}
-      {settings.presetName === "Audio Bars" && <AudioBars getAudioData={getAudioData} settings={settings} />}
-      {settings.presetName === "Geometric Kaleidoscope" && <GeometricKaleidoscope getAudioData={getAudioData} settings={settings} />}
-      {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
+      <ZoomableScene zoom={zoom}>
+        {settings.presetName === "Energy Rings" && <EnergyRings getAudioData={getAudioData} settings={settings} />}
+        {settings.presetName === "Psy Tunnel" && <PsyTunnel getAudioData={getAudioData} settings={settings} />}
+        {settings.presetName === "Particle Field" && <ParticleField getAudioData={getAudioData} settings={settings} />}
+        {settings.presetName === "Waveform Sphere" && <WaveformSphere getAudioData={getAudioData} settings={settings} />}
+        {settings.presetName === "Audio Bars" && <AudioBars getAudioData={getAudioData} settings={settings} />}
+        {settings.presetName === "Geometric Kaleidoscope" && <GeometricKaleidoscope getAudioData={getAudioData} settings={settings} />}
+        {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
+      </ZoomableScene>
 
       <EffectComposer>
         <Bloom 
@@ -891,12 +921,12 @@ function ThreeScene({ getAudioData, settings, backgroundImage }: AudioVisualizer
   );
 }
 
-export function AudioVisualizer({ getAudioData, settings, backgroundImage }: AudioVisualizerProps) {
+export function AudioVisualizer({ getAudioData, settings, backgroundImage, zoom = 1 }: AudioVisualizerProps) {
   const [webglSupported] = useState(() => isWebGLAvailable());
 
   if (!webglSupported) {
     return <FallbackVisualizer settings={settings} backgroundImage={backgroundImage} />;
   }
 
-  return <ThreeScene getAudioData={getAudioData} settings={settings} backgroundImage={backgroundImage} />;
+  return <ThreeScene getAudioData={getAudioData} settings={settings} backgroundImage={backgroundImage} zoom={zoom} />;
 }
