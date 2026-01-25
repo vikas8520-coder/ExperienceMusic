@@ -1,0 +1,66 @@
+# Audio-Reactive Visualization Web App
+
+## Overview
+
+This is a production-ready audio-reactive visualization web application that allows users to upload audio tracks and generates real-time, high-quality WebGL visualizations in the browser. The app analyzes audio frequency bands (bass, mid, high) and uses them to drive GPU-accelerated 3D visuals with Three.js. It includes multiple visual presets (Energy Rings, Psy Tunnel, Particle Field), customizable controls for intensity/speed/color, and AI-powered thumbnail analysis for automatic theme extraction.
+
+## User Preferences
+
+Preferred communication style: Simple, everyday language.
+
+## System Architecture
+
+### Frontend Architecture
+- **Framework**: React 18 with TypeScript, bundled by Vite
+- **3D Rendering**: Three.js via @react-three/fiber (R3F) for declarative WebGL
+- **Visual Effects**: @react-three/postprocessing for Bloom, ChromaticAberration, and Noise effects
+- **UI Components**: shadcn/ui component library built on Radix UI primitives
+- **Styling**: Tailwind CSS with custom CSS variables for theming
+- **State Management**: React hooks + TanStack Query for server state
+- **Routing**: Wouter for lightweight client-side routing
+- **Animations**: Framer Motion for UI transitions
+
+### Backend Architecture
+- **Runtime**: Node.js with Express.js
+- **Language**: TypeScript compiled with tsx for development, esbuild for production
+- **API Pattern**: REST endpoints defined in `shared/routes.ts` with Zod validation
+- **Database ORM**: Drizzle ORM with PostgreSQL dialect
+- **AI Integration**: OpenAI API via Replit AI Integrations for image/audio analysis
+
+### Audio Processing
+- **Analysis**: Web Audio API with AnalyserNode for real-time frequency extraction
+- **Frequency Bands**: Bass (20-140Hz), Mid (140-2000Hz), High (2000Hz+) extracted from FFT data
+- **Recording**: MediaRecorder API for WebM/Opus audio capture
+- **Playback**: AudioWorklet for streaming PCM16 audio playback
+
+### Data Flow
+1. User uploads audio file → stored as blob URL
+2. Audio element connected to Web Audio API AnalyserNode
+3. Animation loop reads frequency data via `getAudioData()` callback
+4. Three.js shaders/meshes respond to bass/mid/high/energy values
+5. Optional: Thumbnail uploaded → AI Vision extracts colors → applied to visualization
+
+### Build System
+- **Development**: Vite dev server with HMR, proxied through Express
+- **Production**: Vite builds static assets to `dist/public`, esbuild bundles server to `dist/index.cjs`
+- **Database**: Drizzle Kit for schema migrations via `npm run db:push`
+
+## External Dependencies
+
+### Database
+- **PostgreSQL**: Primary data store for tracks, presets, conversations, and messages
+- **Connection**: `DATABASE_URL` environment variable required
+- **Session Storage**: connect-pg-simple for Express session persistence
+
+### AI Services
+- **OpenAI API**: Accessed via Replit AI Integrations
+  - Image analysis for thumbnail color/theme extraction
+  - Voice chat capabilities (speech-to-text, text-to-speech)
+  - Chat completions for conversational features
+- **Environment Variables**: `AI_INTEGRATIONS_OPENAI_API_KEY`, `AI_INTEGRATIONS_OPENAI_BASE_URL`
+
+### Third-Party Libraries
+- **Three.js ecosystem**: @react-three/fiber, @react-three/drei, @react-three/postprocessing
+- **Audio utilities**: maath for mathematical helpers
+- **Batch processing**: p-limit and p-retry for rate-limited API calls
+- **Media conversion**: ffmpeg (system dependency) for audio format conversion
