@@ -73,6 +73,7 @@ export function UIControls({
   const [localThumbnailUrl, setLocalThumbnailUrl] = useState<string | null>(null);
   const [isMobileExpanded, setIsMobileExpanded] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(true);
+  const [isDesktopPanelVisible, setIsDesktopPanelVisible] = useState(true);
   
   const desktopScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
@@ -133,7 +134,7 @@ export function UIControls({
       <Button 
         onClick={onPlayPause} 
         size="lg"
-        className="h-14 w-14 rounded-full bg-primary hover:bg-primary/80 shadow-lg shadow-primary/30"
+        className="rounded-full shadow-lg shadow-primary/30"
         data-testid="button-play-mobile"
       >
         {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6 ml-0.5" />}
@@ -150,8 +151,8 @@ export function UIControls({
         />
         <Button 
           variant="secondary"
-          size="lg"
-          className="h-12 w-12 rounded-full shadow-lg"
+          size="icon"
+          className="rounded-full shadow-lg"
         >
           <Upload className="h-5 w-5" />
         </Button>
@@ -160,8 +161,8 @@ export function UIControls({
       {/* Settings Toggle */}
       <Button 
         variant="secondary"
-        size="lg"
-        className="h-12 w-12 rounded-full shadow-lg"
+        size="icon"
+        className="rounded-full shadow-lg"
         onClick={() => setShowMobileControls(!showMobileControls)}
         data-testid="button-settings-mobile"
       >
@@ -171,8 +172,8 @@ export function UIControls({
       {/* Library Button */}
       <Button 
         variant="secondary"
-        size="lg"
-        className="h-12 w-12 rounded-full shadow-lg"
+        size="icon"
+        className="rounded-full shadow-lg"
         onClick={onToggleLibrary}
         data-testid="button-library-mobile"
       >
@@ -182,8 +183,8 @@ export function UIControls({
       {/* Fullscreen Button */}
       <Button 
         variant="secondary"
-        size="lg"
-        className="h-12 w-12 rounded-full shadow-lg"
+        size="icon"
+        className="rounded-full shadow-lg"
         onClick={onToggleFullscreen}
         data-testid="button-fullscreen-mobile"
       >
@@ -388,7 +389,7 @@ export function UIControls({
                   <div className="grid grid-cols-2 gap-3">
                     <Button 
                       variant="outline" 
-                      className={`border-destructive/50 text-destructive h-12 ${isRecording ? 'animate-pulse bg-destructive/20' : ''}`}
+                      className={`border-destructive/50 text-destructive ${isRecording ? 'animate-pulse bg-destructive/20' : ''}`}
                       onClick={onToggleRecording}
                       data-testid="button-record-mobile"
                     >
@@ -397,8 +398,7 @@ export function UIControls({
                     </Button>
                     
                     <Button 
-                      variant="outline" 
-                      className="h-12"
+                      variant="outline"
                       onClick={onSaveToLibrary}
                       data-testid="button-save-library-mobile"
                     >
@@ -415,320 +415,316 @@ export function UIControls({
     </AnimatePresence>
   );
 
-  // Desktop sidebar (existing)
-  const DesktopSidebar = () => (
-    <motion.div 
-      initial={{ x: 100, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      className="absolute top-0 right-0 h-full w-80 glass-panel z-10 flex-col overflow-hidden hidden md:flex"
-    >
-      {/* Header */}
-      <div className="p-6 border-b border-white/10">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold font-display text-primary text-glow tracking-widest">
-              AURAL<span className="text-foreground">VIS</span>
-            </h1>
-            <p className="text-[10px] text-muted-foreground font-mono mt-1">
-              AUDIO REACTIVE ENGINE V2.0
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onToggleLibrary}
-            className="text-muted-foreground hover:text-primary"
-            data-testid="button-toggle-library"
+  // Desktop bottom panel
+  const DesktopBottomPanel = () => (
+    <div className="hidden md:block">
+      {/* Toggle button when panel is hidden */}
+      <AnimatePresence>
+        {!isDesktopPanelVisible && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20"
           >
-            <Library className="w-5 h-5" />
-          </Button>
-        </div>
-        
-        {/* Current Track Display */}
-        {trackName && (
-          <div className="mt-4 p-3 bg-black/30 rounded-lg border border-white/5">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Now Playing</p>
-            <p className="text-sm font-medium text-foreground truncate" data-testid="text-current-track">
-              {trackName.replace(/\.[^/.]+$/, "")}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Scrollable Content */}
-      <div ref={desktopScrollRef} className="flex-1 overflow-y-auto p-6 space-y-6" style={{ overscrollBehavior: 'contain' }}>
-        {/* Audio Controls */}
-        <div className="space-y-3">
-          <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Audio</Label>
-          <div className="flex gap-2">
-            <Button 
-              onClick={onPlayPause} 
-              className="flex-1 bg-primary hover:bg-primary/80 font-bold tracking-wider h-12"
-              data-testid="button-play"
+            <Button
+              variant="outline"
+              onClick={() => setIsDesktopPanelVisible(true)}
+              className="glass-panel flex items-center gap-2"
+              data-testid="button-show-panel"
             >
-              {isPlaying ? <><Pause className="mr-2 h-5 w-5" /> PAUSE</> : <><Play className="mr-2 h-5 w-5" /> PLAY</>}
+              <Settings className="w-4 h-4" />
+              <span>Show Controls</span>
+              <ChevronUp className="w-4 h-4" />
             </Button>
-            <div className="relative">
-              <input
-                type="file"
-                accept="audio/*"
-                onChange={onFileUpload}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                data-testid="input-audio-upload"
-              />
-              <Button variant="outline" size="icon" className="border-primary/50 text-primary hover:bg-primary/10 h-12 w-12">
-                <Upload className="h-5 w-5" />
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Thumbnail Upload Section */}
-        <div className="space-y-3">
-          <div className="flex justify-between items-center">
-            <Label className="text-xs uppercase tracking-widest text-accent font-bold">Artwork</Label>
-            <Sparkles className="w-3 h-3 text-accent/50" />
-          </div>
-          
-          <div className="relative aspect-video rounded-xl border border-white/10 bg-black/50 overflow-hidden group cursor-pointer">
-            {displayThumbnail ? (
-              <img 
-                src={displayThumbnail} 
-                alt="Thumbnail" 
-                className="w-full h-full object-cover"
-                data-testid="img-thumbnail"
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
-                <ImagePlus className="w-10 h-10 opacity-30" />
-                <span className="text-xs opacity-50">Drop artwork here</span>
-              </div>
-            )}
-            
-            {isAnalyzing && (
-              <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2">
-                <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                <span className="text-xs text-primary">Analyzing...</span>
-              </div>
-            )}
-            
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleThumbnailUpload}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              data-testid="input-thumbnail-upload"
-            />
-            
-            <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-              <p className="text-xs text-white font-medium">Click to upload</p>
-            </div>
-          </div>
-
-          {analysis && (
-            <motion.div 
-              initial={{ opacity: 0, y: -10 }} 
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-3 p-3 bg-black/30 rounded-lg border border-white/5"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">AI Theme</span>
-                <span className="text-xs font-mono text-accent" data-testid="text-ai-theme">{analysis.theme}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Mood</span>
-                <span className="text-xs font-mono text-secondary" data-testid="text-ai-mood">{analysis.mood}</span>
-              </div>
-              <div className="flex gap-1">
-                {analysis.colorPalette.slice(0, 7).map((color, i) => (
-                  <div
-                    key={i}
-                    className="flex-1 aspect-square rounded"
-                    style={{ backgroundColor: color }}
-                    title={color}
-                    data-testid={`color-swatch-${i}`}
-                  />
-                ))}
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm"
-                className="w-full text-xs border-accent/50 text-accent hover:bg-accent/10"
-                onClick={applyAIPalette}
-                data-testid="button-apply-ai-palette"
-              >
-                <Sparkles className="mr-2 h-3 w-3" />
-                Apply AI Palette
-              </Button>
-            </motion.div>
-          )}
-          
-          {/* Image Filter Selector - Multiple */}
-          <div className="space-y-2 pt-4">
-            <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Artwork Filters</Label>
-            <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
-              {imageFilters.filter(f => f.id !== "none").map((filter) => {
-                const isActive = settings.imageFilters.includes(filter.id);
-                return (
-                  <button
-                    key={filter.id}
-                    onClick={() => {
-                      const newFilters = isActive
-                        ? settings.imageFilters.filter(f => f !== filter.id)
-                        : [...settings.imageFilters.filter(f => f !== "none"), filter.id];
-                      setSettings({ 
-                        ...settings, 
-                        imageFilters: newFilters.length === 0 ? ["none"] : newFilters 
-                      });
-                    }}
-                    className={`text-xs py-2 px-2 rounded-lg border transition-all ${
-                      isActive 
-                        ? "border-purple-500 bg-purple-500/20 text-purple-300" 
-                        : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
-                    }`}
-                    data-testid={`filter-toggle-${filter.id}`}
-                  >
-                    {filter.name}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[10px] text-muted-foreground">Click to layer multiple psy effects</p>
-          </div>
-        </div>
-
-        <div className="h-px bg-white/10" />
-
-        {/* Visual Settings */}
-        <div className="space-y-5">
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label className="text-xs uppercase tracking-widest text-primary font-bold">Preset</Label>
-              <Activity className="w-3 h-3 text-primary/50" />
-            </div>
-            <Select
-              value={settings.presetName}
-              onValueChange={(val) => setSettings({ ...settings, presetName: val as PresetName })}
-            >
-              <SelectTrigger className="bg-black/50 border-white/10 font-mono h-11" data-testid="select-preset">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-background border-white/10">
-                {presets.map((preset) => (
-                  <SelectItem key={preset} value={preset} className="font-mono focus:bg-primary/20">
-                    {preset}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <Label className="text-xs uppercase tracking-widest">Intensity</Label>
-              <span className="text-xs font-mono text-primary">{settings.intensity.toFixed(1)}</span>
-            </div>
-            <Slider
-              min={0} max={3} step={0.1}
-              value={[settings.intensity]}
-              onValueChange={([val]) => updateSetting('intensity', val)}
-              className="[&>.absolute]:bg-primary"
-              data-testid="slider-intensity"
-            />
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <Label className="text-xs uppercase tracking-widest">Speed</Label>
-              <span className="text-xs font-mono text-secondary">{settings.speed.toFixed(1)}</span>
-            </div>
-            <Slider
-              min={0} max={2} step={0.1}
-              value={[settings.speed]}
-              onValueChange={([val]) => updateSetting('speed', val)}
-              className="[&>.absolute]:bg-secondary"
-              data-testid="slider-speed"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs uppercase tracking-widest text-accent font-bold">Palette</Label>
-            <div className="grid grid-cols-5 gap-2 mt-2">
-              {colorPalettes.map((palette) => (
-                <button
-                  key={palette.name}
-                  onClick={() => setSettings({ ...settings, colorPalette: palette.colors })}
-                  className={`w-full aspect-square rounded-full border-2 transition-all hover:scale-110 ${
-                    JSON.stringify(settings.colorPalette) === JSON.stringify(palette.colors)
-                      ? "border-white ring-2 ring-primary/50 scale-110"
-                      : "border-transparent opacity-60 hover:opacity-100"
-                  }`}
-                  style={{ background: `linear-gradient(135deg, ${palette.colors[0]}, ${palette.colors[1]})` }}
-                  title={palette.name}
-                  data-testid={`button-palette-${palette.name.toLowerCase().replace(/\s/g, '-')}`}
-                />
-              ))}
-            </div>
-            <p className="text-[10px] text-right text-muted-foreground pt-1" data-testid="text-palette-name">{currentPaletteName}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer Actions */}
-      <div className="p-6 border-t border-white/10 space-y-3">
-        <Button 
-          variant="outline" 
-          className={`w-full border-destructive/50 hover:bg-destructive/10 text-destructive h-11 ${isRecording ? 'animate-pulse bg-destructive/20' : ''}`}
-          onClick={onToggleRecording}
-          data-testid="button-record"
-        >
-          <Disc className={`mr-2 h-4 w-4 ${isRecording ? 'animate-spin' : ''}`} />
-          {isRecording ? "STOP RECORDING" : "RECORD SESSION"}
-        </Button>
-        
-        <div className="flex gap-2">
-          <Button 
-            variant="ghost" 
-            className="flex-1 text-xs text-muted-foreground hover:text-white"
-            onClick={onSavePreset}
-            data-testid="button-save-preset"
-          >
-            <Save className="mr-2 h-3 w-3" /> Save Preset
-          </Button>
-          <Button 
-            variant="ghost" 
-            className="flex-1 text-xs text-muted-foreground hover:text-white"
-            onClick={onSaveToLibrary}
-            data-testid="button-save-library"
-          >
-            <FolderPlus className="mr-2 h-3 w-3" /> Save to Library
-          </Button>
-        </div>
-        
-        <Button 
-          variant="outline" 
-          className="w-full h-11 border-white/20"
-          onClick={onToggleFullscreen}
-          data-testid="button-fullscreen"
-        >
-          {isFullscreen ? <Minimize className="mr-2 h-4 w-4" /> : <Maximize className="mr-2 h-4 w-4" />}
-          {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-        </Button>
-        
-        {zoom !== undefined && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <ZoomIn className="h-3 w-3" />
-            <span>Zoom: {(zoom * 100).toFixed(0)}%</span>
-            <span className="text-[10px]">(2-finger swipe)</span>
-          </div>
+          </motion.div>
         )}
-      </div>
-    </motion.div>
+      </AnimatePresence>
+
+      {/* Main bottom panel */}
+      <AnimatePresence>
+        {isDesktopPanelVisible && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            className="fixed bottom-0 left-0 right-0 glass-panel z-10 border-t border-white/10"
+          >
+            {/* Panel Header with hide button */}
+            <div className="flex items-center justify-between gap-4 px-6 py-2 border-b border-white/10">
+              <div className="flex items-center gap-4 flex-wrap">
+                <h1 className="text-lg font-bold font-display text-primary text-glow tracking-widest">
+                  AURAL<span className="text-foreground">VIS</span>
+                </h1>
+                {trackName && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-black/30 rounded-lg border border-white/5">
+                    <span className="text-[10px] text-muted-foreground uppercase">Playing:</span>
+                    <span className="text-sm font-medium text-foreground truncate max-w-40" data-testid="text-current-track">
+                      {trackName.replace(/\.[^/.]+$/, "")}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onToggleLibrary}
+                  data-testid="button-toggle-library"
+                >
+                  <Library className="w-5 h-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsDesktopPanelVisible(false)}
+                  data-testid="button-hide-panel"
+                >
+                  <ChevronDown className="w-5 h-5" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Scrollable horizontal content */}
+            <div ref={desktopScrollRef} className="overflow-x-auto p-4" style={{ overscrollBehavior: 'contain' }}>
+              <div className="flex gap-6 min-w-max">
+                
+                {/* Audio Controls Section */}
+                <div className="flex flex-col gap-3 min-w-48">
+                  <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Audio</Label>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button 
+                      onClick={onPlayPause} 
+                      className="flex-1 font-bold tracking-wider"
+                      data-testid="button-play"
+                    >
+                      {isPlaying ? <><Pause className="mr-2 h-4 w-4" /> PAUSE</> : <><Play className="mr-2 h-4 w-4" /> PLAY</>}
+                    </Button>
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        onChange={onFileUpload}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        data-testid="input-audio-upload"
+                      />
+                      <Button variant="outline" size="icon" className="border-primary/50 text-primary">
+                        <Upload className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className={`flex-1 text-xs border-destructive/50 text-destructive ${isRecording ? 'animate-pulse bg-destructive/20' : ''}`}
+                      onClick={onToggleRecording}
+                      data-testid="button-record"
+                    >
+                      <Disc className={`mr-1 h-3 w-3 ${isRecording ? 'animate-spin' : ''}`} />
+                      {isRecording ? "Stop" : "Record"}
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="flex-1 text-xs"
+                      onClick={onToggleFullscreen}
+                      data-testid="button-fullscreen"
+                    >
+                      {isFullscreen ? <Minimize className="mr-1 h-3 w-3" /> : <Maximize className="mr-1 h-3 w-3" />}
+                      {isFullscreen ? "Exit" : "Full"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="w-px bg-white/10 self-stretch" />
+
+                {/* Artwork Section */}
+                <div className="flex flex-col gap-2 min-w-40">
+                  <div className="flex justify-between items-center gap-2">
+                    <Label className="text-xs uppercase tracking-widest text-accent font-bold">Artwork</Label>
+                    {isAnalyzing && <Loader2 className="w-3 h-3 text-primary animate-spin" />}
+                  </div>
+                  <div className="relative w-24 h-24 rounded-lg border border-white/10 bg-black/50 overflow-hidden group cursor-pointer">
+                    {displayThumbnail ? (
+                      <img src={displayThumbnail} alt="Thumbnail" className="w-full h-full object-cover" data-testid="img-thumbnail" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                        <ImagePlus className="w-6 h-6 opacity-30" />
+                      </div>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleThumbnailUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      data-testid="input-thumbnail-upload"
+                    />
+                  </div>
+                  {analysis && (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="text-xs border-accent/50 text-accent"
+                      onClick={applyAIPalette}
+                      data-testid="button-apply-ai-palette"
+                    >
+                      <Sparkles className="mr-1 h-3 w-3" />
+                      Apply AI
+                    </Button>
+                  )}
+                </div>
+
+                <div className="w-px bg-white/10 self-stretch" />
+
+                {/* Preset & Visual Settings */}
+                <div className="flex flex-col gap-3 min-w-48">
+                  <Label className="text-xs uppercase tracking-widest text-primary font-bold">Preset</Label>
+                  <Select
+                    value={settings.presetName}
+                    onValueChange={(val) => setSettings({ ...settings, presetName: val as PresetName })}
+                  >
+                    <SelectTrigger className="bg-black/50 border-white/10 font-mono h-9 text-sm" data-testid="select-preset">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background border-white/10">
+                      {presets.map((preset) => (
+                        <SelectItem key={preset} value={preset} className="font-mono focus:bg-primary/20">
+                          {preset}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs">
+                      <span className="uppercase tracking-widest">Intensity</span>
+                      <span className="font-mono text-primary">{settings.intensity.toFixed(1)}</span>
+                    </div>
+                    <Slider
+                      min={0} max={3} step={0.1}
+                      value={[settings.intensity]}
+                      onValueChange={([val]) => updateSetting('intensity', val)}
+                      className="[&>.absolute]:bg-primary"
+                      data-testid="slider-intensity"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs">
+                      <span className="uppercase tracking-widest">Speed</span>
+                      <span className="font-mono text-secondary">{settings.speed.toFixed(1)}</span>
+                    </div>
+                    <Slider
+                      min={0} max={2} step={0.1}
+                      value={[settings.speed]}
+                      onValueChange={([val]) => updateSetting('speed', val)}
+                      className="[&>.absolute]:bg-secondary"
+                      data-testid="slider-speed"
+                    />
+                  </div>
+                </div>
+
+                <div className="w-px bg-white/10 self-stretch" />
+
+                {/* Color Palette */}
+                <div className="flex flex-col gap-2 min-w-48">
+                  <Label className="text-xs uppercase tracking-widest text-accent font-bold">Palette</Label>
+                  <div className="flex gap-2 flex-wrap">
+                    {colorPalettes.map((palette) => (
+                      <button
+                        key={palette.name}
+                        onClick={() => setSettings({ ...settings, colorPalette: palette.colors })}
+                        className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${
+                          JSON.stringify(settings.colorPalette) === JSON.stringify(palette.colors)
+                            ? "border-white ring-2 ring-primary/50 scale-110"
+                            : "border-transparent opacity-60 hover:opacity-100"
+                        }`}
+                        style={{ background: `linear-gradient(135deg, ${palette.colors[0]}, ${palette.colors[1]})` }}
+                        title={palette.name}
+                        data-testid={`button-palette-${palette.name.toLowerCase().replace(/\s/g, '-')}`}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground" data-testid="text-palette-name">{currentPaletteName}</p>
+                </div>
+
+                <div className="w-px bg-white/10 self-stretch" />
+
+                {/* Artwork Filters */}
+                <div className="flex flex-col gap-2 min-w-56">
+                  <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Filters</Label>
+                  <div className="flex gap-1 flex-wrap max-w-56">
+                    {imageFilters.filter(f => f.id !== "none").map((filter) => {
+                      const isActive = settings.imageFilters.includes(filter.id);
+                      return (
+                        <button
+                          key={filter.id}
+                          onClick={() => {
+                            const newFilters = isActive
+                              ? settings.imageFilters.filter(f => f !== filter.id)
+                              : [...settings.imageFilters.filter(f => f !== "none"), filter.id];
+                            setSettings({ 
+                              ...settings, 
+                              imageFilters: newFilters.length === 0 ? ["none"] : newFilters 
+                            });
+                          }}
+                          className={`text-[10px] py-1 px-2 rounded border transition-all ${
+                            isActive 
+                              ? "border-purple-500 bg-purple-500/20 text-purple-300" 
+                              : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
+                          }`}
+                          data-testid={`filter-toggle-${filter.id}`}
+                        >
+                          {filter.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="w-px bg-white/10 self-stretch" />
+
+                {/* Save Actions */}
+                <div className="flex flex-col gap-2 min-w-32">
+                  <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Save</Label>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className="justify-start text-xs"
+                    onClick={onSavePreset}
+                    data-testid="button-save-preset"
+                  >
+                    <Save className="mr-2 h-3 w-3" /> Save Preset
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className="justify-start text-xs"
+                    onClick={onSaveToLibrary}
+                    data-testid="button-save-library"
+                  >
+                    <FolderPlus className="mr-2 h-3 w-3" /> Save to Library
+                  </Button>
+                  {zoom !== undefined && (
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <ZoomIn className="h-3 w-3" />
+                      <span>{(zoom * 100).toFixed(0)}%</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 
   return (
     <>
-      <DesktopSidebar />
+      <DesktopBottomPanel />
       <MobileBottomSheet />
       <MobileFloatingControls />
     </>

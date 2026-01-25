@@ -63,6 +63,7 @@ export const api = {
     extractArtwork: {
       method: 'POST' as const,
       path: '/api/extract-artwork',
+      input: z.object({ audioBase64: z.string() }),
       responses: {
         200: z.object({
           artwork: z.string().nullable(),

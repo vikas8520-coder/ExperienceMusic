@@ -113,12 +113,12 @@ Respond in JSON format:
   // Extract artwork from audio file
   app.post(api.tracks.extractArtwork.path, async (req, res) => {
     try {
-      const { audioBase64 } = req.body;
-      
-      if (!audioBase64) {
-        return res.status(400).json({ message: 'Audio data required' });
+      const parseResult = api.tracks.extractArtwork.input.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: 'Invalid request: audioBase64 is required' });
       }
-
+      
+      const { audioBase64 } = parseResult.data;
       const audioBuffer = Buffer.from(audioBase64, 'base64');
       const metadata = await musicMetadata.parseBuffer(audioBuffer);
       
