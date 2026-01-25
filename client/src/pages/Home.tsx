@@ -137,7 +137,7 @@ export default function Home() {
 
   const { getAudioData, destNode } = useAudioAnalyzer(audioRef.current, audioFile);
 
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const url = URL.createObjectURL(file);
@@ -156,6 +156,34 @@ export default function Home() {
         title: "Track Loaded",
         description: `Ready to play: ${file.name}`,
       });
+      
+      // Try to extract embedded artwork from audio file
+      try {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const base64 = (event.target?.result as string).split(',')[1];
+          const response = await fetch('/api/extract-artwork', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audioBase64: base64 })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.artwork && data.mimeType) {
+              const artworkUrl = `data:${data.mimeType};base64,${data.artwork}`;
+              setThumbnailUrl(artworkUrl);
+              toast({
+                title: "Artwork Found",
+                description: "Extracted embedded artwork from audio file.",
+              });
+            }
+          }
+        };
+        reader.readAsDataURL(file);
+      } catch (error) {
+        console.log('No embedded artwork found or extraction failed');
+      }
     }
   }, [toast]);
 

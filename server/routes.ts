@@ -125,7 +125,7 @@ Respond in JSON format:
       const picture = metadata.common.picture?.[0];
       
       if (picture) {
-        const artworkBase64 = picture.data.toString('base64');
+        const artworkBase64 = Buffer.from(picture.data).toString('base64');
         res.json({
           artwork: artworkBase64,
           mimeType: picture.format,
