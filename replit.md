@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a production-ready audio-reactive visualization web application that allows users to upload audio tracks and generates real-time, high-quality WebGL visualizations in the browser. The app analyzes audio frequency bands (bass, mid, high) and uses them to drive GPU-accelerated 3D visuals with Three.js. It includes multiple visual presets (Energy Rings, Psy Tunnel, Particle Field), customizable controls for intensity/speed/color, and AI-powered thumbnail analysis for automatic theme extraction.
+This is a production-ready audio-reactive visualization web application that allows users to upload audio tracks and generates real-time, high-quality WebGL visualizations in the browser. The app analyzes audio frequency bands (bass, mid, high) and uses them to drive GPU-accelerated 3D visuals with Three.js. It includes 7 visual presets (Energy Rings, Psy Tunnel, Particle Field, Waveform Sphere, Audio Bars, Geometric Kaleidoscope, Cosmic Web), 10 color palettes, customizable controls for intensity/speed/color, and AI-powered thumbnail analysis for automatic theme extraction. The UI is fully responsive with mobile-optimized touch controls.
 
 ## User Preferences
 
