@@ -643,7 +643,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage }: AudioVisualizer
       }}
     >
       <color attach="background" args={['#050508']} />
-      <OrbitControls makeDefault enableZoom={true} enablePan={false} />
+      <OrbitControls makeDefault enableZoom={false} enablePan={false} />
       
       {backgroundImage && <BackgroundImage imageUrl={backgroundImage} />}
       
