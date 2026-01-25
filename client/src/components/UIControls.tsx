@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -73,6 +73,13 @@ export function UIControls({
   const [localThumbnailUrl, setLocalThumbnailUrl] = useState<string | null>(null);
   const [isMobileExpanded, setIsMobileExpanded] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(true);
+  
+  const desktopScrollRef = useRef<HTMLDivElement>(null);
+  const mobileScrollRef = useRef<HTMLDivElement>(null);
+  
+  const updateSetting = useCallback(<K extends keyof typeof settings>(key: K, value: typeof settings[K]) => {
+    setSettings({ ...settings, [key]: value });
+  }, [settings, setSettings]);
 
   const displayThumbnail = thumbnailUrl || localThumbnailUrl;
 
@@ -264,6 +271,8 @@ export function UIControls({
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
                   className="px-4 pb-6 space-y-6 overflow-y-auto max-h-[40vh]"
+                  style={{ overscrollBehavior: 'contain' }}
+                  ref={mobileScrollRef}
                 >
                   {/* Intensity Slider */}
                   <div className="space-y-3">
@@ -274,7 +283,7 @@ export function UIControls({
                     <Slider
                       min={0} max={3} step={0.1}
                       value={[settings.intensity]}
-                      onValueChange={([val]) => setSettings({ ...settings, intensity: val })}
+                      onValueChange={([val]) => updateSetting('intensity', val)}
                       className="[&>.absolute]:bg-primary"
                       data-testid="slider-intensity-mobile"
                     />
@@ -289,7 +298,7 @@ export function UIControls({
                     <Slider
                       min={0} max={2} step={0.1}
                       value={[settings.speed]}
-                      onValueChange={([val]) => setSettings({ ...settings, speed: val })}
+                      onValueChange={([val]) => updateSetting('speed', val)}
                       className="[&>.absolute]:bg-secondary"
                       data-testid="slider-speed-mobile"
                     />
@@ -447,7 +456,7 @@ export function UIControls({
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      <div ref={desktopScrollRef} className="flex-1 overflow-y-auto p-6 space-y-6" style={{ overscrollBehavior: 'contain' }}>
         {/* Audio Controls */}
         <div className="space-y-3">
           <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Audio</Label>
@@ -622,7 +631,7 @@ export function UIControls({
             <Slider
               min={0} max={3} step={0.1}
               value={[settings.intensity]}
-              onValueChange={([val]) => setSettings({ ...settings, intensity: val })}
+              onValueChange={([val]) => updateSetting('intensity', val)}
               className="[&>.absolute]:bg-primary"
               data-testid="slider-intensity"
             />
@@ -636,7 +645,7 @@ export function UIControls({
             <Slider
               min={0} max={2} step={0.1}
               value={[settings.speed]}
-              onValueChange={([val]) => setSettings({ ...settings, speed: val })}
+              onValueChange={([val]) => updateSetting('speed', val)}
               className="[&>.absolute]:bg-secondary"
               data-testid="slider-speed"
             />
