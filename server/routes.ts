@@ -7,6 +7,7 @@ import express from "express";
 import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
+import * as musicMetadata from "music-metadata";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -106,6 +107,42 @@ Respond in JSON format:
     } catch (error) {
       console.error('Error analyzing thumbnail:', error);
       res.status(500).json({ message: 'Failed to analyze thumbnail' });
+    }
+  });
+
+  // Extract artwork from audio file
+  app.post(api.tracks.extractArtwork.path, async (req, res) => {
+    try {
+      const { audioBase64 } = req.body;
+      
+      if (!audioBase64) {
+        return res.status(400).json({ message: 'Audio data required' });
+      }
+
+      const audioBuffer = Buffer.from(audioBase64, 'base64');
+      const metadata = await musicMetadata.parseBuffer(audioBuffer);
+      
+      const picture = metadata.common.picture?.[0];
+      
+      if (picture) {
+        const artworkBase64 = picture.data.toString('base64');
+        res.json({
+          artwork: artworkBase64,
+          mimeType: picture.format,
+          title: metadata.common.title || null,
+          artist: metadata.common.artist || null,
+        });
+      } else {
+        res.json({
+          artwork: null,
+          mimeType: null,
+          title: metadata.common.title || null,
+          artist: metadata.common.artist || null,
+        });
+      }
+    } catch (error) {
+      console.error('Error extracting artwork:', error);
+      res.status(500).json({ message: 'Failed to extract artwork from audio' });
     }
   });
 
