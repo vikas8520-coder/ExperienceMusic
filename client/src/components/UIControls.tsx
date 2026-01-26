@@ -132,16 +132,16 @@ export function UIControls({
     <div className="fixed bottom-0 left-0 right-0 z-30 md:hidden">
       <div className="glass-panel border-t border-white/10 px-4 py-3 flex items-center justify-around gap-2">
         {/* Upload Button */}
-        <label className="relative cursor-pointer">
+        <label className="relative cursor-pointer touch-manipulation">
           <input
             type="file"
-            accept="audio/*"
+            accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.wma,.aiff,.webm"
             onChange={onFileUpload}
             className="sr-only"
             data-testid="input-audio-upload-mobile"
           />
-          <div className="flex items-center justify-center w-10 h-10 rounded-md hover:bg-accent/10 active:bg-accent/20 transition-colors">
-            <Upload className="h-5 w-5" />
+          <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/20 active:bg-primary/40 transition-colors">
+            <Upload className="h-5 w-5 text-primary" />
           </div>
         </label>
         
@@ -508,7 +508,7 @@ export function UIControls({
                     <div className="relative">
                       <input
                         type="file"
-                        accept="audio/*"
+                        accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.wma,.aiff,.webm"
                         onChange={onFileUpload}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         data-testid="input-audio-upload"
