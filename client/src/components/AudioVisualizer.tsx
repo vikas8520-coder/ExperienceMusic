@@ -905,7 +905,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
           }
         }}
       >
-        <OrbitControls makeDefault enableZoom={false} enablePan={false} enableRotate={false} />
+        <OrbitControls makeDefault enableZoom={true} enablePan={true} enableRotate={true} />
       
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} intensity={1} />
