@@ -188,29 +188,47 @@ export function UIControls({
     </div>
   );
 
-  // Simple swipeable modal for mobile settings
+  // Swipeable carousel settings panel with 6 slides
   const MobileSettingsModal = () => {
-    const [startY, setStartY] = useState(0);
-    const [currentY, setCurrentY] = useState(0);
-    const [isDragging, setIsDragging] = useState(false);
+    const [activeSlide, setActiveSlide] = useState(0);
+    const [touchStartX, setTouchStartX] = useState(0);
+    const [touchDeltaX, setTouchDeltaX] = useState(0);
+    const [isSwiping, setIsSwiping] = useState(false);
+    
+    const slides = [
+      { id: 'audio', title: 'Audio', icon: Upload },
+      { id: 'artwork', title: 'Artwork', icon: ImagePlus },
+      { id: 'preset', title: 'Preset', icon: Activity },
+      { id: 'palette', title: 'Colors', icon: Sparkles },
+      { id: 'filters', title: 'Filters', icon: Disc },
+      { id: 'save', title: 'Save', icon: FolderPlus },
+    ];
 
     const handleTouchStart = (e: React.TouchEvent) => {
-      setStartY(e.touches[0].clientY);
-      setIsDragging(true);
+      setTouchStartX(e.touches[0].clientX);
+      setIsSwiping(true);
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
-      if (!isDragging) return;
-      const diff = e.touches[0].clientY - startY;
-      if (diff > 0) setCurrentY(diff);
+      if (!isSwiping) return;
+      const delta = e.touches[0].clientX - touchStartX;
+      setTouchDeltaX(delta);
     };
 
     const handleTouchEnd = () => {
-      if (currentY > 100) {
-        setShowMobileControls(false);
+      if (Math.abs(touchDeltaX) > 50) {
+        if (touchDeltaX > 0 && activeSlide > 0) {
+          setActiveSlide(activeSlide - 1);
+        } else if (touchDeltaX < 0 && activeSlide < slides.length - 1) {
+          setActiveSlide(activeSlide + 1);
+        }
       }
-      setCurrentY(0);
-      setIsDragging(false);
+      setTouchDeltaX(0);
+      setIsSwiping(false);
+    };
+
+    const goToSlide = (index: number) => {
+      setActiveSlide(index);
     };
 
     return (
@@ -222,195 +240,284 @@ export function UIControls({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 z-40 md:hidden"
+              className="fixed inset-0 bg-black/70 z-40 md:hidden"
               onClick={() => setShowMobileControls(false)}
             />
             
             {/* Modal */}
             <motion.div
               initial={{ y: "100%" }}
-              animate={{ y: currentY }}
+              animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 30, stiffness: 400 }}
-              className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/95 backdrop-blur-xl rounded-t-3xl max-h-[85vh] overflow-hidden"
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
+              className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/98 backdrop-blur-xl rounded-t-3xl"
+              style={{ height: '70vh' }}
             >
               {/* Drag Handle */}
               <div className="flex justify-center py-3">
-                <div className="w-12 h-1.5 bg-white/30 rounded-full" />
+                <div className="w-10 h-1 bg-white/20 rounded-full" />
               </div>
               
-              {/* Header */}
-              <div className="flex items-center justify-between px-5 pb-4">
-                <h2 className="text-lg font-semibold">Settings</h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowMobileControls(false)}
-                  data-testid="button-close-settings"
+              {/* Slide Indicators */}
+              <div className="flex justify-center gap-2 px-4 pb-3">
+                {slides.map((slide, index) => (
+                  <button
+                    key={slide.id}
+                    onClick={() => goToSlide(index)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                      activeSlide === index
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-white/5 text-foreground/50"
+                    }`}
+                    data-testid={`slide-tab-${slide.id}`}
+                  >
+                    <slide.icon className="w-3 h-3" />
+                    <span className={activeSlide === index ? "" : "hidden"}>{slide.title}</span>
+                  </button>
+                ))}
+              </div>
+              
+              {/* Swipeable Content Area */}
+              <div 
+                className="relative overflow-hidden flex-1"
+                style={{ height: 'calc(70vh - 100px)' }}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              >
+                <motion.div
+                  className="flex h-full"
+                  animate={{ x: `calc(-${activeSlide * 100}% + ${touchDeltaX}px)` }}
+                  transition={{ type: "spring", damping: 30, stiffness: 300 }}
                 >
-                  <X className="w-5 h-5" />
-                </Button>
-              </div>
-              
-              {/* Scrollable Content */}
-              <div className="overflow-y-auto px-5 pb-8 space-y-6" style={{ maxHeight: 'calc(85vh - 80px)' }}>
-                
-                {/* Preset Selection */}
-                <div className="space-y-3">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Visualization</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {presets.map((preset) => (
-                      <button
-                        key={preset}
-                        onClick={() => setSettings({ ...settings, presetName: preset })}
-                        className={`py-3 px-4 rounded-xl text-sm font-medium transition-all ${
-                          settings.presetName === preset
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-white/5 text-foreground/70"
-                        }`}
-                        data-testid={`button-preset-${preset.toLowerCase().replace(/\s/g, '-')}`}
-                      >
-                        {preset}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Color Palettes */}
-                <div className="space-y-3">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Colors</Label>
-                  <div className="flex gap-3 overflow-x-auto pb-2">
-                    {colorPalettes.map((palette) => (
-                      <button
-                        key={palette.name}
-                        onClick={() => setSettings({ ...settings, colorPalette: palette.colors })}
-                        className={`flex-shrink-0 w-12 h-12 rounded-xl transition-all ${
-                          JSON.stringify(settings.colorPalette) === JSON.stringify(palette.colors)
-                            ? "ring-2 ring-white scale-110"
-                            : "opacity-60"
-                        }`}
-                        style={{ background: `linear-gradient(135deg, ${palette.colors[0]}, ${palette.colors[1]}, ${palette.colors[2]})` }}
-                        data-testid={`button-palette-${palette.name.toLowerCase().replace(/\s/g, '-')}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-                
-                {/* Filters */}
-                <div className="space-y-3">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Image Filters</Label>
-                  <div className="flex gap-2 overflow-x-auto pb-2">
-                    {imageFilters.filter(f => f.id !== "none").map((filter) => {
-                      const isActive = settings.imageFilters.includes(filter.id);
-                      return (
-                        <button
-                          key={filter.id}
-                          onClick={() => {
-                            const newFilters = isActive
-                              ? settings.imageFilters.filter(f => f !== filter.id)
-                              : [...settings.imageFilters.filter(f => f !== "none"), filter.id];
-                            setSettings({ 
-                              ...settings, 
-                              imageFilters: newFilters.length === 0 ? ["none"] : newFilters 
-                            });
-                          }}
-                          className={`flex-shrink-0 py-2.5 px-4 rounded-xl text-sm transition-all ${
-                            isActive 
-                              ? "bg-purple-500/30 text-purple-300 ring-1 ring-purple-500" 
-                              : "bg-white/5 text-foreground/60"
-                          }`}
-                          data-testid={`filter-toggle-mobile-${filter.id}`}
-                        >
-                          {filter.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                
-                {/* Intensity & Speed */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <Label className="text-xs uppercase tracking-wider text-muted-foreground">Intensity</Label>
-                      <span className="text-xs font-mono text-primary">{settings.intensity.toFixed(1)}</span>
-                    </div>
-                    <Slider
-                      min={0} max={3} step={0.1}
-                      value={[settings.intensity]}
-                      onValueChange={([val]) => updateSetting('intensity', val)}
-                      data-testid="slider-intensity-mobile"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <Label className="text-xs uppercase tracking-wider text-muted-foreground">Speed</Label>
-                      <span className="text-xs font-mono text-secondary">{settings.speed.toFixed(1)}</span>
-                    </div>
-                    <Slider
-                      min={0} max={2} step={0.1}
-                      value={[settings.speed]}
-                      onValueChange={([val]) => updateSetting('speed', val)}
-                      data-testid="slider-speed-mobile"
-                    />
-                  </div>
-                </div>
-                
-                {/* Artwork Upload */}
-                <div className="space-y-3">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Artwork</Label>
-                  <div className="flex gap-4 items-center">
-                    <div className="relative w-16 h-16 rounded-xl border border-white/10 bg-white/5 overflow-hidden flex-shrink-0">
-                      {displayThumbnail ? (
-                        <img src={displayThumbnail} alt="Artwork" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <ImagePlus className="w-6 h-6 text-muted-foreground/30" />
+                  {/* Slide 1: Audio Upload */}
+                  <div className="w-full flex-shrink-0 px-6 py-4 overflow-y-auto">
+                    <div className="flex flex-col items-center justify-center h-full gap-6">
+                      <div className="w-24 h-24 rounded-2xl bg-primary/10 flex items-center justify-center">
+                        <Upload className="w-10 h-10 text-primary" />
+                      </div>
+                      <div className="text-center space-y-2">
+                        <h3 className="text-xl font-semibold">Upload Audio</h3>
+                        <p className="text-sm text-muted-foreground">Select an audio file to visualize</p>
+                      </div>
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="*/*"
+                          onChange={onFileUpload}
+                          className="sr-only"
+                          data-testid="input-audio-slide"
+                        />
+                        <div className="px-8 py-4 bg-primary text-primary-foreground rounded-2xl font-medium">
+                          Choose File
+                        </div>
+                      </label>
+                      {trackName && (
+                        <div className="px-4 py-2 bg-white/5 rounded-xl">
+                          <p className="text-sm text-center truncate max-w-[200px]">{trackName}</p>
                         </div>
                       )}
-                      {isAnalyzing && (
-                        <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
-                          <Loader2 className="w-5 h-5 animate-spin text-primary" />
-                        </div>
-                      )}
-                      <input
-                        type="file"
-                        accept="*/*"
-                        onChange={handleThumbnailUpload}
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                        data-testid="input-thumbnail-upload-mobile"
-                      />
                     </div>
-                    <div className="flex-1 space-y-2">
-                      <p className="text-xs text-muted-foreground">Tap to upload artwork</p>
+                  </div>
+
+                  {/* Slide 2: Artwork Upload */}
+                  <div className="w-full flex-shrink-0 px-6 py-4 overflow-y-auto">
+                    <div className="flex flex-col items-center justify-center h-full gap-6">
+                      <div className="relative w-32 h-32 rounded-2xl border-2 border-dashed border-white/20 overflow-hidden">
+                        {displayThumbnail ? (
+                          <img src={displayThumbnail} alt="Artwork" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-white/5">
+                            <ImagePlus className="w-10 h-10 text-muted-foreground/30" />
+                          </div>
+                        )}
+                        {isAnalyzing && (
+                          <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                          </div>
+                        )}
+                        <input
+                          type="file"
+                          accept="*/*"
+                          onChange={handleThumbnailUpload}
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          data-testid="input-thumbnail-slide"
+                        />
+                      </div>
+                      <div className="text-center space-y-2">
+                        <h3 className="text-xl font-semibold">Artwork</h3>
+                        <p className="text-sm text-muted-foreground">Tap to upload background image</p>
+                      </div>
                       {analysis && (
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={applyAIPalette}
-                          className="text-xs"
-                          data-testid="button-apply-ai-palette-mobile"
-                        >
-                          <Sparkles className="mr-1.5 h-3 w-3" />
-                          Use AI Colors
+                        <Button onClick={applyAIPalette} className="gap-2" data-testid="button-apply-ai-slide">
+                          <Sparkles className="w-4 h-4" />
+                          Apply AI Colors
                         </Button>
                       )}
                     </div>
                   </div>
-                </div>
-                
-                {/* Save Button */}
-                <Button 
-                  className="w-full"
-                  onClick={onSaveToLibrary}
-                  data-testid="button-save-library-mobile"
+
+                  {/* Slide 3: Preset Selection */}
+                  <div className="w-full flex-shrink-0 px-6 py-4 overflow-y-auto">
+                    <div className="space-y-4">
+                      <div className="text-center pb-2">
+                        <h3 className="text-xl font-semibold">Visualization</h3>
+                        <p className="text-sm text-muted-foreground">Choose a preset style</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {presets.map((preset) => (
+                          <button
+                            key={preset}
+                            onClick={() => setSettings({ ...settings, presetName: preset })}
+                            className={`py-4 px-3 rounded-2xl text-sm font-medium transition-all ${
+                              settings.presetName === preset
+                                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+                                : "bg-white/5 text-foreground/70"
+                            }`}
+                            data-testid={`preset-slide-${preset.toLowerCase().replace(/\s/g, '-')}`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Slide 4: Color Palette */}
+                  <div className="w-full flex-shrink-0 px-6 py-4 overflow-y-auto">
+                    <div className="space-y-4">
+                      <div className="text-center pb-2">
+                        <h3 className="text-xl font-semibold">Colors</h3>
+                        <p className="text-sm text-muted-foreground">Select a color palette</p>
+                      </div>
+                      <div className="grid grid-cols-5 gap-3">
+                        {colorPalettes.map((palette) => (
+                          <button
+                            key={palette.name}
+                            onClick={() => setSettings({ ...settings, colorPalette: palette.colors })}
+                            className={`aspect-square rounded-2xl transition-all ${
+                              JSON.stringify(settings.colorPalette) === JSON.stringify(palette.colors)
+                                ? "ring-3 ring-white scale-110 shadow-lg"
+                                : "opacity-60"
+                            }`}
+                            style={{ background: `linear-gradient(135deg, ${palette.colors[0]}, ${palette.colors[1]}, ${palette.colors[2]})` }}
+                            title={palette.name}
+                            data-testid={`palette-slide-${palette.name.toLowerCase().replace(/\s/g, '-')}`}
+                          />
+                        ))}
+                      </div>
+                      <div className="text-center pt-4">
+                        <p className="text-sm text-muted-foreground">
+                          Selected: <span className="text-foreground font-medium">{currentPaletteName}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Slide 5: Filters */}
+                  <div className="w-full flex-shrink-0 px-6 py-4 overflow-y-auto">
+                    <div className="space-y-4">
+                      <div className="text-center pb-2">
+                        <h3 className="text-xl font-semibold">Filters</h3>
+                        <p className="text-sm text-muted-foreground">Apply effects to artwork</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        {imageFilters.filter(f => f.id !== "none").map((filter) => {
+                          const isActive = settings.imageFilters.includes(filter.id);
+                          return (
+                            <button
+                              key={filter.id}
+                              onClick={() => {
+                                const newFilters = isActive
+                                  ? settings.imageFilters.filter(f => f !== filter.id)
+                                  : [...settings.imageFilters.filter(f => f !== "none"), filter.id];
+                                setSettings({ 
+                                  ...settings, 
+                                  imageFilters: newFilters.length === 0 ? ["none"] : newFilters 
+                                });
+                              }}
+                              className={`py-4 px-3 rounded-2xl text-sm font-medium transition-all ${
+                                isActive 
+                                  ? "bg-purple-500/30 text-purple-300 ring-2 ring-purple-500 shadow-lg shadow-purple-500/20" 
+                                  : "bg-white/5 text-foreground/60"
+                              }`}
+                              data-testid={`filter-slide-${filter.id}`}
+                            >
+                              {filter.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Slide 6: Save */}
+                  <div className="w-full flex-shrink-0 px-6 py-4 overflow-y-auto">
+                    <div className="flex flex-col items-center justify-center h-full gap-6">
+                      <div className="w-24 h-24 rounded-2xl bg-green-500/10 flex items-center justify-center">
+                        <FolderPlus className="w-10 h-10 text-green-500" />
+                      </div>
+                      <div className="text-center space-y-2">
+                        <h3 className="text-xl font-semibold">Save Track</h3>
+                        <p className="text-sm text-muted-foreground">Save to your library for later</p>
+                      </div>
+                      <Button 
+                        size="lg"
+                        className="px-8 py-6 text-lg rounded-2xl"
+                        onClick={() => {
+                          onSaveToLibrary?.();
+                          setShowMobileControls(false);
+                        }}
+                        data-testid="button-save-slide"
+                      >
+                        <FolderPlus className="mr-2 h-5 w-5" />
+                        Save to Library
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={onToggleLibrary}
+                        className="gap-2"
+                        data-testid="button-open-library-slide"
+                      >
+                        <Library className="w-4 h-4" />
+                        View Library
+                      </Button>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+              
+              {/* Navigation Arrows */}
+              <div className="absolute bottom-6 left-0 right-0 flex justify-between px-6">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => activeSlide > 0 && setActiveSlide(activeSlide - 1)}
+                  className={activeSlide === 0 ? "opacity-30" : ""}
+                  disabled={activeSlide === 0}
+                  data-testid="button-prev-slide"
                 >
-                  <FolderPlus className="mr-2 h-4 w-4" />
-                  Save to Library
+                  <ChevronDown className="w-6 h-6 rotate-90" />
+                </Button>
+                <div className="flex gap-1.5">
+                  {slides.map((_, index) => (
+                    <div
+                      key={index}
+                      className={`w-2 h-2 rounded-full transition-all ${
+                        activeSlide === index ? "bg-primary w-6" : "bg-white/20"
+                      }`}
+                    />
+                  ))}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => activeSlide < slides.length - 1 && setActiveSlide(activeSlide + 1)}
+                  className={activeSlide === slides.length - 1 ? "opacity-30" : ""}
+                  disabled={activeSlide === slides.length - 1}
+                  data-testid="button-next-slide"
+                >
+                  <ChevronDown className="w-6 h-6 -rotate-90" />
                 </Button>
               </div>
             </motion.div>
