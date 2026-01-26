@@ -836,40 +836,76 @@ function ZoomableScene({
   return <group ref={groupRef}>{children}</group>;
 }
 
+// Static background image rendered as HTML (completely fixed, no animation)
+function StaticBackgroundImage({ imageUrl, filterId }: { imageUrl: string; filterId: string }) {
+  const filterStyle = useMemo(() => {
+    switch (filterId) {
+      case 'kaleidoscope':
+        return { filter: 'hue-rotate(30deg) saturate(1.5)' };
+      case 'mirror':
+        return { transform: 'scaleX(-1)' };
+      case 'colorshift':
+        return { filter: 'hue-rotate(60deg)' };
+      case 'invert':
+        return { filter: 'invert(1)' };
+      case 'pixelate':
+        return { filter: 'contrast(1.2) saturate(0.8)' };
+      case 'rgbsplit':
+        return { filter: 'saturate(1.3) contrast(1.1)' };
+      case 'wave':
+        return { filter: 'blur(1px) saturate(1.2)' };
+      case 'zoompulse':
+        return { transform: 'scale(1.05)' };
+      default:
+        return {};
+    }
+  }, [filterId]);
+
+  return (
+    <div
+      className="absolute inset-0 z-0"
+      style={{
+        backgroundImage: `url(${imageUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        opacity: 0.6,
+        ...filterStyle,
+      }}
+    />
+  );
+}
+
 function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: AudioVisualizerProps) {
   const [hasError, setHasError] = useState(false);
   
   const activeFilters = settings.imageFilters || ["none"];
+  const primaryFilter = activeFilters[0] || "none";
 
   if (hasError) {
     return <FallbackVisualizer settings={settings} backgroundImage={backgroundImage} />;
   }
 
   return (
-    <Canvas
-      gl={{ antialias: true, toneMapping: THREE.ReinhardToneMapping }}
-      camera={{ position: [0, 0, 15], fov: 45 }}
-      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 0 }}
-      dpr={[1, 2]}
-      onCreated={({ gl }) => {
-        if (!gl.getContext()) {
-          setHasError(true);
-        }
-      }}
-    >
-      <color attach="background" args={['#050508']} />
-      <OrbitControls makeDefault enableZoom={false} enablePan={false} />
+    <>
+      {/* Static background image - completely fixed, no animation */}
+      {backgroundImage && (
+        <StaticBackgroundImage imageUrl={backgroundImage} filterId={primaryFilter} />
+      )}
       
-      {backgroundImage && activeFilters.map((filterId, index) => (
-        <BackgroundImage 
-          key={`filter-${filterId}-${index}`}
-          imageUrl={backgroundImage} 
-          filterId={filterId}
-          intensity={settings.intensity}
-          getAudioData={getAudioData}
-          layerOffset={index * 0.5}
-        />
-      ))}
+      <Canvas
+        gl={{ antialias: true, toneMapping: THREE.ReinhardToneMapping, alpha: true }}
+        camera={{ position: [0, 0, 15], fov: 45 }}
+        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 1, background: 'transparent' }}
+        dpr={[1, 2]}
+        onCreated={({ gl }) => {
+          gl.setClearColor(0x000000, 0);
+          if (!gl.getContext()) {
+            setHasError(true);
+          }
+        }}
+      >
+        <OrbitControls makeDefault enableZoom={false} enablePan={false} enableRotate={false} />
       
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} intensity={1} />
@@ -900,6 +936,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
         <Noise opacity={0.05} />
       </EffectComposer>
     </Canvas>
+    </>
   );
 }
 
