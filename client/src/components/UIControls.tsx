@@ -91,22 +91,22 @@ export function UIControls({
     safeFilters.forEach(filterId => {
       switch (filterId) {
         case 'kaleidoscope':
-          cssFilters.push('hue-rotate(30deg)', 'saturate(1.5)');
+          cssFilters.push('hue-rotate(90deg)', 'saturate(2)', 'contrast(1.3)', 'brightness(1.1)');
           break;
         case 'colorshift':
-          cssFilters.push('hue-rotate(60deg)');
+          cssFilters.push('hue-rotate(180deg)', 'saturate(1.5)');
           break;
         case 'invert':
           cssFilters.push('invert(1)');
           break;
         case 'pixelate':
-          cssFilters.push('contrast(1.2)', 'saturate(0.8)');
+          cssFilters.push('contrast(1.5)', 'saturate(0.5)', 'brightness(1.2)');
           break;
         case 'rgbsplit':
-          cssFilters.push('saturate(1.3)', 'contrast(1.1)');
+          cssFilters.push('saturate(2)', 'contrast(1.3)', 'hue-rotate(15deg)');
           break;
         case 'wave':
-          cssFilters.push('blur(1px)', 'saturate(1.2)');
+          cssFilters.push('blur(2px)', 'saturate(1.5)', 'brightness(1.1)');
           break;
       }
     });
@@ -124,7 +124,7 @@ export function UIControls({
           transforms.push('scaleX(-1)');
           break;
         case 'zoompulse':
-          transforms.push('scale(1.05)');
+          transforms.push('scale(1.15)');
           break;
       }
     });
