@@ -649,19 +649,14 @@ const PsyFilterMaterial = shaderMaterial(
       return vec2(cos(angle), sin(angle)) * radius + 0.5;
     }
     
+    // Static mirror - no animation
     vec2 mirror(vec2 uv) {
       vec2 centered = uv - 0.5;
-      float angle = atan(centered.y, centered.x) + uTime * 0.3;
-      float radius = length(centered);
       vec2 mirrored = vec2(abs(centered.x), abs(centered.y));
-      float wave = sin(angle * 4.0 + uTime) * 0.1 * uIntensity;
-      return mirrored + 0.5 + wave;
+      return mirrored + 0.5;
     }
     
     vec3 colorShift(vec3 color, float shift) {
-      float r = color.r;
-      float g = color.g;
-      float b = color.b;
       float angle = shift * PI * 2.0;
       mat3 rotation = mat3(
         0.299 + 0.701 * cos(angle), 0.587 - 0.587 * cos(angle), 0.114 - 0.114 * cos(angle),
@@ -669,12 +664,6 @@ const PsyFilterMaterial = shaderMaterial(
         0.299 - 0.299 * cos(angle), 0.587 - 0.587 * cos(angle), 0.114 + 0.886 * cos(angle)
       );
       return rotation * color;
-    }
-    
-    vec2 wave(vec2 uv) {
-      float waveX = sin(uv.y * 10.0 + uTime * 2.0) * 0.02 * uIntensity;
-      float waveY = cos(uv.x * 10.0 + uTime * 2.0) * 0.02 * uIntensity;
-      return uv + vec2(waveX, waveY);
     }
     
     vec2 pixelate(vec2 uv, float pixels) {
@@ -804,16 +793,13 @@ function BackgroundImage({
     return tex;
   }, [imageUrl]);
 
-  useFrame((state) => {
+  // Set filter type once - background is static, no animation
+  useFrame(() => {
     if (materialRef.current) {
-      materialRef.current.uTime = state.clock.getElapsedTime() + layerOffset;
+      materialRef.current.uTime = 0; // Static - no time animation
       materialRef.current.uFilterType = filterIdToType[filterId] || 0;
       materialRef.current.uIntensity = intensity;
-      
-      if (getAudioData) {
-        const { energy } = getAudioData();
-        materialRef.current.uEnergy = energy;
-      }
+      materialRef.current.uEnergy = 0; // No audio reactivity for background
     }
   });
 
