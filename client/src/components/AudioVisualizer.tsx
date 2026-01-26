@@ -899,23 +899,28 @@ function ZoomableScene({
 function StaticBackgroundImage({ imageUrl, filters = ["none"] }: { imageUrl: string; filters?: string[] }) {
   const filterStyles = useMemo(() => getFilterStyles(filters), [filters]);
   
-  // Compute explicit filter and transform strings for debugging
+  // Compute explicit filter and transform strings
   const cssFilter = filterStyles.filter || 'none';
   const cssTransform = filterStyles.transform || 'none';
+  
+  // Debug logging
+  console.log('[StaticBackgroundImage] filters:', filters, 'cssFilter:', cssFilter, 'cssTransform:', cssTransform);
 
   return (
     <div
-      className="absolute inset-0 z-0"
+      className="absolute inset-0"
       data-testid="static-background-image"
       data-filters={filters.join(',')}
+      data-css-filter={cssFilter}
       style={{
         backgroundImage: `url(${imageUrl})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
-        opacity: 0.6,
+        opacity: 0.7,
         filter: cssFilter,
         transform: cssTransform,
+        zIndex: 0,
       }}
     />
   );
@@ -925,6 +930,9 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
   const [hasError, setHasError] = useState(false);
   
   const activeFilters = settings.imageFilters || ["none"];
+  
+  // Debug logging
+  console.log('[ThreeScene] settings.imageFilters:', settings.imageFilters, 'activeFilters:', activeFilters, 'backgroundImage:', !!backgroundImage);
 
   if (hasError) {
     return <FallbackVisualizer settings={settings} backgroundImage={backgroundImage} />;
