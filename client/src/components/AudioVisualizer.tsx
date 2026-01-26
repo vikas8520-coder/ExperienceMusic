@@ -898,17 +898,24 @@ function ZoomableScene({
 // Static background image rendered as HTML (completely fixed, no animation)
 function StaticBackgroundImage({ imageUrl, filters = ["none"] }: { imageUrl: string; filters?: string[] }) {
   const filterStyles = useMemo(() => getFilterStyles(filters), [filters]);
+  
+  // Compute explicit filter and transform strings for debugging
+  const cssFilter = filterStyles.filter || 'none';
+  const cssTransform = filterStyles.transform || 'none';
 
   return (
     <div
       className="absolute inset-0 z-0"
+      data-testid="static-background-image"
+      data-filters={filters.join(',')}
       style={{
         backgroundImage: `url(${imageUrl})`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
         opacity: 0.6,
-        ...filterStyles,
+        filter: cssFilter,
+        transform: cssTransform,
       }}
     />
   );
@@ -924,7 +931,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
   }
 
   return (
-    <>
+    <div className="absolute inset-0 overflow-hidden">
       {/* Static background image - completely fixed, no animation */}
       {backgroundImage && (
         <StaticBackgroundImage imageUrl={backgroundImage} filters={activeFilters} />
@@ -973,7 +980,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
         <Noise opacity={0.05} />
       </EffectComposer>
     </Canvas>
-    </>
+    </div>
   );
 }
 

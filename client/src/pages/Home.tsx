@@ -342,19 +342,7 @@ export default function Home() {
   return (
     <div className="w-full h-screen relative bg-background overflow-hidden selection:bg-primary/30">
       
-      {/* Background Thumbnail Layer */}
-      {thumbnailUrl && (
-        <div 
-          className="absolute inset-0 z-0 opacity-20 blur-xl"
-          style={{
-            backgroundImage: `url(${thumbnailUrl})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-      )}
-      
-      {/* 3D Visualizer Layer */}
+      {/* 3D Visualizer Layer - handles its own background with filters */}
       <AudioVisualizer 
         getAudioData={getAudioData}
         settings={settings}
