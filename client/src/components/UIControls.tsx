@@ -135,7 +135,7 @@ export function UIControls({
         <label className="relative cursor-pointer touch-manipulation">
           <input
             type="file"
-            accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.wma,.aiff,.webm"
+            accept="*/*"
             onChange={onFileUpload}
             className="sr-only"
             data-testid="input-audio-upload-mobile"
@@ -508,7 +508,7 @@ export function UIControls({
                     <div className="relative">
                       <input
                         type="file"
-                        accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.wma,.aiff,.webm"
+                        accept="*/*"
                         onChange={onFileUpload}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         data-testid="input-audio-upload"
