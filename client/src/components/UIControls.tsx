@@ -132,21 +132,18 @@ export function UIControls({
     <div className="fixed bottom-0 left-0 right-0 z-30 md:hidden">
       <div className="glass-panel border-t border-white/10 px-4 py-3 flex items-center justify-around gap-2">
         {/* Upload Button */}
-        <div className="relative">
+        <label className="relative cursor-pointer">
           <input
             type="file"
             accept="audio/*"
             onChange={onFileUpload}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            className="sr-only"
             data-testid="input-audio-upload-mobile"
           />
-          <Button 
-            variant="ghost"
-            size="icon"
-          >
+          <div className="flex items-center justify-center w-10 h-10 rounded-md hover:bg-accent/10 active:bg-accent/20 transition-colors">
             <Upload className="h-5 w-5" />
-          </Button>
-        </div>
+          </div>
+        </label>
         
         {/* Library Button */}
         <Button 
