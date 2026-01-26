@@ -837,29 +837,46 @@ function ZoomableScene({
 }
 
 // Static background image rendered as HTML (completely fixed, no animation)
-function StaticBackgroundImage({ imageUrl, filterId }: { imageUrl: string; filterId: string }) {
-  const filterStyle = useMemo(() => {
-    switch (filterId) {
-      case 'kaleidoscope':
-        return { filter: 'hue-rotate(30deg) saturate(1.5)' };
-      case 'mirror':
-        return { transform: 'scaleX(-1)' };
-      case 'colorshift':
-        return { filter: 'hue-rotate(60deg)' };
-      case 'invert':
-        return { filter: 'invert(1)' };
-      case 'pixelate':
-        return { filter: 'contrast(1.2) saturate(0.8)' };
-      case 'rgbsplit':
-        return { filter: 'saturate(1.3) contrast(1.1)' };
-      case 'wave':
-        return { filter: 'blur(1px) saturate(1.2)' };
-      case 'zoompulse':
-        return { transform: 'scale(1.05)' };
-      default:
-        return {};
-    }
-  }, [filterId]);
+function StaticBackgroundImage({ imageUrl, filters = ["none"] }: { imageUrl: string; filters?: string[] }) {
+  const combinedStyles = useMemo(() => {
+    const cssFilters: string[] = [];
+    const transforms: string[] = [];
+    const safeFilters = filters || ["none"];
+    
+    safeFilters.forEach(filterId => {
+      switch (filterId) {
+        case 'kaleidoscope':
+          cssFilters.push('hue-rotate(30deg)', 'saturate(1.5)');
+          break;
+        case 'mirror':
+          transforms.push('scaleX(-1)');
+          break;
+        case 'colorshift':
+          cssFilters.push('hue-rotate(60deg)');
+          break;
+        case 'invert':
+          cssFilters.push('invert(1)');
+          break;
+        case 'pixelate':
+          cssFilters.push('contrast(1.2)', 'saturate(0.8)');
+          break;
+        case 'rgbsplit':
+          cssFilters.push('saturate(1.3)', 'contrast(1.1)');
+          break;
+        case 'wave':
+          cssFilters.push('blur(1px)', 'saturate(1.2)');
+          break;
+        case 'zoompulse':
+          transforms.push('scale(1.05)');
+          break;
+      }
+    });
+    
+    return {
+      filter: cssFilters.length > 0 ? cssFilters.join(' ') : undefined,
+      transform: transforms.length > 0 ? transforms.join(' ') : undefined,
+    };
+  }, [filters]);
 
   return (
     <div
@@ -870,7 +887,7 @@ function StaticBackgroundImage({ imageUrl, filterId }: { imageUrl: string; filte
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
         opacity: 0.6,
-        ...filterStyle,
+        ...combinedStyles,
       }}
     />
   );
@@ -880,7 +897,6 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
   const [hasError, setHasError] = useState(false);
   
   const activeFilters = settings.imageFilters || ["none"];
-  const primaryFilter = activeFilters[0] || "none";
 
   if (hasError) {
     return <FallbackVisualizer settings={settings} backgroundImage={backgroundImage} />;
@@ -890,7 +906,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
     <>
       {/* Static background image - completely fixed, no animation */}
       {backgroundImage && (
-        <StaticBackgroundImage imageUrl={backgroundImage} filterId={primaryFilter} />
+        <StaticBackgroundImage imageUrl={backgroundImage} filters={activeFilters} />
       )}
       
       <Canvas
