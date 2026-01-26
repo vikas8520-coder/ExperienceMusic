@@ -31,9 +31,52 @@ function isWebGLAvailable(): boolean {
   }
 }
 
+// Get CSS filter styles from filter IDs
+function getFilterStyles(filters: string[]): React.CSSProperties {
+  const cssFilters: string[] = [];
+  const transforms: string[] = [];
+  const safeFilters = filters || ["none"];
+  
+  safeFilters.forEach(filterId => {
+    switch (filterId) {
+      case 'kaleidoscope':
+        cssFilters.push('hue-rotate(30deg)', 'saturate(1.5)');
+        break;
+      case 'mirror':
+        transforms.push('scaleX(-1)');
+        break;
+      case 'colorshift':
+        cssFilters.push('hue-rotate(60deg)');
+        break;
+      case 'invert':
+        cssFilters.push('invert(1)');
+        break;
+      case 'pixelate':
+        cssFilters.push('contrast(1.2)', 'saturate(0.8)');
+        break;
+      case 'rgbsplit':
+        cssFilters.push('saturate(1.3)', 'contrast(1.1)');
+        break;
+      case 'wave':
+        cssFilters.push('blur(1px)', 'saturate(1.2)');
+        break;
+      case 'zoompulse':
+        transforms.push('scale(1.05)');
+        break;
+    }
+  });
+  
+  return {
+    filter: cssFilters.length > 0 ? cssFilters.join(' ') : undefined,
+    transform: transforms.length > 0 ? transforms.join(' ') : undefined,
+  };
+}
+
 // Fallback visualizer when WebGL is unavailable
 function FallbackVisualizer({ settings, backgroundImage }: { settings: any; backgroundImage?: string | null }) {
   const [pulse, setPulse] = useState(0);
+  const filters = settings.imageFilters || ["none"];
+  const filterStyles = getFilterStyles(filters);
   
   useEffect(() => {
     const interval = setInterval(() => {
@@ -45,15 +88,34 @@ function FallbackVisualizer({ settings, backgroundImage }: { settings: any; back
   const scale = 1 + Math.sin(pulse) * 0.1 * settings.intensity;
   
   return (
-    <div 
-      className="absolute inset-0 flex items-center justify-center overflow-hidden"
-      style={{
-        background: backgroundImage 
-          ? `linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.9)), url(${backgroundImage}) center/cover`
-          : `radial-gradient(ellipse at center, ${settings.colorPalette[0] || '#1a0a2e'} 0%, #050508 100%)`
-      }}
-    >
-      <div className="relative">
+    <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+      {/* Static background with filters applied */}
+      {backgroundImage && (
+        <div 
+          className="absolute inset-0 z-0"
+          style={{
+            backgroundImage: `url(${backgroundImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            opacity: 0.6,
+            ...filterStyles,
+          }}
+        />
+      )}
+      
+      {/* Dark overlay */}
+      <div 
+        className="absolute inset-0 z-1"
+        style={{
+          background: backgroundImage 
+            ? 'linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.6))'
+            : `radial-gradient(ellipse at center, ${settings.colorPalette[0] || '#1a0a2e'} 0%, #050508 100%)`
+        }}
+      />
+      
+      {/* Animated visualization */}
+      <div className="relative z-10">
         {settings.colorPalette.slice(0, 5).map((color: string, i: number) => (
           <div
             key={i}
@@ -79,9 +141,6 @@ function FallbackVisualizer({ settings, backgroundImage }: { settings: any; back
             boxShadow: `0 0 60px ${settings.colorPalette[0]}80`
           }}
         />
-      </div>
-      <div className="absolute bottom-8 text-center">
-        <p className="text-muted-foreground text-xs opacity-50">Audio Visualization (2D Fallback)</p>
       </div>
     </div>
   );
@@ -838,45 +897,7 @@ function ZoomableScene({
 
 // Static background image rendered as HTML (completely fixed, no animation)
 function StaticBackgroundImage({ imageUrl, filters = ["none"] }: { imageUrl: string; filters?: string[] }) {
-  const combinedStyles = useMemo(() => {
-    const cssFilters: string[] = [];
-    const transforms: string[] = [];
-    const safeFilters = filters || ["none"];
-    
-    safeFilters.forEach(filterId => {
-      switch (filterId) {
-        case 'kaleidoscope':
-          cssFilters.push('hue-rotate(30deg)', 'saturate(1.5)');
-          break;
-        case 'mirror':
-          transforms.push('scaleX(-1)');
-          break;
-        case 'colorshift':
-          cssFilters.push('hue-rotate(60deg)');
-          break;
-        case 'invert':
-          cssFilters.push('invert(1)');
-          break;
-        case 'pixelate':
-          cssFilters.push('contrast(1.2)', 'saturate(0.8)');
-          break;
-        case 'rgbsplit':
-          cssFilters.push('saturate(1.3)', 'contrast(1.1)');
-          break;
-        case 'wave':
-          cssFilters.push('blur(1px)', 'saturate(1.2)');
-          break;
-        case 'zoompulse':
-          transforms.push('scale(1.05)');
-          break;
-      }
-    });
-    
-    return {
-      filter: cssFilters.length > 0 ? cssFilters.join(' ') : undefined,
-      transform: transforms.length > 0 ? transforms.join(' ') : undefined,
-    };
-  }, [filters]);
+  const filterStyles = useMemo(() => getFilterStyles(filters), [filters]);
 
   return (
     <div
@@ -887,7 +908,7 @@ function StaticBackgroundImage({ imageUrl, filters = ["none"] }: { imageUrl: str
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
         opacity: 0.6,
-        ...combinedStyles,
+        ...filterStyles,
       }}
     />
   );
