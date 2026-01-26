@@ -332,7 +332,7 @@ export function UIControls({
                         
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="*/*"
                           onChange={handleThumbnailUpload}
                           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                           data-testid="input-thumbnail-upload-mobile"
@@ -560,7 +560,7 @@ export function UIControls({
                     )}
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="*/*"
                       onChange={handleThumbnailUpload}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       data-testid="input-thumbnail-upload"

@@ -824,7 +824,7 @@ function BackgroundImage({
   const opacity = layerOffset > 0 ? 0.4 : 1;
 
   return (
-    <mesh position={[0, 0, -30 + layerOffset * 0.1]} scale={[60, 40, 1]}>
+    <mesh position={[0, 0, -30 + layerOffset * 0.1]} scale={[100, 100, 1]}>
       <planeGeometry />
       <psyFilterMaterial 
         ref={materialRef}
