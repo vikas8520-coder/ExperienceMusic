@@ -127,103 +127,104 @@ export function UIControls({
     }
   };
 
-  // Mobile floating controls (always visible)
+  // Mobile floating controls (always visible at bottom)
   const MobileFloatingControls = () => (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 md:hidden">
-      {/* Play/Pause Button */}
-      <Button 
-        onClick={onPlayPause} 
-        size="lg"
-        className="rounded-full shadow-lg shadow-primary/30"
-        data-testid="button-play-mobile"
-      >
-        {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6 ml-0.5" />}
-      </Button>
-      
-      {/* Upload Button */}
-      <div className="relative">
-        <input
-          type="file"
-          accept="audio/*"
-          onChange={onFileUpload}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          data-testid="input-audio-upload-mobile"
-        />
+    <div className="fixed bottom-0 left-0 right-0 z-30 md:hidden">
+      <div className="glass-panel border-t border-white/10 px-4 py-3 flex items-center justify-around gap-2">
+        {/* Upload Button */}
+        <div className="relative">
+          <input
+            type="file"
+            accept="audio/*"
+            onChange={onFileUpload}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            data-testid="input-audio-upload-mobile"
+          />
+          <Button 
+            variant="ghost"
+            size="icon"
+          >
+            <Upload className="h-5 w-5" />
+          </Button>
+        </div>
+        
+        {/* Library Button */}
         <Button 
-          variant="secondary"
+          variant="ghost"
           size="icon"
-          className="rounded-full shadow-lg"
+          onClick={onToggleLibrary}
+          data-testid="button-library-mobile"
         >
-          <Upload className="h-5 w-5" />
+          <Library className="h-5 w-5" />
+        </Button>
+        
+        {/* Play/Pause Button - Center and Larger */}
+        <Button 
+          onClick={onPlayPause} 
+          size="lg"
+          className="rounded-full shadow-lg shadow-primary/30"
+          data-testid="button-play-mobile"
+        >
+          {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6 ml-0.5" />}
+        </Button>
+        
+        {/* Settings Toggle */}
+        <Button 
+          variant={showMobileControls ? "default" : "ghost"}
+          size="icon"
+          onClick={() => setShowMobileControls(!showMobileControls)}
+          data-testid="button-settings-mobile"
+        >
+          <Settings className="h-5 w-5" />
+        </Button>
+        
+        {/* Fullscreen Button */}
+        <Button 
+          variant="ghost"
+          size="icon"
+          onClick={onToggleFullscreen}
+          data-testid="button-fullscreen-mobile"
+        >
+          {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
         </Button>
       </div>
-      
-      {/* Settings Toggle */}
-      <Button 
-        variant="secondary"
-        size="icon"
-        className="rounded-full shadow-lg"
-        onClick={() => setShowMobileControls(!showMobileControls)}
-        data-testid="button-settings-mobile"
-      >
-        <Settings className="h-5 w-5" />
-      </Button>
-      
-      {/* Library Button */}
-      <Button 
-        variant="secondary"
-        size="icon"
-        className="rounded-full shadow-lg"
-        onClick={onToggleLibrary}
-        data-testid="button-library-mobile"
-      >
-        <Library className="h-5 w-5" />
-      </Button>
-      
-      {/* Fullscreen Button */}
-      <Button 
-        variant="secondary"
-        size="icon"
-        className="rounded-full shadow-lg"
-        onClick={onToggleFullscreen}
-        data-testid="button-fullscreen-mobile"
-      >
-        {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
-      </Button>
     </div>
   );
 
-  // Mobile bottom sheet
+  // Mobile bottom sheet - appears above the bottom bar
   const MobileBottomSheet = () => (
     <AnimatePresence>
       {showMobileControls && (
         <motion.div 
           initial={{ y: "100%" }}
-          animate={{ y: isMobileExpanded ? 0 : "calc(100% - 180px)" }}
+          animate={{ y: 0 }}
           exit={{ y: "100%" }}
           transition={{ type: "spring", damping: 25, stiffness: 300 }}
-          className="fixed bottom-20 left-0 right-0 z-20 md:hidden"
+          className="fixed bottom-16 left-0 right-0 z-20 md:hidden"
         >
-          <div className="glass-panel rounded-t-3xl max-h-[70vh] overflow-hidden">
-            {/* Drag Handle */}
+          <div className="glass-panel rounded-t-2xl border-t border-white/10 max-h-[60vh] overflow-hidden flex flex-col">
+            {/* Header with expand toggle */}
             <button
               onClick={() => setIsMobileExpanded(!isMobileExpanded)}
-              className="w-full flex flex-col items-center py-3 active:bg-white/5"
+              className="w-full flex items-center justify-between px-4 py-3 active:bg-white/5 flex-shrink-0"
               data-testid="button-expand-controls"
             >
-              <div className="w-12 h-1 bg-white/30 rounded-full mb-2" />
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium">Controls</span>
+              </div>
               <div className="flex items-center gap-2 text-muted-foreground">
-                <span className="text-xs uppercase tracking-wider">Controls</span>
+                <span className="text-xs">{isMobileExpanded ? "Less" : "More"}</span>
                 {isMobileExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
               </div>
             </button>
             
-            {/* Quick Controls Row */}
-            <div className="px-4 pb-4 space-y-4">
+            {/* Quick Controls - Always Visible */}
+            <div className="px-4 pb-3 space-y-3 flex-shrink-0">
               {/* Current Track */}
               {trackName && (
                 <div className="p-2 bg-black/30 rounded-lg text-center">
-                  <p className="text-xs text-muted-foreground">Now Playing</p>
+                  <p className="text-[10px] text-muted-foreground uppercase">Now Playing</p>
                   <p className="text-sm font-medium truncate">{trackName.replace(/\.[^/.]+$/, "")}</p>
                 </div>
               )}
@@ -233,12 +234,12 @@ export function UIControls({
                 value={settings.presetName}
                 onValueChange={(val) => setSettings({ ...settings, presetName: val as PresetName })}
               >
-                <SelectTrigger className="bg-black/50 border-white/10 font-mono h-12 text-base" data-testid="select-preset-mobile">
+                <SelectTrigger className="bg-black/50 border-white/10 font-mono" data-testid="select-preset-mobile">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-background border-white/10">
                   {presets.map((preset) => (
-                    <SelectItem key={preset} value={preset} className="font-mono focus:bg-primary/20 py-3">
+                    <SelectItem key={preset} value={preset} className="font-mono focus:bg-primary/20">
                       {preset}
                     </SelectItem>
                   ))}
@@ -246,15 +247,15 @@ export function UIControls({
               </Select>
               
               {/* Color Palette Row */}
-              <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
+              <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4">
                 {colorPalettes.map((palette) => (
                   <button
                     key={palette.name}
                     onClick={() => setSettings({ ...settings, colorPalette: palette.colors })}
-                    className={`flex-shrink-0 w-10 h-10 rounded-full border-2 transition-all ${
+                    className={`flex-shrink-0 w-9 h-9 rounded-full border-2 transition-all ${
                       JSON.stringify(settings.colorPalette) === JSON.stringify(palette.colors)
                         ? "border-white ring-2 ring-primary/50 scale-110"
-                        : "border-transparent opacity-60"
+                        : "border-transparent opacity-70"
                     }`}
                     style={{ background: `linear-gradient(135deg, ${palette.colors[0]}, ${palette.colors[1]})` }}
                     title={palette.name}
@@ -271,91 +272,98 @@ export function UIControls({
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="px-4 pb-6 space-y-6 overflow-y-auto max-h-[40vh]"
+                  className="border-t border-white/10 px-4 py-4 space-y-5 overflow-y-auto flex-1"
                   style={{ overscrollBehavior: 'contain' }}
                   ref={mobileScrollRef}
                 >
-                  {/* Intensity Slider */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <Label className="text-xs uppercase tracking-widest">Intensity</Label>
-                      <span className="text-xs font-mono text-primary">{settings.intensity.toFixed(1)}</span>
-                    </div>
-                    <Slider
-                      min={0} max={3} step={0.1}
-                      value={[settings.intensity]}
-                      onValueChange={([val]) => updateSetting('intensity', val)}
-                      className="[&>.absolute]:bg-primary"
-                      data-testid="slider-intensity-mobile"
-                    />
-                  </div>
-                  
-                  {/* Speed Slider */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <Label className="text-xs uppercase tracking-widest">Speed</Label>
-                      <span className="text-xs font-mono text-secondary">{settings.speed.toFixed(1)}</span>
-                    </div>
-                    <Slider
-                      min={0} max={2} step={0.1}
-                      value={[settings.speed]}
-                      onValueChange={([val]) => updateSetting('speed', val)}
-                      className="[&>.absolute]:bg-secondary"
-                      data-testid="slider-speed-mobile"
-                    />
-                  </div>
-                  
-                  {/* Thumbnail Upload */}
-                  <div className="space-y-3">
-                    <Label className="text-xs uppercase tracking-widest text-accent font-bold">Artwork</Label>
-                    <div className="relative aspect-video rounded-xl border border-white/10 bg-black/50 overflow-hidden">
-                      {displayThumbnail ? (
-                        <img 
-                          src={displayThumbnail} 
-                          alt="Thumbnail" 
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
-                          <ImagePlus className="w-8 h-8 opacity-30" />
-                          <span className="text-xs opacity-50">Tap to add artwork</span>
-                        </div>
-                      )}
-                      
-                      {isAnalyzing && (
-                        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2">
-                          <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                          <span className="text-xs text-primary">Analyzing...</span>
-                        </div>
-                      )}
-                      
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleThumbnailUpload}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        data-testid="input-thumbnail-upload-mobile"
+                  {/* Sliders Row */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Intensity Slider */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between gap-2">
+                        <Label className="text-xs uppercase tracking-widest">Intensity</Label>
+                        <span className="text-xs font-mono text-primary">{settings.intensity.toFixed(1)}</span>
+                      </div>
+                      <Slider
+                        min={0} max={3} step={0.1}
+                        value={[settings.intensity]}
+                        onValueChange={([val]) => updateSetting('intensity', val)}
+                        className="[&>.absolute]:bg-primary"
+                        data-testid="slider-intensity-mobile"
                       />
                     </div>
                     
-                    {analysis && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="w-full text-xs border-accent/50 text-accent"
-                        onClick={applyAIPalette}
-                        data-testid="button-apply-ai-palette-mobile"
-                      >
-                        <Sparkles className="mr-2 h-3 w-3" />
-                        Apply AI Palette
-                      </Button>
-                    )}
+                    {/* Speed Slider */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between gap-2">
+                        <Label className="text-xs uppercase tracking-widest">Speed</Label>
+                        <span className="text-xs font-mono text-secondary">{settings.speed.toFixed(1)}</span>
+                      </div>
+                      <Slider
+                        min={0} max={2} step={0.1}
+                        value={[settings.speed]}
+                        onValueChange={([val]) => updateSetting('speed', val)}
+                        className="[&>.absolute]:bg-secondary"
+                        data-testid="slider-speed-mobile"
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Artwork Upload */}
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase tracking-widest text-accent font-bold">Artwork</Label>
+                    <div className="flex gap-3 items-start">
+                      <div className="relative w-20 h-20 flex-shrink-0 rounded-lg border border-white/10 bg-black/50 overflow-hidden">
+                        {displayThumbnail ? (
+                          <img 
+                            src={displayThumbnail} 
+                            alt="Thumbnail" 
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-1">
+                            <ImagePlus className="w-6 h-6 opacity-30" />
+                            <span className="text-[8px] opacity-50">Tap</span>
+                          </div>
+                        )}
+                        
+                        {isAnalyzing && (
+                          <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                            <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                          </div>
+                        )}
+                        
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleThumbnailUpload}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          data-testid="input-thumbnail-upload-mobile"
+                        />
+                      </div>
+                      
+                      <div className="flex-1 space-y-2">
+                        <p className="text-[10px] text-muted-foreground">Upload custom artwork or use embedded album art from your audio file.</p>
+                        {analysis && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            className="w-full text-xs border-accent/50 text-accent"
+                            onClick={applyAIPalette}
+                            data-testid="button-apply-ai-palette-mobile"
+                          >
+                            <Sparkles className="mr-2 h-3 w-3" />
+                            Apply AI Palette
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                   
                   {/* Image Filter Selector - Multiple */}
-                  <div className="space-y-3">
-                    <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Artwork Filters (Layer Multiple)</Label>
-                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Artwork Filters</Label>
+                    <div className="grid grid-cols-3 gap-2">
                       {imageFilters.filter(f => f.id !== "none").map((filter) => {
                         const isActive = settings.imageFilters.includes(filter.id);
                         return (
@@ -370,10 +378,10 @@ export function UIControls({
                                 imageFilters: newFilters.length === 0 ? ["none"] : newFilters 
                               });
                             }}
-                            className={`text-xs py-2 px-3 rounded-lg border transition-all ${
+                            className={`text-[11px] py-2.5 px-2 rounded-lg border transition-all ${
                               isActive 
                                 ? "border-purple-500 bg-purple-500/20 text-purple-300" 
-                                : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
+                                : "border-white/10 bg-black/30 text-muted-foreground"
                             }`}
                             data-testid={`filter-toggle-mobile-${filter.id}`}
                           >
@@ -382,11 +390,10 @@ export function UIControls({
                         );
                       })}
                     </div>
-                    <p className="text-[10px] text-muted-foreground">Tap to toggle multiple filters</p>
                   </div>
                   
                   {/* Action Buttons */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-3 pt-2">
                     <Button 
                       variant="outline" 
                       className={`border-destructive/50 text-destructive ${isRecording ? 'animate-pulse bg-destructive/20' : ''}`}
