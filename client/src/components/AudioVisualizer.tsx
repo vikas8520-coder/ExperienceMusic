@@ -40,7 +40,9 @@ function getFilterStyles(filters: string[]): React.CSSProperties {
   safeFilters.forEach(filterId => {
     switch (filterId) {
       case 'kaleidoscope':
-        cssFilters.push('hue-rotate(90deg)', 'saturate(2)', 'contrast(1.3)', 'brightness(1.1)');
+        // Kaleidoscope is handled by KaleidoscopeBackground component
+        // Just add subtle color enhancement here
+        cssFilters.push('saturate(1.2)');
         break;
       case 'mirror':
         transforms.push('scaleX(-1)');
@@ -895,16 +897,76 @@ function ZoomableScene({
   return <group ref={groupRef}>{children}</group>;
 }
 
+// Kaleidoscope effect component - creates mirrored segments
+function KaleidoscopeBackground({ imageUrl, baseFilter }: { imageUrl: string; baseFilter: string }) {
+  const segments = 6;
+  const angleStep = 360 / segments;
+  
+  return (
+    <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 0 }}>
+      {Array.from({ length: segments }).map((_, i) => (
+        <div
+          key={i}
+          className="absolute"
+          style={{
+            width: '100%',
+            height: '100%',
+            backgroundImage: `url(${imageUrl})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            opacity: 0.5,
+            transform: `rotate(${i * angleStep}deg) ${i % 2 === 0 ? 'scaleX(1)' : 'scaleX(-1)'}`,
+            transformOrigin: 'center center',
+            filter: `${baseFilter} hue-rotate(${i * 30}deg)`,
+            mixBlendMode: 'screen',
+          }}
+        />
+      ))}
+      {/* Center overlay for depth */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage: `url(${imageUrl})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          opacity: 0.4,
+          filter: baseFilter,
+        }}
+      />
+    </div>
+  );
+}
+
 // Static background image rendered as HTML (completely fixed, no animation)
 function StaticBackgroundImage({ imageUrl, filters = ["none"] }: { imageUrl: string; filters?: string[] }) {
   const filterStyles = useMemo(() => getFilterStyles(filters), [filters]);
+  const hasKaleidoscope = filters.includes('kaleidoscope');
   
-  // Compute explicit filter and transform strings
-  const cssFilter = filterStyles.filter || 'none';
+  // Get filter styles without kaleidoscope (it's handled separately)
+  const nonKaleidoscopeFilters = filters.filter(f => f !== 'kaleidoscope');
+  const baseFilterStyles = useMemo(() => getFilterStyles(nonKaleidoscopeFilters), [nonKaleidoscopeFilters]);
+  
+  const cssFilter = baseFilterStyles.filter || 'none';
   const cssTransform = filterStyles.transform || 'none';
-  
-  // Debug logging
-  console.log('[StaticBackgroundImage] filters:', filters, 'cssFilter:', cssFilter, 'cssTransform:', cssTransform);
+
+  // If kaleidoscope is active, use the special component
+  if (hasKaleidoscope) {
+    return (
+      <div className="absolute inset-0" style={{ zIndex: 0 }}>
+        <KaleidoscopeBackground imageUrl={imageUrl} baseFilter={cssFilter} />
+        {/* Apply remaining transforms */}
+        {cssTransform !== 'none' && (
+          <div 
+            className="absolute inset-0" 
+            style={{ 
+              transform: cssTransform,
+              pointerEvents: 'none',
+            }} 
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
