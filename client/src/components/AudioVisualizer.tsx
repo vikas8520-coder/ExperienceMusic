@@ -686,76 +686,72 @@ const PsyFilterMaterial = shaderMaterial(
     void main() {
       vec2 uv = vUv;
       vec3 color;
-      float opacity = 0.35;
+      float opacity = 0.6;
       
-      // Filter type 0: None
+      // All filters now show static image - no animation
+      // Filter type 0: None - just show the image
       if (uFilterType == 0) {
         color = texture2D(uTexture, uv).rgb;
+        opacity = 0.7;
       }
-      // Filter type 1: Kaleidoscope
+      // Filter type 1: Kaleidoscope (static)
       else if (uFilterType == 1) {
-        float segments = 6.0 + uEnergy * 6.0;
+        float segments = 8.0;
         vec2 kUv = kaleidoscope(uv, segments);
-        kUv = fract(kUv + uTime * 0.05);
         color = texture2D(uTexture, kUv).rgb;
-        opacity = 0.5;
+        opacity = 0.65;
       }
-      // Filter type 2: Mirror Fractal
+      // Filter type 2: Mirror Fractal (static)
       else if (uFilterType == 2) {
-        vec2 mUv = mirror(uv);
-        mUv = fract(mUv);
-        color = texture2D(uTexture, mUv).rgb;
-        color = mix(color, colorShift(color, uTime * 0.1), 0.3);
-        opacity = 0.45;
+        vec2 centered = uv - 0.5;
+        vec2 mirrored = vec2(abs(centered.x), abs(centered.y)) + 0.5;
+        color = texture2D(uTexture, mirrored).rgb;
+        opacity = 0.6;
       }
-      // Filter type 3: Color Shift
+      // Filter type 3: Color Shift (static warm tint)
       else if (uFilterType == 3) {
         color = texture2D(uTexture, uv).rgb;
-        float shift = uTime * 0.2 + uEnergy * 0.5;
-        color = colorShift(color, shift);
-        color = mix(color, vec3(1.0) - color, sin(uTime) * 0.2 + 0.2);
-        opacity = 0.4;
+        color = colorShift(color, 0.1);
+        opacity = 0.6;
       }
-      // Filter type 4: Invert Pulse
+      // Filter type 4: Invert (static)
       else if (uFilterType == 4) {
         color = texture2D(uTexture, uv).rgb;
-        float pulse = (sin(uTime * 2.0) * 0.5 + 0.5) * uEnergy;
-        color = mix(color, vec3(1.0) - color, pulse);
-        opacity = 0.4;
+        color = vec3(1.0) - color;
+        opacity = 0.5;
       }
-      // Filter type 5: Pixelate
+      // Filter type 5: Pixelate (static)
       else if (uFilterType == 5) {
-        float pixels = 100.0 - uEnergy * 80.0;
-        vec2 pUv = pixelate(uv, max(pixels, 10.0));
+        float pixels = 60.0;
+        vec2 pUv = pixelate(uv, pixels);
         color = texture2D(uTexture, pUv).rgb;
-        opacity = 0.45;
+        opacity = 0.6;
       }
-      // Filter type 6: RGB Split
+      // Filter type 6: RGB Split (static)
       else if (uFilterType == 6) {
-        float offset = 0.01 * uIntensity * (1.0 + uEnergy);
+        float offset = 0.008;
         float r = texture2D(uTexture, uv + vec2(offset, 0.0)).r;
         float g = texture2D(uTexture, uv).g;
         float b = texture2D(uTexture, uv - vec2(offset, 0.0)).b;
         color = vec3(r, g, b);
-        opacity = 0.4;
+        opacity = 0.6;
       }
-      // Filter type 7: Wave Distort
+      // Filter type 7: Soft Blur Effect (static)
       else if (uFilterType == 7) {
-        vec2 wUv = wave(uv);
-        color = texture2D(uTexture, wUv).rgb;
-        float pulse = sin(uTime * 3.0) * 0.5 + 0.5;
-        color *= 0.8 + pulse * 0.4;
-        opacity = 0.45;
+        color = texture2D(uTexture, uv).rgb;
+        color = color * 1.1;
+        opacity = 0.55;
       }
-      // Filter type 8: Zoom Pulse
+      // Filter type 8: Vignette (static)
       else if (uFilterType == 8) {
-        float zoom = 1.0 + sin(uTime * 2.0) * 0.1 * uIntensity * (1.0 + uEnergy);
-        vec2 centered = (uv - 0.5) / zoom + 0.5;
-        color = texture2D(uTexture, centered).rgb;
-        opacity = 0.4;
+        color = texture2D(uTexture, uv).rgb;
+        float dist = distance(uv, vec2(0.5));
+        color *= 1.0 - dist * 0.5;
+        opacity = 0.6;
       }
       else {
         color = texture2D(uTexture, uv).rgb;
+        opacity = 0.6;
       }
       
       gl_FragColor = vec4(color, opacity);
