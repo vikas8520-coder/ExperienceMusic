@@ -74,6 +74,7 @@ export function UIControls({
   const [isMobileExpanded, setIsMobileExpanded] = useState(false);
   const [showMobileControls, setShowMobileControls] = useState(true);
   const [isDesktopPanelVisible, setIsDesktopPanelVisible] = useState(true);
+  const [mobileActiveSlide, setMobileActiveSlide] = useState(0);
   
   const desktopScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
@@ -81,6 +82,55 @@ export function UIControls({
   const updateSetting = useCallback(<K extends keyof typeof settings>(key: K, value: typeof settings[K]) => {
     setSettings({ ...settings, [key]: value });
   }, [settings, setSettings]);
+
+  // Helper functions to generate CSS filter strings
+  const getFilterCssString = (filters: ImageFilterId[]): string => {
+    const cssFilters: string[] = [];
+    const safeFilters = filters || ["none"];
+    
+    safeFilters.forEach(filterId => {
+      switch (filterId) {
+        case 'kaleidoscope':
+          cssFilters.push('hue-rotate(30deg)', 'saturate(1.5)');
+          break;
+        case 'colorshift':
+          cssFilters.push('hue-rotate(60deg)');
+          break;
+        case 'invert':
+          cssFilters.push('invert(1)');
+          break;
+        case 'pixelate':
+          cssFilters.push('contrast(1.2)', 'saturate(0.8)');
+          break;
+        case 'rgbsplit':
+          cssFilters.push('saturate(1.3)', 'contrast(1.1)');
+          break;
+        case 'wave':
+          cssFilters.push('blur(1px)', 'saturate(1.2)');
+          break;
+      }
+    });
+    
+    return cssFilters.length > 0 ? cssFilters.join(' ') : 'none';
+  };
+
+  const getFilterTransformString = (filters: ImageFilterId[]): string => {
+    const transforms: string[] = [];
+    const safeFilters = filters || ["none"];
+    
+    safeFilters.forEach(filterId => {
+      switch (filterId) {
+        case 'mirror':
+          transforms.push('scaleX(-1)');
+          break;
+        case 'zoompulse':
+          transforms.push('scale(1.05)');
+          break;
+      }
+    });
+    
+    return transforms.length > 0 ? transforms.join(' ') : 'none';
+  };
 
   const displayThumbnail = thumbnailUrl || localThumbnailUrl;
 
@@ -190,10 +240,13 @@ export function UIControls({
 
   // Swipeable carousel settings panel with 6 slides
   const MobileSettingsModal = () => {
-    const [activeSlide, setActiveSlide] = useState(0);
     const [touchStartX, setTouchStartX] = useState(0);
     const [touchDeltaX, setTouchDeltaX] = useState(0);
     const [isSwiping, setIsSwiping] = useState(false);
+    
+    // Use parent-level state to prevent reset on re-render
+    const activeSlide = mobileActiveSlide;
+    const setActiveSlide = setMobileActiveSlide;
     
     const slides = [
       { id: 'audio', title: 'Audio', icon: Upload },
@@ -421,6 +474,23 @@ export function UIControls({
                         <h3 className="text-xl font-semibold">Filters</h3>
                         <p className="text-sm text-muted-foreground">Apply effects to artwork</p>
                       </div>
+                      
+                      {/* Live Preview with Filters */}
+                      {displayThumbnail && (
+                        <div className="flex justify-center pb-2">
+                          <div 
+                            className="w-24 h-24 rounded-xl overflow-hidden border border-white/10"
+                            style={{
+                              backgroundImage: `url(${displayThumbnail})`,
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center',
+                              filter: getFilterCssString(settings.imageFilters),
+                              transform: getFilterTransformString(settings.imageFilters),
+                            }}
+                          />
+                        </div>
+                      )}
+                      
                       <div className="grid grid-cols-2 gap-3">
                         {imageFilters.filter(f => f.id !== "none").map((filter) => {
                           const isActive = settings.imageFilters.includes(filter.id);
