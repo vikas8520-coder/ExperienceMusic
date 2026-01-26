@@ -2,7 +2,7 @@ import { useRef, useMemo, useState, useEffect } from "react";
 import { Canvas, useFrame, extend } from "@react-three/fiber";
 import { OrbitControls, Sphere, shaderMaterial } from "@react-three/drei";
 import * as THREE from "three";
-import { EffectComposer, Bloom, ChromaticAberration, Noise } from "@react-three/postprocessing";
+import { EffectComposer, Bloom, ChromaticAberration, Noise, HueSaturation, BrightnessContrast, Pixelation, Vignette } from "@react-three/postprocessing";
 import { BlendFunction } from "postprocessing";
 import { type AudioData } from "@/hooks/use-audio-analyzer";
 import { type ImageFilterId } from "@/lib/visualizer-presets";
@@ -895,6 +895,63 @@ function ZoomableScene({
   return <group ref={groupRef}>{children}</group>;
 }
 
+// WebGL post-processing filter effects
+function FilterEffects({ activeFilters, intensity }: { activeFilters: string[]; intensity: number }) {
+  const hasKaleidoscope = activeFilters.includes('kaleidoscope');
+  const hasColorshift = activeFilters.includes('colorshift');
+  const hasPixelate = activeFilters.includes('pixelate');
+  const hasRgbsplit = activeFilters.includes('rgbsplit');
+  const hasWave = activeFilters.includes('wave');
+  const hasInvert = activeFilters.includes('invert');
+  
+  // Calculate combined hue/saturation values
+  const hueValue = (hasKaleidoscope ? Math.PI / 2 : 0) + (hasColorshift ? Math.PI : 0);
+  const satValue = (hasKaleidoscope ? 0.8 : 0) + (hasColorshift ? 0.3 : 0);
+  
+  // Brightness/contrast values
+  const brightnessVal = hasInvert ? -0.2 : (hasWave ? 0.1 : 0);
+  const contrastVal = hasInvert ? 0.5 : (hasWave ? 0.15 : 0);
+  
+  // Chromatic aberration offset
+  const chromaOffset = hasRgbsplit 
+    ? new THREE.Vector2(0.015, 0.015) 
+    : new THREE.Vector2(0.002 * intensity, 0.002 * intensity);
+  
+  return (
+    <EffectComposer>
+      <Bloom 
+        luminanceThreshold={0.5} 
+        luminanceSmoothing={0.9} 
+        intensity={1.5 * intensity} 
+      />
+      
+      <HueSaturation 
+        blendFunction={BlendFunction.NORMAL}
+        hue={hueValue}
+        saturation={satValue}
+      />
+      
+      <Pixelation granularity={hasPixelate ? 8 : 0} />
+      
+      <BrightnessContrast 
+        brightness={brightnessVal} 
+        contrast={contrastVal} 
+      />
+      
+      <Vignette darkness={hasWave ? 0.4 : 0} offset={hasWave ? 0.3 : 1} />
+      
+      <ChromaticAberration 
+        blendFunction={BlendFunction.NORMAL}
+        offset={chromaOffset}
+        radialModulation={hasRgbsplit}
+        modulationOffset={hasRgbsplit ? 0.5 : 0}
+      />
+      
+      <Noise opacity={0.05} />
+    </EffectComposer>
+  );
+}
+
 // Static background image rendered as HTML (completely fixed, no animation)
 function StaticBackgroundImage({ imageUrl, filters = ["none"] }: { imageUrl: string; filters?: string[] }) {
   const filterStyles = useMemo(() => getFilterStyles(filters), [filters]);
@@ -968,20 +1025,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
         {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
       </ZoomableScene>
 
-      <EffectComposer>
-        <Bloom 
-          luminanceThreshold={0.5} 
-          luminanceSmoothing={0.9} 
-          intensity={1.5 * settings.intensity} 
-        />
-        <ChromaticAberration 
-          blendFunction={BlendFunction.NORMAL}
-          offset={new THREE.Vector2(0.002 * settings.intensity, 0.002 * settings.intensity)}
-          radialModulation={false}
-          modulationOffset={0}
-        />
-        <Noise opacity={0.05} />
-      </EffectComposer>
+      <FilterEffects activeFilters={activeFilters} intensity={settings.intensity} />
     </Canvas>
     </div>
   );
