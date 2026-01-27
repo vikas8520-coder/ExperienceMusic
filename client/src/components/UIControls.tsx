@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -77,10 +77,33 @@ export function UIControls({
   
   const desktopScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
+  const desktopScrollPosition = useRef<number>(0);
+  const mobileScrollPosition = useRef<number>(0);
+  
+  // Save scroll positions before state updates
+  const saveScrollPositions = useCallback(() => {
+    if (desktopScrollRef.current) {
+      desktopScrollPosition.current = desktopScrollRef.current.scrollLeft;
+    }
+    if (mobileScrollRef.current) {
+      mobileScrollPosition.current = mobileScrollRef.current.scrollLeft;
+    }
+  }, []);
+  
+  // Restore scroll positions after render
+  useEffect(() => {
+    if (desktopScrollRef.current && desktopScrollPosition.current > 0) {
+      desktopScrollRef.current.scrollLeft = desktopScrollPosition.current;
+    }
+    if (mobileScrollRef.current && mobileScrollPosition.current > 0) {
+      mobileScrollRef.current.scrollLeft = mobileScrollPosition.current;
+    }
+  });
   
   const updateSetting = useCallback(<K extends keyof typeof settings>(key: K, value: typeof settings[K]) => {
+    saveScrollPositions();
     setSettings({ ...settings, [key]: value });
-  }, [settings, setSettings]);
+  }, [settings, setSettings, saveScrollPositions]);
 
   const displayThumbnail = thumbnailUrl || localThumbnailUrl;
 
@@ -123,6 +146,7 @@ export function UIControls({
 
   const applyAIPalette = () => {
     if (analysis?.colorPalette) {
+      saveScrollPositions();
       setSettings({ ...settings, colorPalette: analysis.colorPalette });
     }
   };
@@ -231,7 +255,7 @@ export function UIControls({
               {/* Preset Selector */}
               <Select
                 value={settings.presetName}
-                onValueChange={(val) => setSettings({ ...settings, presetName: val as PresetName })}
+                onValueChange={(val) => { saveScrollPositions(); setSettings({ ...settings, presetName: val as PresetName }); }}
               >
                 <SelectTrigger className="bg-black/50 border-white/10 font-mono h-12 text-base" data-testid="select-preset-mobile">
                   <SelectValue />
@@ -250,7 +274,7 @@ export function UIControls({
                 {colorPalettes.map((palette) => (
                   <button
                     key={palette.name}
-                    onClick={() => setSettings({ ...settings, colorPalette: palette.colors })}
+                    onClick={() => { saveScrollPositions(); setSettings({ ...settings, colorPalette: palette.colors }); }}
                     className={`flex-shrink-0 w-10 h-10 rounded-full border-2 transition-all ${
                       JSON.stringify(settings.colorPalette) === JSON.stringify(palette.colors)
                         ? "border-white ring-2 ring-primary/50 scale-110"
@@ -362,6 +386,7 @@ export function UIControls({
                           <button
                             key={filter.id}
                             onClick={() => {
+                              saveScrollPositions();
                               const newFilters = isActive
                                 ? settings.imageFilters.filter(f => f !== filter.id)
                                 : [...settings.imageFilters.filter(f => f !== "none"), filter.id];
@@ -583,7 +608,7 @@ export function UIControls({
                   <Label className="text-xs uppercase tracking-widest text-primary font-bold">Preset</Label>
                   <Select
                     value={settings.presetName}
-                    onValueChange={(val) => setSettings({ ...settings, presetName: val as PresetName })}
+                    onValueChange={(val) => { saveScrollPositions(); setSettings({ ...settings, presetName: val as PresetName }); }}
                   >
                     <SelectTrigger className="bg-black/50 border-white/10 font-mono h-9 text-sm" data-testid="select-preset">
                       <SelectValue />
@@ -635,7 +660,7 @@ export function UIControls({
                     {colorPalettes.map((palette) => (
                       <button
                         key={palette.name}
-                        onClick={() => setSettings({ ...settings, colorPalette: palette.colors })}
+                        onClick={() => { saveScrollPositions(); setSettings({ ...settings, colorPalette: palette.colors }); }}
                         className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${
                           JSON.stringify(settings.colorPalette) === JSON.stringify(palette.colors)
                             ? "border-white ring-2 ring-primary/50 scale-110"
@@ -662,6 +687,7 @@ export function UIControls({
                         <button
                           key={filter.id}
                           onClick={() => {
+                            saveScrollPositions();
                             const newFilters = isActive
                               ? settings.imageFilters.filter(f => f !== filter.id)
                               : [...settings.imageFilters.filter(f => f !== "none"), filter.id];
