@@ -3,6 +3,7 @@ import { Canvas, useFrame, extend } from "@react-three/fiber";
 import { OrbitControls, Sphere, shaderMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { Effects } from "./Effects";
+import { PsyTunnel as PsyTunnelShader } from "./PsyTunnel";
 import { type AudioData } from "@/hooks/use-audio-analyzer";
 import { type ImageFilterId } from "@/lib/visualizer-presets";
 
@@ -160,44 +161,15 @@ function EnergyRings({ getAudioData, settings }: { getAudioData: () => AudioData
   );
 }
 
-// === PRESET 2: Psy Tunnel ===
+// === PRESET 2: Psy Tunnel (Shader-based fullscreen effect) ===
 function PsyTunnel({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const count = 200;
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-
-  useFrame((state) => {
-    if (!meshRef.current) return;
-    const { bass, mid, energy } = getAudioData();
-    const time = state.clock.getElapsedTime() * settings.speed;
-
-    for (let i = 0; i < count; i++) {
-      const z = (i * 1.5 + time * 20 * (0.5 + energy * settings.intensity)) % (count * 1.5) - 50;
-      const radius = 5 + Math.sin(z * 0.1 + time) * 2 * (bass * settings.intensity);
-      const angle = (i / count) * Math.PI * 12 + time * 0.2;
-      
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-
-      dummy.position.set(x, y, -z);
-      dummy.rotation.set(0, 0, angle + time + mid * Math.PI);
-      dummy.scale.setScalar(1 + mid * settings.intensity);
-      
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
-      
-      const color = new THREE.Color(settings.colorPalette[i % settings.colorPalette.length]);
-      meshRef.current.setColorAt(i, color);
-    }
-    meshRef.current.instanceMatrix.needsUpdate = true;
-    if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
-  });
-
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
-      <boxGeometry args={[0.5, 0.5, 4]} />
-      <meshStandardMaterial toneMapped={false} />
-    </instancedMesh>
+    <PsyTunnelShader
+      getAudioData={getAudioData}
+      intensity={settings.intensity}
+      speed={settings.speed}
+      opacity={0.85}
+    />
   );
 }
 
