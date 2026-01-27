@@ -2,8 +2,7 @@ import { useRef, useMemo, useState, useEffect } from "react";
 import { Canvas, useFrame, extend } from "@react-three/fiber";
 import { OrbitControls, Sphere, shaderMaterial } from "@react-three/drei";
 import * as THREE from "three";
-import { EffectComposer, Bloom, ChromaticAberration, Noise } from "@react-three/postprocessing";
-import { BlendFunction } from "postprocessing";
+import { Effects } from "./Effects";
 import { type AudioData } from "@/hooks/use-audio-analyzer";
 import { type ImageFilterId } from "@/lib/visualizer-presets";
 
@@ -854,6 +853,30 @@ function ZoomableScene({
   return <group ref={groupRef}>{children}</group>;
 }
 
+function AudioReactiveEffects({ getAudioData, settings }: { getAudioData: () => AudioData; settings: any }) {
+  const audioDataRef = useRef<AudioData>({ bass: 0, mid: 0, high: 0, energy: 0, frequencyData: new Uint8Array(0) });
+  
+  useFrame(() => {
+    audioDataRef.current = getAudioData();
+  });
+  
+  const { bass, mid, high } = audioDataRef.current;
+  
+  return (
+    <Effects
+      bass={bass}
+      mid={mid}
+      high={high}
+      intensity={settings.intensity}
+      bloomOn={true}
+      chromaOn={true}
+      noiseOn={true}
+      vignetteOn={true}
+      kaleidoOn={settings.presetName === "Geometric Kaleidoscope"}
+    />
+  );
+}
+
 function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: AudioVisualizerProps) {
   const [hasError, setHasError] = useState(false);
   
@@ -903,20 +926,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
         {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
       </ZoomableScene>
 
-      <EffectComposer>
-        <Bloom 
-          luminanceThreshold={0.5} 
-          luminanceSmoothing={0.9} 
-          intensity={1.5 * settings.intensity} 
-        />
-        <ChromaticAberration 
-          blendFunction={BlendFunction.NORMAL}
-          offset={new THREE.Vector2(0.002 * settings.intensity, 0.002 * settings.intensity)}
-          radialModulation={false}
-          modulationOffset={0}
-        />
-        <Noise opacity={0.05} />
-      </EffectComposer>
+      <AudioReactiveEffects getAudioData={getAudioData} settings={settings} />
     </Canvas>
   );
 }

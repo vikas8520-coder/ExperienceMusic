@@ -1,0 +1,423 @@
+Below is a **ready-to-drop R3F (@react-three/fiber) + @react-three/postprocessing** setup that matches your environment:
+
+✅ Uses **@react-three/postprocessing** for Bloom / ChromaticAberration / Noise / Scanline / Vignette / Afterimage
+✅ Adds a **custom Kaleidoscope pass** via `<Effect />` (no three/examples composer boilerplate)
+✅ Supports **thumbnail blending** (base background plane + optional “overlay blend” plane)
+✅ Audio-reactive wiring for **bass / mid / high**
+✅ Includes **enable toggles + blend sliders** (you can hook to your UI)
+
+---
+
+# 1) `src/components/ThumbnailBackdrop.tsx`
+
+Background image plane + optional overlay blend plane (makes “melt into thumbnail” easy).
+
+```tsx
+import * as THREE from "three";
+import { useMemo } from "react";
+import { useLoader } from "@react-three/fiber";
+
+type Props = {
+  /** URL created from uploaded file: URL.createObjectURL(file) */
+  thumbnailUrl?: string | null;
+
+  /** 0..1 how much to dim the thumbnail (helps visuals pop) */
+  dim?: number;
+
+  /** 0..1 overlay blend strength (visuals blending into thumbnail look) */
+  overlayBlend?: number;
+
+  /** Overlay blend mode: "screen" | "overlay" | "add" | "multiply" */
+  blendMode?: "screen" | "overlay" | "add" | "multiply";
+};
+
+export function ThumbnailBackdrop({
+  thumbnailUrl,
+  dim = 0.2,
+  overlayBlend = 0.35,
+  blendMode = "screen",
+}: Props) {
+  const texture = useLoader(
+    THREE.TextureLoader,
+    thumbnailUrl || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEKQIFmJxV3wAAAABJRU5ErkJggg=="
+  );
+
+  // ensure nice color on modern three
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  // map blendMode → three blending
+  const blending = useMemo(() => {
+    switch (blendMode) {
+      case "add":
+        return THREE.AdditiveBlending;
+      case "multiply":
+        return THREE.MultiplyBlending;
+      // "screen" and "overlay" aren't native blending modes in fixed pipeline
+      // We'll approximate with Additive for screen-like, and Normal with opacity for overlay-like.
+      case "screen":
+        return THREE.AdditiveBlending;
+      case "overlay":
+      default:
+        return THREE.NormalBlending;
+    }
+  }, [blendMode]);
+
+  return (
+    <>
+      {/* Base thumbnail */}
+      <mesh position={[0, 0, -5]} renderOrder={0}>
+        <planeGeometry args={[20, 20]} />
+        <meshBasicMaterial
+          map={texture}
+          toneMapped={false}
+          transparent={false}
+          color={new THREE.Color(1 - dim, 1 - dim, 1 - dim)}
+        />
+      </mesh>
+
+      {/* Overlay blend layer: same thumbnail slightly brightened and blended.
+          This helps “fuse” the foreground visuals with the image.
+          You can disable by setting overlayBlend=0 */}
+      {overlayBlend > 0 && (
+        <mesh position={[0, 0, -4.99]} renderOrder={1}>
+          <planeGeometry args={[20, 20]} />
+          <meshBasicMaterial
+            map={texture}
+            toneMapped={false}
+            transparent
+            opacity={overlayBlend}
+            blending={blending}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+    </>
+  );
+}
+```
+
+> Note: True “Overlay/Screen” blending mathematically is best done in a **final shader composite**. This overlay plane gets you 80% of the look, fast, and works great in V1.
+
+---
+
+# 2) `src/components/KaleidoscopeEffect.tsx`
+
+Custom kaleidoscope post-processing effect (R3F-friendly).
+
+```tsx
+import { Effect } from "postprocessing";
+import { forwardRef, useMemo } from "react";
+import { Uniform } from "three";
+import { wrapEffect } from "@react-three/postprocessing";
+
+const fragmentShader = /* glsl */ `
+  uniform float sides;
+  uniform float angle;
+  uniform float intensity;
+
+  void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+    vec2 p = uv * 2.0 - 1.0;
+    float a = atan(p.y, p.x) + angle;
+    float r = length(p);
+
+    float tau = 6.28318530718;
+    float sector = tau / max(1.0, sides);
+
+    a = mod(a, sector);
+    a = abs(a - sector * 0.5);
+
+    vec2 kp = r * vec2(cos(a), sin(a));
+    vec2 kuv = (kp + 1.0) * 0.5;
+
+    vec3 col = mix(inputColor.rgb, texture2D(inputBuffer, kuv).rgb, intensity);
+    outputColor = vec4(col, inputColor.a);
+  }
+`;
+
+class KaleidoscopeEffectImpl extends Effect {
+  constructor({
+    sides = 8,
+    angle = 0,
+    intensity = 0.6,
+  }: {
+    sides?: number;
+    angle?: number;
+    intensity?: number;
+  } = {}) {
+    super("KaleidoscopeEffect", fragmentShader, {
+      uniforms: new Map<string, Uniform>([
+        ["sides", new Uniform(sides)],
+        ["angle", new Uniform(angle)],
+        ["intensity", new Uniform(intensity)],
+      ]),
+    });
+  }
+
+  set sides(v: number) {
+    this.uniforms.get("sides")!.value = v;
+  }
+  set angle(v: number) {
+    this.uniforms.get("angle")!.value = v;
+  }
+  set intensity(v: number) {
+    this.uniforms.get("intensity")!.value = v;
+  }
+}
+
+export const KaleidoscopeEffect = wrapEffect(KaleidoscopeEffectImpl);
+
+type Props = {
+  enabled?: boolean;
+  sides?: number;
+  angle?: number;
+  intensity?: number;
+};
+
+// Optional forwardRef if you want imperative access later
+export const Kaleidoscope = forwardRef<any, Props>(function Kaleidoscope(
+  { enabled = true, sides = 8, angle = 0, intensity = 0.6 },
+  ref
+) {
+  const props = useMemo(
+    () => ({ sides, angle, intensity }),
+    [sides, angle, intensity]
+  );
+
+  if (!enabled) return null;
+  // @ts-ignore
+  return <KaleidoscopeEffect ref={ref} {...props} />;
+});
+```
+
+---
+
+# 3) `src/components/Effects.tsx`
+
+This is the main post-processing stack you asked for, fully audio-reactive.
+
+```tsx
+import { EffectComposer, Bloom, ChromaticAberration, Noise, Scanline, Vignette, Afterimage } from "@react-three/postprocessing";
+import * as THREE from "three";
+import { useMemo } from "react";
+import { Kaleidoscope } from "./KaleidoscopeEffect";
+
+type Props = {
+  bass: number; // 0..1
+  mid: number;  // 0..1
+  high: number; // 0..1
+
+  enabled?: boolean;
+
+  // toggles
+  bloomOn?: boolean;
+  chromaOn?: boolean;
+  noiseOn?: boolean;
+  scanlineOn?: boolean;
+  vignetteOn?: boolean;
+  afterimageOn?: boolean;
+  kaleidoOn?: boolean;
+
+  // user controls
+  intensity?: number;     // overall 0..2
+  motion?: number;        // 0..2 (affects kaleido rotation speed)
+  vignetteStrength?: number; // 0..1
+  trails?: number;        // 0..1 (afterimage)
+  kaleidoStrength?: number; // 0..1
+};
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+export function Effects({
+  bass, mid, high,
+  enabled = true,
+
+  bloomOn = true,
+  chromaOn = true,
+  noiseOn = true,
+  scanlineOn = false,
+  vignetteOn = true,
+  afterimageOn = true,
+  kaleidoOn = false,
+
+  intensity = 1.0,
+  motion = 1.0,
+  vignetteStrength = 0.35,
+  trails = 0.65,
+  kaleidoStrength = 0.6,
+}: Props) {
+  const b = clamp01(bass);
+  const m = clamp01(mid);
+  const h = clamp01(high);
+
+  // Audio-reactive mappings (tune as you like)
+  const bloomIntensity = (0.2 + b * 1.2) * intensity;      // bass drives glow
+  const bloomLuminanceThreshold = 0.2 + (1 - h) * 0.25;    // high → more threshold (cleaner)
+  const chromaOffset = useMemo(() => {
+    // high drives color separation
+    const amt = (0.0005 + h * 0.006) * intensity;
+    return new THREE.Vector2(amt, -amt * 0.85);
+  }, [h, intensity]);
+
+  // trails: higher damp = longer trails. Afterimage uses "damp" internally (0..1, closer to 1 = longer trails)
+  // We'll map trails slider + bass/high to a damp value.
+  const afterimageDamp = clamp01(0.75 + trails * 0.22 + b * 0.08 - h * 0.06);
+
+  // Kaleidoscope: mid/high → rotation + sides
+  const kaleidoSides = 6 + Math.floor(h * 10); // 6..16
+  const kaleidoAngle = (m * 0.8 + h * 0.4) * 0.25 * motion; // this is a static angle; you can animate it over time in your render loop if you want
+  const kaleidoIntensity = clamp01(kaleidoStrength * (0.35 + b * 0.25 + h * 0.4));
+
+  if (!enabled) return null;
+
+  return (
+    <EffectComposer multisampling={0}>
+      {bloomOn && (
+        <Bloom
+          intensity={bloomIntensity}
+          luminanceThreshold={bloomLuminanceThreshold}
+          luminanceSmoothing={0.7}
+          mipmapBlur
+        />
+      )}
+
+      {chromaOn && (
+        <ChromaticAberration
+          offset={chromaOffset}
+          radialModulation
+          modulationOffset={0.35}
+        />
+      )}
+
+      {noiseOn && (
+        <Noise opacity={0.05 + h * 0.12} />
+      )}
+
+      {scanlineOn && (
+        <Scanline density={1.2 + m * 2.2} opacity={0.08 + h * 0.25} />
+      )}
+
+      {vignetteOn && (
+        <Vignette
+          eskil={false}
+          offset={0.2}
+          darkness={clamp01(vignetteStrength + b * 0.25)}
+        />
+      )}
+
+      {afterimageOn && (
+        <Afterimage damp={afterimageDamp} />
+      )}
+
+      {kaleidoOn && (
+        <Kaleidoscope
+          enabled
+          sides={kaleidoSides}
+          angle={kaleidoAngle}
+          intensity={kaleidoIntensity}
+        />
+      )}
+    </EffectComposer>
+  );
+}
+```
+
+> If you want kaleidoscope to **spin continuously**, we’ll update `angle` each frame using `useFrame()` and store it in state/ref. I can paste that version too.
+
+---
+
+# 4) Example usage in your `Canvas` scene (R3F)
+
+This shows thumbnail blending + effects + your existing visualizer.
+
+```tsx
+import { Canvas } from "@react-three/fiber";
+import { ThumbnailBackdrop } from "./components/ThumbnailBackdrop";
+import { Effects } from "./components/Effects";
+// import your Visualizer scene that uses bass/mid/high
+import { VisualizerScene } from "./components/VisualizerScene";
+
+type Props = {
+  thumbnailUrl: string | null;
+  bass: number;
+  mid: number;
+  high: number;
+};
+
+export function VisualPage({ thumbnailUrl, bass, mid, high }: Props) {
+  return (
+    <Canvas
+      gl={{ antialias: true, alpha: false }}
+      camera={{ position: [0, 0, 6], fov: 55 }}
+    >
+      {/* 1) base image */}
+      <ThumbnailBackdrop
+        thumbnailUrl={thumbnailUrl}
+        dim={0.25}
+        overlayBlend={0.35}
+        blendMode="screen"
+      />
+
+      {/* 2) your audio-reactive meshes */}
+      <VisualizerScene bass={bass} mid={mid} high={high} />
+
+      {/* 3) post-processing filters */}
+      <Effects
+        bass={bass}
+        mid={mid}
+        high={high}
+        intensity={1.0}
+        motion={1.0}
+        trails={0.7}
+        vignetteStrength={0.35}
+        kaleidoOn={true}
+        afterimageOn={true}
+        bloomOn={true}
+        chromaOn={true}
+        noiseOn={true}
+        scanlineOn={false}
+      />
+    </Canvas>
+  );
+}
+```
+
+---
+
+# 5) Hooking uploaded thumbnail into `thumbnailUrl`
+
+Wherever you handle upload:
+
+```ts
+const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+
+function onThumbnailUpload(file: File) {
+  const url = URL.createObjectURL(file);
+  setThumbnailUrl(url);
+}
+```
+
+---
+
+## Notes (important for your exact goal)
+
+### “Blend modes” like real Instagram filters
+
+* The overlay plane trick works well fast.
+* If you want **true Screen/Overlay/SoftLight**, we’ll add a final custom “BlendPass” shader in postprocessing that mixes `tDiffuse` with `tThumb`. (I can give that too — it’s ~40 lines.)
+
+### Afterimage / Trails
+
+* Use it **subtly**; too strong makes exports look muddy.
+* Map damp with bass/high (already done above).
+
+### Export video
+
+* Since you already record the canvas, everything shown on canvas (thumbnail + visuals + effects) will export automatically.
+
+---
+
+If you paste your current `VisualizerScene` file (or whatever renders your rings/tunnel/particles) I can wire:
+
+* **Additive blending** on the visual materials so they “melt” better into the thumbnail
+* A continuously rotating kaleidoscope angle via `useFrame()` (better than static angle)
+* A proper **final Blend shader pass** (true Screen/Overlay) if you want that premium “filter” feel
