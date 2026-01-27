@@ -837,6 +837,20 @@ export function UIControls({
                 {/* Artwork Filters */}
                 <div className="flex flex-col gap-2 min-w-56">
                   <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Filters</Label>
+                  {/* Filter Preview - matches mobile */}
+                  {displayThumbnail && (
+                    <div 
+                      className="w-16 h-16 rounded-lg overflow-hidden border border-white/10"
+                      style={{
+                        backgroundImage: `url(${displayThumbnail})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        filter: getFilterCssString(settings.imageFilters),
+                        transform: getFilterTransformString(settings.imageFilters),
+                      }}
+                      data-testid="filter-preview-desktop"
+                    />
+                  )}
                   <div className="flex gap-1 flex-wrap max-w-56">
                     {imageFilters.filter(f => f.id !== "none").map((filter) => {
                       const isActive = settings.imageFilters.includes(filter.id);
