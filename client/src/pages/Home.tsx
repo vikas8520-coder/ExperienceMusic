@@ -62,6 +62,7 @@ export default function Home() {
     speed: 0.5,
     colorPalette: colorPalettes[0].colors,
     presetName: "Energy Rings" as PresetName,
+    presetEnabled: true,
     imageFilters: ["none"] as ImageFilterId[],
     psyOverlays: [] as PsyOverlayId[],
   });

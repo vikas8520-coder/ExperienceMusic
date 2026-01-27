@@ -15,6 +15,7 @@ interface AudioVisualizerProps {
     speed: number;
     colorPalette: string[];
     presetName: string;
+    presetEnabled?: boolean;
     imageFilters?: ImageFilterId[];
     psyOverlays?: PsyOverlayId[];
   };
@@ -933,20 +934,24 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
       <pointLight position={[-10, -10, -10]} intensity={0.5} color="#ff00ff" />
       
       <ZoomableScene zoom={zoom}>
-        {settings.presetName === "Energy Rings" && <EnergyRings getAudioData={getAudioData} settings={settings} />}
-        {settings.presetName === "Psy Tunnel" && <PsyTunnel getAudioData={getAudioData} settings={settings} />}
-        {settings.presetName === "Particle Field" && <ParticleField getAudioData={getAudioData} settings={settings} />}
-        {settings.presetName === "Waveform Sphere" && <WaveformSphere getAudioData={getAudioData} settings={settings} />}
-        {settings.presetName === "Audio Bars" && <AudioBars getAudioData={getAudioData} settings={settings} />}
-        {settings.presetName === "Geometric Kaleidoscope" && <GeometricKaleidoscope getAudioData={getAudioData} settings={settings} />}
-        {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
-        
-        {isPsyPreset && (
-          <PsyPresetWrapper 
-            preset={presetToPsyPresetName(settings.presetName)} 
-            getAudioData={getAudioData}
-            opacity={0.95}
-          />
+        {settings.presetEnabled !== false && (
+          <>
+            {settings.presetName === "Energy Rings" && <EnergyRings getAudioData={getAudioData} settings={settings} />}
+            {settings.presetName === "Psy Tunnel" && <PsyTunnel getAudioData={getAudioData} settings={settings} />}
+            {settings.presetName === "Particle Field" && <ParticleField getAudioData={getAudioData} settings={settings} />}
+            {settings.presetName === "Waveform Sphere" && <WaveformSphere getAudioData={getAudioData} settings={settings} />}
+            {settings.presetName === "Audio Bars" && <AudioBars getAudioData={getAudioData} settings={settings} />}
+            {settings.presetName === "Geometric Kaleidoscope" && <GeometricKaleidoscope getAudioData={getAudioData} settings={settings} />}
+            {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
+            
+            {isPsyPreset && (
+              <PsyPresetWrapper 
+                preset={presetToPsyPresetName(settings.presetName)} 
+                getAudioData={getAudioData}
+                opacity={0.95}
+              />
+            )}
+          </>
         )}
       </ZoomableScene>
 

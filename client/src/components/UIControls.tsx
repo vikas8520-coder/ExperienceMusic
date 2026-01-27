@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { 
   Select, 
   SelectContent, 
@@ -23,6 +24,7 @@ interface UIControlsProps {
     speed: number;
     colorPalette: string[];
     presetName: PresetName;
+    presetEnabled: boolean;
     imageFilters: ImageFilterId[];
     psyOverlays: PsyOverlayId[];
   };
@@ -253,22 +255,30 @@ export function UIControls({
                 </div>
               )}
               
-              {/* Preset Selector */}
-              <Select
-                value={settings.presetName}
-                onValueChange={(val) => { saveScrollPositions(); setSettings({ ...settings, presetName: val as PresetName }); }}
-              >
-                <SelectTrigger className="bg-black/50 border-white/10 font-mono h-12 text-base" data-testid="select-preset-mobile">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-background border-white/10">
-                  {presets.map((preset) => (
-                    <SelectItem key={preset} value={preset} className="font-mono focus:bg-primary/20 py-3">
-                      {preset}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Preset Selector with Toggle */}
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={settings.presetEnabled}
+                  onCheckedChange={(checked) => { saveScrollPositions(); setSettings({ ...settings, presetEnabled: checked }); }}
+                  data-testid="switch-preset-toggle-mobile"
+                />
+                <Select
+                  value={settings.presetName}
+                  onValueChange={(val) => { saveScrollPositions(); setSettings({ ...settings, presetName: val as PresetName }); }}
+                  disabled={!settings.presetEnabled}
+                >
+                  <SelectTrigger className={`flex-1 bg-black/50 border-white/10 font-mono h-12 text-base ${!settings.presetEnabled ? 'opacity-50' : ''}`} data-testid="select-preset-mobile">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background border-white/10">
+                    {presets.map((preset) => (
+                      <SelectItem key={preset} value={preset} className="font-mono focus:bg-primary/20 py-3">
+                        {preset}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               
               {/* Color Palette Row */}
               <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
@@ -641,12 +651,20 @@ export function UIControls({
 
                 {/* Preset & Visual Settings */}
                 <div className="flex flex-col gap-3 min-w-48">
-                  <Label className="text-xs uppercase tracking-widest text-primary font-bold">Preset</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-xs uppercase tracking-widest text-primary font-bold">Preset</Label>
+                    <Switch
+                      checked={settings.presetEnabled}
+                      onCheckedChange={(checked) => { saveScrollPositions(); setSettings({ ...settings, presetEnabled: checked }); }}
+                      data-testid="switch-preset-toggle"
+                    />
+                  </div>
                   <Select
                     value={settings.presetName}
                     onValueChange={(val) => { saveScrollPositions(); setSettings({ ...settings, presetName: val as PresetName }); }}
+                    disabled={!settings.presetEnabled}
                   >
-                    <SelectTrigger className="bg-black/50 border-white/10 font-mono h-9 text-sm" data-testid="select-preset">
+                    <SelectTrigger className={`bg-black/50 border-white/10 font-mono h-9 text-sm ${!settings.presetEnabled ? 'opacity-50' : ''}`} data-testid="select-preset">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-background border-white/10">
