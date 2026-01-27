@@ -855,11 +855,15 @@ function AudioReactiveEffects({ getAudioData, settings }: { getAudioData: () => 
 function PsyPresetWrapper({ 
   preset, 
   getAudioData, 
+  intensity = 1.0,
+  speed = 1.0,
   opacity = 0.9,
   blending = THREE.AdditiveBlending 
 }: { 
   preset: PsyPresetName; 
   getAudioData: () => AudioData; 
+  intensity?: number;
+  speed?: number;
   opacity?: number;
   blending?: THREE.Blending;
 }) {
@@ -875,6 +879,8 @@ function PsyPresetWrapper({
       bass={audioDataRef.current.bass}
       mid={audioDataRef.current.mid}
       high={audioDataRef.current.high}
+      intensity={intensity}
+      speed={speed}
       opacity={opacity}
       blending={blending}
     />
@@ -955,6 +961,8 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
               <PsyPresetWrapper 
                 preset={presetToPsyPresetName(settings.presetName)} 
                 getAudioData={getAudioData}
+                intensity={settings.intensity}
+                speed={settings.speed}
                 opacity={0.95}
               />
             )}
@@ -967,6 +975,8 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
           key={`overlay-${overlayId}`}
           preset={overlayId as PsyPresetName}
           getAudioData={getAudioData}
+          intensity={settings.intensity}
+          speed={settings.speed}
           opacity={0.4}
           blending={THREE.AdditiveBlending}
         />
