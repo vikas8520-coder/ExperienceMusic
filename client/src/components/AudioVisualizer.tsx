@@ -953,11 +953,17 @@ function FilterEffects({ activeFilters, intensity }: { activeFilters: string[]; 
 }
 
 // Static background image rendered as HTML (completely fixed, no animation)
+// Note: Filters are now applied via WebGL post-processing in FilterEffects component
 function StaticBackgroundImage({ imageUrl, filters = ["none"] }: { imageUrl: string; filters?: string[] }) {
-  const filterStyles = useMemo(() => getFilterStyles(filters), [filters]);
+  // Only apply transform-based filters (mirror, zoom) via CSS since they affect geometry
+  const hasMirror = filters.includes('mirror');
+  const hasZoom = filters.includes('zoompulse');
   
-  const cssFilter = filterStyles.filter || 'none';
-  const cssTransform = filterStyles.transform || 'none';
+  const transforms: string[] = [];
+  if (hasMirror) transforms.push('scaleX(-1)');
+  if (hasZoom) transforms.push('scale(1.15)');
+  
+  const cssTransform = transforms.length > 0 ? transforms.join(' ') : undefined;
 
   return (
     <div
@@ -970,7 +976,6 @@ function StaticBackgroundImage({ imageUrl, filters = ["none"] }: { imageUrl: str
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
         opacity: 0.7,
-        filter: cssFilter,
         transform: cssTransform,
         zIndex: 0,
       }}
