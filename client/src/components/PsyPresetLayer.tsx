@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useMemo } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 
 export type PsyPresetName = "blueTunnel" | "bwVortex" | "rainbowSpiral" | "redMandala";
@@ -201,10 +201,13 @@ export function PsyPresetLayer({
   opacity = 0.9,
   blending = THREE.AdditiveBlending,
 }: Props) {
+  const geometryRef = useRef<THREE.PlaneGeometry | null>(null);
+  
   const material = useMemo(() => {
     return new THREE.ShaderMaterial({
       transparent: true,
       depthWrite: false,
+      depthTest: false,
       blending,
       uniforms: {
         uTime: { value: 0 },
@@ -219,6 +222,15 @@ export function PsyPresetLayer({
     });
   }, [blending, opacity, preset]);
 
+  useEffect(() => {
+    return () => {
+      material.dispose();
+      if (geometryRef.current) {
+        geometryRef.current.dispose();
+      }
+    };
+  }, [material]);
+
   useFrame((_, dt) => {
     material.uniforms.uTime.value += dt;
     material.uniforms.uBass.value = clamp01(bass);
@@ -230,7 +242,7 @@ export function PsyPresetLayer({
 
   return (
     <mesh frustumCulled={false} renderOrder={10}>
-      <planeGeometry args={[2, 2]} />
+      <planeGeometry ref={geometryRef} args={[2, 2]} />
       <primitive object={material} attach="material" />
     </mesh>
   );

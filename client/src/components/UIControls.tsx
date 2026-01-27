@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Play, Pause, Upload, Save, Disc, Activity, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, X, Settings, Maximize, Minimize, ZoomIn } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { colorPalettes, presets, imageFilters, type PresetName, type ImageFilterId } from "@/lib/visualizer-presets";
+import { colorPalettes, presets, imageFilters, psyOverlays, type PresetName, type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface UIControlsProps {
@@ -24,6 +24,7 @@ interface UIControlsProps {
     colorPalette: string[];
     presetName: PresetName;
     imageFilters: ImageFilterId[];
+    psyOverlays: PsyOverlayId[];
   };
   setSettings: (s: any) => void;
   isRecording: boolean;
@@ -410,6 +411,41 @@ export function UIControls({
                     <p className="text-[10px] text-muted-foreground">Tap to toggle multiple filters</p>
                   </div>
                   
+                  {/* Psy Overlays - Mobile */}
+                  <div className="space-y-3">
+                    <Label className="text-xs uppercase tracking-widest text-cyan-400 font-bold">Psy Overlays</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {psyOverlays.map((overlay) => {
+                        const isActive = (settings.psyOverlays || []).includes(overlay.id);
+                        return (
+                          <button
+                            key={overlay.id}
+                            onClick={() => {
+                              saveScrollPositions();
+                              const currentOverlays = settings.psyOverlays || [];
+                              const newOverlays = isActive
+                                ? currentOverlays.filter(o => o !== overlay.id)
+                                : [...currentOverlays, overlay.id];
+                              setSettings({ 
+                                ...settings, 
+                                psyOverlays: newOverlays 
+                              });
+                            }}
+                            className={`text-xs py-2 px-3 rounded-lg border transition-all ${
+                              isActive 
+                                ? "border-cyan-500 bg-cyan-500/20 text-cyan-300" 
+                                : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
+                            }`}
+                            data-testid={`overlay-toggle-mobile-${overlay.id}`}
+                          >
+                            {overlay.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Layer on any preset</p>
+                  </div>
+                  
                   {/* Action Buttons */}
                   <div className="grid grid-cols-2 gap-3">
                     <Button 
@@ -708,6 +744,43 @@ export function UIControls({
                       );
                     })}
                   </div>
+                </div>
+
+                <div className="w-px bg-white/10 self-stretch" />
+
+                {/* Psy Overlays */}
+                <div className="flex flex-col gap-2 min-w-44">
+                  <Label className="text-xs uppercase tracking-widest text-cyan-400 font-bold">Psy Overlays</Label>
+                  <div className="flex gap-1 flex-wrap max-w-44">
+                    {psyOverlays.map((overlay) => {
+                      const currentOverlays = settings.psyOverlays || [];
+                      const isActive = currentOverlays.includes(overlay.id);
+                      return (
+                        <button
+                          key={overlay.id}
+                          onClick={() => {
+                            saveScrollPositions();
+                            const newOverlays = isActive
+                              ? currentOverlays.filter(o => o !== overlay.id)
+                              : [...currentOverlays, overlay.id];
+                            setSettings({ 
+                              ...settings, 
+                              psyOverlays: newOverlays 
+                            });
+                          }}
+                          className={`text-[10px] py-1 px-2 rounded border transition-all ${
+                            isActive 
+                              ? "border-cyan-500 bg-cyan-500/20 text-cyan-300" 
+                              : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
+                          }`}
+                          data-testid={`overlay-toggle-${overlay.id}`}
+                        >
+                          {overlay.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Layer on top of any preset</p>
                 </div>
 
                 <div className="w-px bg-white/10 self-stretch" />

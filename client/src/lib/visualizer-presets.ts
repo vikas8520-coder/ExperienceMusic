@@ -19,9 +19,22 @@ export const presets = [
   "Audio Bars",
   "Geometric Kaleidoscope",
   "Cosmic Web",
+  "Blue Tunnel",
+  "BW Vortex",
+  "Rainbow Spiral",
+  "Red Mandala",
 ] as const;
 
 export type PresetName = typeof presets[number];
+
+export const psyOverlays = [
+  { name: "Blue Tunnel", id: "blueTunnel" },
+  { name: "BW Vortex", id: "bwVortex" },
+  { name: "Rainbow Spiral", id: "rainbowSpiral" },
+  { name: "Red Mandala", id: "redMandala" },
+] as const;
+
+export type PsyOverlayId = typeof psyOverlays[number]["id"];
 
 export const imageFilters = [
   { name: "None", id: "none" },

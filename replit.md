@@ -2,7 +2,12 @@
 
 ## Overview
 
-This is a production-ready audio-reactive visualization web application that allows users to upload audio tracks and generates real-time, high-quality WebGL visualizations in the browser. The app analyzes audio frequency bands (bass, mid, high) and uses them to drive GPU-accelerated 3D visuals with Three.js. It includes 7 visual presets (Energy Rings, Psy Tunnel, Particle Field, Waveform Sphere, Audio Bars, Geometric Kaleidoscope, Cosmic Web), 10 color palettes, customizable controls for intensity/speed/color, and AI-powered thumbnail analysis for automatic theme extraction. The UI is fully responsive with mobile-optimized touch controls.
+This is a production-ready audio-reactive visualization web application that allows users to upload audio tracks and generates real-time, high-quality WebGL visualizations in the browser. The app analyzes audio frequency bands (bass, mid, high) and uses them to drive GPU-accelerated 3D visuals with Three.js. It includes 11 visual presets (Energy Rings, Psy Tunnel, Particle Field, Waveform Sphere, Audio Bars, Geometric Kaleidoscope, Cosmic Web, Blue Tunnel, BW Vortex, Rainbow Spiral, Red Mandala), 10 color palettes, customizable controls for intensity/speed/color, and AI-powered thumbnail analysis for automatic theme extraction. The UI is fully responsive with mobile-optimized touch controls.
+
+### Psy Overlay System
+The app includes 4 psychedelic shader presets (Blue Tunnel, BW Vortex, Rainbow Spiral, Red Mandala) that can function both as:
+- **Standalone presets**: Selectable from the preset dropdown
+- **Overlay layers**: Can be toggled on/off via the "Psy Overlays" section in the control panel, layering on top of any active preset with additive blending. Multiple overlays can be active simultaneously.
 
 ## User Preferences
 

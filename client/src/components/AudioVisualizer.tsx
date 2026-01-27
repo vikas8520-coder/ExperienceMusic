@@ -4,8 +4,9 @@ import { OrbitControls, Sphere, shaderMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { Effects } from "./Effects";
 import { PsyTunnel as PsyTunnelShader } from "./PsyTunnel";
+import { PsyPresetLayer, type PsyPresetName } from "./PsyPresetLayer";
 import { type AudioData } from "@/hooks/use-audio-analyzer";
-import { type ImageFilterId } from "@/lib/visualizer-presets";
+import { type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
 
 interface AudioVisualizerProps {
   getAudioData: () => AudioData;
@@ -15,6 +16,7 @@ interface AudioVisualizerProps {
     colorPalette: string[];
     presetName: string;
     imageFilters?: ImageFilterId[];
+    psyOverlays?: PsyOverlayId[];
   };
   backgroundImage?: string | null;
   zoom?: number;
@@ -849,10 +851,52 @@ function AudioReactiveEffects({ getAudioData, settings }: { getAudioData: () => 
   );
 }
 
+function PsyPresetWrapper({ 
+  preset, 
+  getAudioData, 
+  opacity = 0.9,
+  blending = THREE.AdditiveBlending 
+}: { 
+  preset: PsyPresetName; 
+  getAudioData: () => AudioData; 
+  opacity?: number;
+  blending?: THREE.Blending;
+}) {
+  const audioDataRef = useRef<AudioData>({ bass: 0, mid: 0, high: 0, energy: 0, frequencyData: new Uint8Array(0) });
+  
+  useFrame(() => {
+    audioDataRef.current = getAudioData();
+  });
+  
+  return (
+    <PsyPresetLayer
+      preset={preset}
+      bass={audioDataRef.current.bass}
+      mid={audioDataRef.current.mid}
+      high={audioDataRef.current.high}
+      opacity={opacity}
+      blending={blending}
+    />
+  );
+}
+
 function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: AudioVisualizerProps) {
   const [hasError, setHasError] = useState(false);
   
   const activeFilters = settings.imageFilters || ["none"];
+  const activeOverlays = settings.psyOverlays || [];
+
+  const isPsyPreset = ["Blue Tunnel", "BW Vortex", "Rainbow Spiral", "Red Mandala"].includes(settings.presetName);
+  
+  const presetToPsyPresetName = (name: string): PsyPresetName => {
+    switch (name) {
+      case "Blue Tunnel": return "blueTunnel";
+      case "BW Vortex": return "bwVortex";
+      case "Rainbow Spiral": return "rainbowSpiral";
+      case "Red Mandala": return "redMandala";
+      default: return "blueTunnel";
+    }
+  };
 
   if (hasError) {
     return <FallbackVisualizer settings={settings} backgroundImage={backgroundImage} />;
@@ -896,7 +940,25 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
         {settings.presetName === "Audio Bars" && <AudioBars getAudioData={getAudioData} settings={settings} />}
         {settings.presetName === "Geometric Kaleidoscope" && <GeometricKaleidoscope getAudioData={getAudioData} settings={settings} />}
         {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
+        
+        {isPsyPreset && (
+          <PsyPresetWrapper 
+            preset={presetToPsyPresetName(settings.presetName)} 
+            getAudioData={getAudioData}
+            opacity={0.95}
+          />
+        )}
       </ZoomableScene>
+
+      {activeOverlays.map((overlayId) => (
+        <PsyPresetWrapper
+          key={`overlay-${overlayId}`}
+          preset={overlayId as PsyPresetName}
+          getAudioData={getAudioData}
+          opacity={0.4}
+          blending={THREE.AdditiveBlending}
+        />
+      ))}
 
       <AudioReactiveEffects getAudioData={getAudioData} settings={settings} />
     </Canvas>

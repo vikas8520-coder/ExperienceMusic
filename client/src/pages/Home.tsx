@@ -3,7 +3,7 @@ import { AudioVisualizer } from "@/components/AudioVisualizer";
 import { UIControls, type ThumbnailAnalysis } from "@/components/UIControls";
 import { TrackLibrary } from "@/components/TrackLibrary";
 import { useAudioAnalyzer } from "@/hooks/use-audio-analyzer";
-import { colorPalettes, type PresetName, type ImageFilterId } from "@/lib/visualizer-presets";
+import { colorPalettes, type PresetName, type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
 import { useCreatePreset } from "@/hooks/use-presets";
 import { useToast } from "@/hooks/use-toast";
 
@@ -63,6 +63,7 @@ export default function Home() {
     colorPalette: colorPalettes[0].colors,
     presetName: "Energy Rings" as PresetName,
     imageFilters: ["none"] as ImageFilterId[],
+    psyOverlays: [] as PsyOverlayId[],
   });
 
   const toggleFullscreen = useCallback(() => {
