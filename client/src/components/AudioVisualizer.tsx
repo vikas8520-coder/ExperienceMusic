@@ -905,10 +905,17 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
 
   return (
     <Canvas
-      gl={{ antialias: true, toneMapping: THREE.ReinhardToneMapping }}
+      gl={{ 
+        antialias: true, 
+        toneMapping: THREE.ACESFilmicToneMapping,
+        powerPreference: "high-performance",
+        alpha: false,
+        stencil: false,
+        depth: true,
+      }}
       camera={{ position: [0, 0, 15], fov: 45 }}
       style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 0 }}
-      dpr={[1, 2]}
+      dpr={[2, Math.min(window.devicePixelRatio, 3)]}
       onCreated={({ gl }) => {
         if (!gl.getContext()) {
           setHasError(true);
