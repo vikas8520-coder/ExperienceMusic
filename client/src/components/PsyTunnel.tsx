@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 
 type AudioData = {
@@ -9,7 +9,10 @@ type AudioData = {
 };
 
 type Props = {
-  getAudioData: () => AudioData;
+  bass?: number;
+  mid?: number;
+  high?: number;
+  getAudioData?: () => AudioData;
   intensity?: number;
   speed?: number;
   opacity?: number;
@@ -17,12 +20,17 @@ type Props = {
 };
 
 export function PsyTunnel({
+  bass: bassProp,
+  mid: midProp,
+  high: highProp,
   getAudioData,
   intensity = 1,
   speed = 1,
   opacity = 0.85,
   blend = THREE.AdditiveBlending,
 }: Props) {
+  const audioRef = useRef({ bass: 0, mid: 0, high: 0 });
+
   const material = useMemo(() => {
     const mat = new THREE.ShaderMaterial({
       transparent: true,
@@ -107,11 +115,21 @@ export function PsyTunnel({
   }, [blend, opacity]);
 
   useFrame((_, delta) => {
-    const { bass, mid, high } = getAudioData();
+    if (getAudioData) {
+      const data = getAudioData();
+      audioRef.current.bass = data.bass * intensity;
+      audioRef.current.mid = data.mid * speed;
+      audioRef.current.high = data.high;
+    } else {
+      audioRef.current.bass = (bassProp ?? 0) * intensity;
+      audioRef.current.mid = (midProp ?? 0) * speed;
+      audioRef.current.high = highProp ?? 0;
+    }
+
     material.uniforms.uTime.value += delta * speed;
-    material.uniforms.uBass.value = bass * intensity;
-    material.uniforms.uMid.value = mid * speed;
-    material.uniforms.uHigh.value = high;
+    material.uniforms.uBass.value = audioRef.current.bass;
+    material.uniforms.uMid.value = audioRef.current.mid;
+    material.uniforms.uHigh.value = audioRef.current.high;
     material.uniforms.uOpacity.value = opacity;
   });
 

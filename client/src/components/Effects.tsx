@@ -9,6 +9,7 @@ type Props = {
   mid: number;
   high: number;
   enabled?: boolean;
+  afterimageOn?: boolean;
   bloomOn?: boolean;
   chromaOn?: boolean;
   noiseOn?: boolean;
@@ -16,6 +17,7 @@ type Props = {
   kaleidoOn?: boolean;
   intensity?: number;
   motion?: number;
+  trails?: number;
   vignetteStrength?: number;
   kaleidoStrength?: number;
 };
@@ -27,6 +29,7 @@ export function Effects({
   mid,
   high,
   enabled = true,
+  afterimageOn = false,
   bloomOn = true,
   chromaOn = true,
   noiseOn = true,
@@ -34,6 +37,7 @@ export function Effects({
   kaleidoOn = false,
   intensity = 1.0,
   motion = 1.0,
+  trails = 0.75,
   vignetteStrength = 0.35,
   kaleidoStrength = 0.6,
 }: Props) {
