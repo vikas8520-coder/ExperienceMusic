@@ -952,34 +952,79 @@ function FilterEffects({ activeFilters, intensity }: { activeFilters: string[]; 
   );
 }
 
-// Static background image rendered as HTML (completely fixed, no animation)
-// Note: Filters are now applied via WebGL post-processing in FilterEffects component
-function StaticBackgroundImage({ imageUrl, filters = ["none"] }: { imageUrl: string; filters?: string[] }) {
-  // Only apply transform-based filters (mirror, zoom) via CSS since they affect geometry
+// Background plane rendered inside Three.js Canvas so it gets post-processed by filters
+function BackgroundPlane({ imageUrl, filters = ["none"] }: { imageUrl: string; filters?: string[] }) {
+  const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  const textureRef = useRef<THREE.Texture | null>(null);
+  
+  // Apply transform-based filters
   const hasMirror = filters.includes('mirror');
   const hasZoom = filters.includes('zoompulse');
   
-  const transforms: string[] = [];
-  if (hasMirror) transforms.push('scaleX(-1)');
-  if (hasZoom) transforms.push('scale(1.15)');
+  // Load the texture with proper cleanup and async race protection
+  useEffect(() => {
+    let isActive = true;
+    
+    // Dispose previous texture before loading new one or when imageUrl is null
+    if (textureRef.current) {
+      textureRef.current.dispose();
+      textureRef.current = null;
+      setTexture(null);
+    }
+    
+    // If no imageUrl, we're done after cleanup
+    if (!imageUrl) return;
+    
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      imageUrl,
+      (loadedTexture) => {
+        // Guard against async race: only use if this effect is still active
+        if (!isActive) {
+          loadedTexture.dispose();
+          return;
+        }
+        loadedTexture.colorSpace = THREE.SRGBColorSpace;
+        textureRef.current = loadedTexture;
+        setTexture(loadedTexture);
+      },
+      undefined,
+      (error) => {
+        console.error('Error loading background texture:', error);
+      }
+    );
+    
+    // Cleanup on unmount or when imageUrl changes
+    return () => {
+      isActive = false;
+      if (textureRef.current) {
+        textureRef.current.dispose();
+        textureRef.current = null;
+      }
+    };
+  }, [imageUrl]);
   
-  const cssTransform = transforms.length > 0 ? transforms.join(' ') : undefined;
-
+  // Calculate scale to cover viewport
+  const scale = useMemo(() => {
+    // Make the plane large enough to cover the camera view
+    // With FOV 45 at z=15, visible width is approximately 2 * tan(22.5°) * 15 ≈ 12.4
+    // We make it larger to ensure full coverage
+    const baseScale = hasZoom ? 32 : 28;
+    return [baseScale * (hasMirror ? -1 : 1), baseScale, 1] as [number, number, number];
+  }, [hasMirror, hasZoom]);
+  
+  if (!texture) return null;
+  
   return (
-    <div
-      className="absolute inset-0"
-      data-testid="static-background-image"
-      data-filters={filters.join(',')}
-      style={{
-        backgroundImage: `url(${imageUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        opacity: 0.7,
-        transform: cssTransform,
-        zIndex: 0,
-      }}
-    />
+    <mesh position={[0, 0, -10]} scale={scale}>
+      <planeGeometry args={[1, 1]} />
+      <meshBasicMaterial 
+        map={texture} 
+        transparent={true} 
+        opacity={0.7}
+        depthWrite={false}
+      />
+    </mesh>
   );
 }
 
@@ -997,41 +1042,41 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
 
   return (
     <div className="absolute inset-0 overflow-hidden">
-      {/* Static background image - completely fixed, no animation */}
-      {backgroundImage && (
-        <StaticBackgroundImage imageUrl={backgroundImage} filters={activeFilters} />
-      )}
-      
       <Canvas
-        gl={{ antialias: true, toneMapping: THREE.ReinhardToneMapping, alpha: true }}
+        gl={{ antialias: true, toneMapping: THREE.ReinhardToneMapping, alpha: false }}
         camera={{ position: [0, 0, 15], fov: 45 }}
-        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 1, background: 'transparent' }}
+        style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
         dpr={[1, 2]}
         onCreated={({ gl }) => {
-          gl.setClearColor(0x000000, 0);
+          gl.setClearColor(0x000000, 1);
           if (!gl.getContext()) {
             setHasError(true);
           }
         }}
       >
+        {/* Background image rendered inside Canvas so it gets post-processed by filters */}
+        {backgroundImage && (
+          <BackgroundPlane imageUrl={backgroundImage} filters={activeFilters} />
+        )}
+        
         <OrbitControls makeDefault enableZoom={true} enablePan={true} enableRotate={true} />
       
-      <ambientLight intensity={0.5} />
-      <pointLight position={[10, 10, 10]} intensity={1} />
-      <pointLight position={[-10, -10, -10]} intensity={0.5} color="#ff00ff" />
+        <ambientLight intensity={0.5} />
+        <pointLight position={[10, 10, 10]} intensity={1} />
+        <pointLight position={[-10, -10, -10]} intensity={0.5} color="#ff00ff" />
       
-      <ZoomableScene zoom={zoom}>
-        {settings.presetName === "Energy Rings" && <EnergyRings getAudioData={getAudioData} settings={settings} />}
-        {settings.presetName === "Psy Tunnel" && <PsyTunnel getAudioData={getAudioData} settings={settings} />}
-        {settings.presetName === "Particle Field" && <ParticleField getAudioData={getAudioData} settings={settings} />}
-        {settings.presetName === "Waveform Sphere" && <WaveformSphere getAudioData={getAudioData} settings={settings} />}
-        {settings.presetName === "Audio Bars" && <AudioBars getAudioData={getAudioData} settings={settings} />}
-        {settings.presetName === "Geometric Kaleidoscope" && <GeometricKaleidoscope getAudioData={getAudioData} settings={settings} />}
-        {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
-      </ZoomableScene>
+        <ZoomableScene zoom={zoom}>
+          {settings.presetName === "Energy Rings" && <EnergyRings getAudioData={getAudioData} settings={settings} />}
+          {settings.presetName === "Psy Tunnel" && <PsyTunnel getAudioData={getAudioData} settings={settings} />}
+          {settings.presetName === "Particle Field" && <ParticleField getAudioData={getAudioData} settings={settings} />}
+          {settings.presetName === "Waveform Sphere" && <WaveformSphere getAudioData={getAudioData} settings={settings} />}
+          {settings.presetName === "Audio Bars" && <AudioBars getAudioData={getAudioData} settings={settings} />}
+          {settings.presetName === "Geometric Kaleidoscope" && <GeometricKaleidoscope getAudioData={getAudioData} settings={settings} />}
+          {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
+        </ZoomableScene>
 
-      <FilterEffects activeFilters={activeFilters} intensity={settings.intensity} />
-    </Canvas>
+        <FilterEffects activeFilters={activeFilters} intensity={settings.intensity} />
+      </Canvas>
     </div>
   );
 }
