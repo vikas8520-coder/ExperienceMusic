@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a production-ready audio-reactive visualization web application that allows users to upload audio tracks and generates real-time, high-quality WebGL visualizations in the browser. The app analyzes audio frequency bands (bass, mid, high) and uses them to drive GPU-accelerated 3D visuals with Three.js. It includes 7 visual presets (Energy Rings, Psy Tunnel, Particle Field, Waveform Sphere, Audio Bars, Geometric Kaleidoscope, Cosmic Web), 10 color palettes, customizable controls for intensity/speed/color, and AI-powered thumbnail analysis for automatic theme extraction. The UI is fully responsive with mobile-optimized touch controls.
+This is a production-ready audio-reactive visualization web application that allows users to upload audio tracks and generates real-time, high-quality WebGL visualizations in the browser. The app analyzes audio frequency bands (bass, mid, high) and uses them to drive GPU-accelerated 3D visuals with Three.js. It includes multiple visual presets (Energy Rings, Psy Tunnel, Particle Field), customizable controls for intensity/speed/color, and AI-powered thumbnail analysis for automatic theme extraction.
 
 ## User Preferences
 
@@ -32,17 +32,6 @@ Preferred communication style: Simple, everyday language.
 - **Frequency Bands**: Bass (20-140Hz), Mid (140-2000Hz), High (2000Hz+) extracted from FFT data
 - **Recording**: MediaRecorder API for WebM/Opus audio capture
 - **Playback**: AudioWorklet for streaming PCM16 audio playback
-- **Source Management**: Audio analyzer hook tracks MediaElementSource to avoid recreation errors and properly reconnects on source changes
-
-### Track Library
-- **Storage**: Client-side localStorage for saving tracks with audio URLs, thumbnails, and color palettes
-- **Interface**: Slide-out panel with visual track cards showing thumbnails and color swatches
-- **Operations**: Save new tracks, load saved tracks, delete tracks from library
-
-### WebGL Fallback
-- **Detection**: Proactive WebGL support check before rendering Canvas component
-- **Fallback**: 2D animated visualization with pulsing rings using the selected color palette
-- **Thumbnail Integration**: Background image works in both WebGL and fallback modes
 
 ### Data Flow
 1. User uploads audio file → stored as blob URL
