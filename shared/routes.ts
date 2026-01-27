@@ -60,6 +60,20 @@ export const api = {
         }),
       },
     },
+    extractArtwork: {
+      method: 'POST' as const,
+      path: '/api/extract-artwork',
+      input: z.object({ audioBase64: z.string() }),
+      responses: {
+        200: z.object({
+          artwork: z.string().nullable(),
+          mimeType: z.string().nullable(),
+          title: z.string().nullable(),
+          artist: z.string().nullable(),
+        }),
+        400: z.object({ message: z.string() }),
+      },
+    },
   },
   presets: {
     list: {
