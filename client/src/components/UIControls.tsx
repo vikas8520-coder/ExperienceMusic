@@ -117,15 +117,21 @@ export function UIControls({
     }
   }, []);
   
-  // Restore scroll positions after render
+  // Restore scroll positions after settings change
   useEffect(() => {
-    if (desktopScrollRef.current && desktopScrollPosition.current > 0) {
-      desktopScrollRef.current.scrollLeft = desktopScrollPosition.current;
-    }
-    if (mobileScrollRef.current && mobileScrollPosition.current > 0) {
-      mobileScrollRef.current.scrollLeft = mobileScrollPosition.current;
-    }
-  });
+    const desktopEl = desktopScrollRef.current;
+    const mobileEl = mobileScrollRef.current;
+    
+    // Use requestAnimationFrame to ensure DOM has updated
+    requestAnimationFrame(() => {
+      if (desktopEl && desktopScrollPosition.current > 0) {
+        desktopEl.scrollLeft = desktopScrollPosition.current;
+      }
+      if (mobileEl && mobileScrollPosition.current > 0) {
+        mobileEl.scrollLeft = mobileScrollPosition.current;
+      }
+    });
+  }, [settings]);
   
   const updateSetting = useCallback(<K extends keyof typeof settings>(key: K, value: typeof settings[K]) => {
     saveScrollPositions();
@@ -301,13 +307,14 @@ export function UIControls({
 
   // Mobile bottom sheet
   const MobileBottomSheet = () => (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {showMobileControls && (
         <motion.div 
+          key="mobile-bottom-sheet"
           initial={{ y: "100%" }}
           animate={{ y: isMobileExpanded ? 0 : "calc(100% - 180px)" }}
           exit={{ y: "100%" }}
-          transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          transition={{ type: "spring", damping: 30, stiffness: 400 }}
           className="fixed bottom-20 left-0 right-0 z-20 md:hidden"
         >
           <div className="glass-panel rounded-t-3xl max-h-[70vh] overflow-hidden">
@@ -379,12 +386,14 @@ export function UIControls({
             </div>
             
             {/* Expanded Controls */}
-            <AnimatePresence>
+            <AnimatePresence mode="wait">
               {isMobileExpanded && (
                 <motion.div 
+                  key="mobile-expanded-controls"
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
                   className="px-4 pb-6 space-y-6 overflow-y-auto max-h-[40vh]"
                   style={{ overscrollBehavior: 'contain' }}
                   ref={mobileScrollRef}
@@ -569,12 +578,14 @@ export function UIControls({
   const DesktopBottomPanel = () => (
     <div className="hidden md:block">
       {/* Toggle button when panel is hidden */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {!isDesktopPanelVisible && (
           <motion.div
+            key="show-controls-button"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.15 }}
             className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20"
           >
             <Button
@@ -592,13 +603,14 @@ export function UIControls({
       </AnimatePresence>
 
       {/* Main bottom panel */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {isDesktopPanelVisible && (
           <motion.div 
+            key="desktop-bottom-panel"
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            transition={{ type: "spring", damping: 30, stiffness: 400 }}
             className="fixed bottom-0 left-0 right-0 glass-panel z-10 border-t border-white/10"
           >
             {/* Panel Header with hide button */}
