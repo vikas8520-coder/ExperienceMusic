@@ -10,7 +10,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { Play, Pause, Upload, Save, Disc, Activity, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, X, Settings, Maximize, Minimize, ZoomIn } from "lucide-react";
+import { Play, Pause, Upload, Save, Disc, Activity, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, X, Settings, Maximize, Minimize, ZoomIn, SkipBack, SkipForward, Volume2, VolumeX } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { colorPalettes, presets, imageFilters, psyOverlays, type PresetName, type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
 import { motion, AnimatePresence } from "framer-motion";
@@ -42,6 +42,14 @@ interface UIControlsProps {
   onToggleFullscreen?: () => void;
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
+  currentTime?: number;
+  duration?: number;
+  onSeek?: (time: number) => void;
+  volume?: number;
+  onVolumeChange?: (volume: number) => void;
+  onPreviousTrack?: () => void;
+  onNextTrack?: () => void;
+  hasLibraryTracks?: boolean;
 }
 
 export interface ThumbnailAnalysis {
@@ -49,6 +57,14 @@ export interface ThumbnailAnalysis {
   theme: string;
   mood: string;
   visualSuggestions: string[];
+}
+
+// Format time in mm:ss format
+function formatTime(seconds: number): string {
+  if (!seconds || !isFinite(seconds)) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 export function UIControls({
@@ -70,6 +86,14 @@ export function UIControls({
   onToggleFullscreen,
   zoom,
   onZoomChange,
+  currentTime = 0,
+  duration = 0,
+  onSeek,
+  volume = 1,
+  onVolumeChange,
+  onPreviousTrack,
+  onNextTrack,
+  hasLibraryTracks = false,
 }: UIControlsProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ThumbnailAnalysis | null>(null);
@@ -156,56 +180,111 @@ export function UIControls({
 
   // Mobile floating controls (always visible)
   const MobileFloatingControls = () => (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 md:hidden">
-      {/* Play/Pause Button */}
-      <Button 
-        onClick={onPlayPause} 
-        size="lg"
-        className="rounded-full shadow-lg shadow-primary/30"
-        data-testid="button-play-mobile"
-      >
-        {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6 ml-0.5" />}
-      </Button>
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 md:hidden">
+      {/* Mini Timeline for Mobile */}
+      {duration > 0 && (
+        <div className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5">
+          <span className="text-[10px] text-white/70 font-mono w-8 text-right">
+            {formatTime(currentTime)}
+          </span>
+          <div 
+            className="w-32 h-1.5 bg-white/20 rounded-full overflow-hidden cursor-pointer"
+            onClick={(e) => {
+              if (onSeek && duration > 0) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const percent = x / rect.width;
+                onSeek(percent * duration);
+              }
+            }}
+          >
+            <div 
+              className="h-full bg-primary transition-all duration-100"
+              style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : "0%" }}
+            />
+          </div>
+          <span className="text-[10px] text-white/70 font-mono w-8">
+            {formatTime(duration)}
+          </span>
+        </div>
+      )}
       
-      {/* Upload Button */}
-      <div className="relative">
-        <input
-          type="file"
-          accept="audio/*"
-          onChange={onFileUpload}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          data-testid="input-audio-upload-mobile"
-        />
+      {/* Transport Controls */}
+      <div className="flex items-center gap-2">
+        {/* Previous Track */}
+        <Button 
+          variant="secondary"
+          size="icon"
+          className="rounded-full shadow-lg h-10 w-10"
+          onClick={onPreviousTrack}
+          disabled={!hasLibraryTracks}
+          data-testid="button-previous-mobile"
+        >
+          <SkipBack className="h-4 w-4" />
+        </Button>
+        
+        {/* Play/Pause Button */}
+        <Button 
+          onClick={onPlayPause} 
+          size="lg"
+          className="rounded-full shadow-lg shadow-primary/30 h-14 w-14"
+          data-testid="button-play-mobile"
+        >
+          {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6 ml-0.5" />}
+        </Button>
+        
+        {/* Next Track */}
+        <Button 
+          variant="secondary"
+          size="icon"
+          className="rounded-full shadow-lg h-10 w-10"
+          onClick={onNextTrack}
+          disabled={!hasLibraryTracks}
+          data-testid="button-next-mobile"
+        >
+          <SkipForward className="h-4 w-4" />
+        </Button>
+        
+        {/* Upload Button */}
+        <div className="relative">
+          <input
+            type="file"
+            accept="audio/*"
+            onChange={onFileUpload}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            data-testid="input-audio-upload-mobile"
+          />
+          <Button 
+            variant="secondary"
+            size="icon"
+            className="rounded-full shadow-lg"
+          >
+            <Upload className="h-5 w-5" />
+          </Button>
+        </div>
+        
+        {/* Settings Toggle */}
         <Button 
           variant="secondary"
           size="icon"
           className="rounded-full shadow-lg"
+          onClick={() => setShowMobileControls(!showMobileControls)}
+          data-testid="button-settings-mobile"
         >
-          <Upload className="h-5 w-5" />
+          <Settings className="h-5 w-5" />
+        </Button>
+        
+        {/* Library Button */}
+        <Button 
+          variant="secondary"
+          size="icon"
+          className="rounded-full shadow-lg"
+          onClick={onToggleLibrary}
+          data-testid="button-library-mobile"
+        >
+          <Library className="h-5 w-5" />
         </Button>
       </div>
-      
-      {/* Settings Toggle */}
-      <Button 
-        variant="secondary"
-        size="icon"
-        className="rounded-full shadow-lg"
-        onClick={() => setShowMobileControls(!showMobileControls)}
-        data-testid="button-settings-mobile"
-      >
-        <Settings className="h-5 w-5" />
-      </Button>
-      
-      {/* Library Button */}
-      <Button 
-        variant="secondary"
-        size="icon"
-        className="rounded-full shadow-lg"
-        onClick={onToggleLibrary}
-        data-testid="button-library-mobile"
-      >
-        <Library className="h-5 w-5" />
-      </Button>
       
       {/* Fullscreen Button */}
       <Button 
@@ -561,18 +640,93 @@ export function UIControls({
             <div ref={desktopScrollRef} className="overflow-x-auto p-4" style={{ overscrollBehavior: 'contain' }}>
               <div className="flex gap-6 min-w-max">
                 
-                {/* Audio Controls Section */}
-                <div className="flex flex-col gap-3 min-w-48">
-                  <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Audio</Label>
-                  <div className="flex gap-2 flex-wrap">
+                {/* Audio Controls Section - Enhanced Player */}
+                <div className="flex flex-col gap-3 min-w-[320px]">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Now Playing</Label>
+                    <span className="text-xs text-muted-foreground truncate max-w-[180px]" title={trackName}>
+                      {trackName || "No track loaded"}
+                    </span>
+                  </div>
+                  
+                  {/* Timeline / Progress Bar */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground w-10 text-right font-mono">
+                      {formatTime(currentTime)}
+                    </span>
+                    <div className="flex-1 relative h-2 group">
+                      <div 
+                        className="absolute inset-0 bg-white/10 rounded-full overflow-hidden cursor-pointer"
+                        onClick={(e) => {
+                          if (onSeek && duration > 0) {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const x = e.clientX - rect.left;
+                            const percent = x / rect.width;
+                            onSeek(percent * duration);
+                          }
+                        }}
+                        data-testid="timeline-progress"
+                      >
+                        <div 
+                          className="h-full bg-gradient-to-r from-primary to-primary/70 transition-all duration-100"
+                          style={{ width: duration > 0 ? `${(currentTime / duration) * 100}%` : "0%" }}
+                        />
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max={duration || 100}
+                        value={currentTime}
+                        onChange={(e) => onSeek?.(parseFloat(e.target.value))}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        data-testid="timeline-slider"
+                      />
+                    </div>
+                    <span className="text-xs text-muted-foreground w-10 font-mono">
+                      {formatTime(duration)}
+                    </span>
+                  </div>
+                  
+                  {/* Transport Controls */}
+                  <div className="flex items-center justify-center gap-2">
+                    {/* Previous Track */}
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={onPreviousTrack}
+                      disabled={!hasLibraryTracks}
+                      className="h-9 w-9"
+                      data-testid="button-previous"
+                      title="Previous track / Restart"
+                    >
+                      <SkipBack className="h-4 w-4" />
+                    </Button>
+                    
+                    {/* Play/Pause */}
                     <Button 
                       onClick={onPlayPause} 
-                      className="flex-1 font-bold tracking-wider"
+                      size="icon"
+                      className="h-12 w-12 rounded-full"
                       data-testid="button-play"
                     >
-                      {isPlaying ? <><Pause className="mr-2 h-4 w-4" /> PAUSE</> : <><Play className="mr-2 h-4 w-4" /> PLAY</>}
+                      {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 ml-0.5" />}
                     </Button>
-                    <div className="relative">
+                    
+                    {/* Next Track */}
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={onNextTrack}
+                      disabled={!hasLibraryTracks}
+                      className="h-9 w-9"
+                      data-testid="button-next"
+                      title="Next track"
+                    >
+                      <SkipForward className="h-4 w-4" />
+                    </Button>
+                    
+                    {/* Upload */}
+                    <div className="relative ml-2">
                       <input
                         type="file"
                         accept="audio/*"
@@ -580,11 +734,35 @@ export function UIControls({
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         data-testid="input-audio-upload"
                       />
-                      <Button variant="outline" size="icon" className="border-primary/50 text-primary">
+                      <Button variant="outline" size="icon" className="h-9 w-9 border-primary/50 text-primary">
                         <Upload className="h-4 w-4" />
                       </Button>
                     </div>
+                    
+                    {/* Volume */}
+                    <div className="flex items-center gap-1 ml-2">
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => onVolumeChange?.(volume > 0 ? 0 : 1)}
+                        data-testid="button-mute"
+                      >
+                        {volume === 0 ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                      </Button>
+                      <Slider
+                        value={[volume * 100]}
+                        min={0}
+                        max={100}
+                        step={1}
+                        onValueChange={(v) => onVolumeChange?.(v[0] / 100)}
+                        className="w-16"
+                        data-testid="slider-volume"
+                      />
+                    </div>
                   </div>
+                  
+                  {/* Secondary Controls */}
                   <div className="flex gap-2 flex-wrap">
                     <Button 
                       variant="outline" 

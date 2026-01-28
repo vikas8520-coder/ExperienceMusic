@@ -24,6 +24,10 @@ export default function Home() {
   const [audioFileName, setAudioFileName] = useState<string>("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
   const [isRecording, setIsRecording] = useState(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
@@ -138,6 +142,105 @@ export default function Home() {
   }, []);
 
   const { getAudioData, destNode } = useAudioAnalyzer(audioRef.current, audioFile);
+
+  // Audio time/duration tracking
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const handleDurationChange = () => setDuration(audio.duration || 0);
+    const handleEnded = () => {
+      setIsPlaying(false);
+      // Auto-play next track if available
+      if (savedTracks.length > 0 && currentTrackIndex >= 0 && currentTrackIndex < savedTracks.length - 1) {
+        handleNextTrack();
+      }
+    };
+    const handleLoadedMetadata = () => setDuration(audio.duration || 0);
+
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("durationchange", handleDurationChange);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+
+    return () => {
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("durationchange", handleDurationChange);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+    };
+  }, [audioRef.current, savedTracks.length, currentTrackIndex]);
+
+  const handleSeek = useCallback((time: number) => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = time;
+      setCurrentTime(time);
+    }
+  }, []);
+
+  const handleVolumeChange = useCallback((newVolume: number) => {
+    setVolume(newVolume);
+    if (audioRef.current) {
+      audioRef.current.volume = newVolume;
+    }
+  }, []);
+
+  const handlePreviousTrack = useCallback(() => {
+    if (savedTracks.length === 0) return;
+    
+    // If we're more than 3 seconds into the track, restart it
+    if (currentTime > 3 && audioRef.current) {
+      audioRef.current.currentTime = 0;
+      setCurrentTime(0);
+      return;
+    }
+    
+    // Go to previous track
+    const newIndex = currentTrackIndex > 0 ? currentTrackIndex - 1 : savedTracks.length - 1;
+    const track = savedTracks[newIndex];
+    if (track) {
+      loadTrackByIndex(newIndex, track);
+    }
+  }, [savedTracks, currentTrackIndex, currentTime]);
+
+  const handleNextTrack = useCallback(() => {
+    if (savedTracks.length === 0) return;
+    
+    const newIndex = currentTrackIndex < savedTracks.length - 1 ? currentTrackIndex + 1 : 0;
+    const track = savedTracks[newIndex];
+    if (track) {
+      loadTrackByIndex(newIndex, track);
+    }
+  }, [savedTracks, currentTrackIndex]);
+
+  const loadTrackByIndex = useCallback(async (index: number, track: SavedTrack) => {
+    setAudioFile(track.audioUrl);
+    setAudioFileName(track.name);
+    setCurrentTrackIndex(index);
+    
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+    }
+    audioRef.current.src = track.audioUrl;
+    audioRef.current.volume = volume;
+    audioRef.current.load();
+    
+    if (track.thumbnailUrl) {
+      setThumbnailUrl(track.thumbnailUrl);
+    }
+    if (track.colorPalette) {
+      setSettings(prev => ({ ...prev, colorPalette: track.colorPalette! }));
+    }
+    
+    // Auto-play after loading
+    try {
+      await audioRef.current.play();
+      setIsPlaying(true);
+    } catch (e) {
+      setIsPlaying(false);
+    }
+  }, [volume]);
 
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -384,6 +487,14 @@ export default function Home() {
         onToggleFullscreen={toggleFullscreen}
         zoom={visualizationZoom}
         onZoomChange={setVisualizationZoom}
+        currentTime={currentTime}
+        duration={duration}
+        onSeek={handleSeek}
+        volume={volume}
+        onVolumeChange={handleVolumeChange}
+        onPreviousTrack={handlePreviousTrack}
+        onNextTrack={handleNextTrack}
+        hasLibraryTracks={savedTracks.length > 0}
       />
       
       {/* Track Library Panel */}
@@ -396,12 +507,6 @@ export default function Home() {
         />
       )}
       
-      {/* Playback Progress Indicator */}
-      {isPlaying && (
-        <div className="absolute bottom-0 left-0 w-full h-1 bg-white/10 z-20">
-          <div className="h-full bg-primary animate-pulse w-full origin-left transform scale-x-100 transition-transform duration-1000 ease-linear" />
-        </div>
-      )}
     </div>
   );
 }
