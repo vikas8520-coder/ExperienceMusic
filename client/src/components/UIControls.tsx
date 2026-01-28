@@ -313,9 +313,8 @@ export function UIControls({
           ? (isMobileExpanded ? 'translate-y-0' : 'translate-y-[calc(100%-180px)]')
           : 'translate-y-full'
       }`}
-      style={{ pointerEvents: 'auto' }}
     >
-      <div className="glass-panel rounded-t-3xl max-h-[70vh] overflow-hidden">
+      <div className="glass-panel settings-panel rounded-t-3xl max-h-[70vh] overflow-hidden">
             {/* Drag Handle */}
             <button
               onClick={() => setIsMobileExpanded(!isMobileExpanded)}
@@ -592,10 +591,9 @@ export function UIControls({
 
       {/* Main bottom panel - CSS transition based */}
       <div 
-        className={`fixed bottom-0 left-0 right-0 glass-panel z-50 border-t border-white/10 transition-transform duration-300 ease-out ${
+        className={`fixed bottom-0 left-0 right-0 glass-panel settings-panel z-50 border-t border-white/10 transition-transform duration-300 ease-out ${
           isDesktopPanelVisible ? 'translate-y-0' : 'translate-y-full'
         }`}
-        style={{ pointerEvents: 'auto' }}
       >
             {/* Panel Header with hide button */}
             <div className="flex items-center justify-between gap-4 px-6 py-2 border-b border-white/10">
@@ -633,7 +631,15 @@ export function UIControls({
             </div>
 
             {/* Scrollable horizontal content */}
-            <div ref={desktopScrollRef} className="overflow-x-auto p-4" style={{ overscrollBehavior: 'contain' }}>
+            <div 
+              ref={desktopScrollRef} 
+              className="overflow-x-auto p-4" 
+              style={{ 
+                overscrollBehavior: 'contain',
+                pointerEvents: 'auto',
+                touchAction: 'pan-x pan-y',
+              }}
+            >
               <div className="flex gap-6 min-w-max">
                 
                 {/* Audio Controls Section - Enhanced Player */}

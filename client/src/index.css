@@ -54,6 +54,18 @@
   
   .glass-panel {
     @apply bg-black/40 backdrop-blur-md border border-white/10 shadow-xl;
+    pointer-events: auto;
+    touch-action: auto;
+  }
+  
+  .settings-panel {
+    pointer-events: auto !important;
+    overflow-x: auto;
+    touch-action: pan-x pan-y;
+  }
+  
+  .settings-panel * {
+    pointer-events: auto;
   }
 }
 
