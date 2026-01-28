@@ -305,19 +305,16 @@ export function UIControls({
     </div>
   );
 
-  // Mobile bottom sheet
+  // Mobile bottom sheet - using CSS transitions for stability
   const MobileBottomSheet = () => (
-    <AnimatePresence mode="wait">
-      {showMobileControls && (
-        <motion.div 
-          key="mobile-bottom-sheet"
-          initial={{ y: "100%" }}
-          animate={{ y: isMobileExpanded ? 0 : "calc(100% - 180px)" }}
-          exit={{ y: "100%" }}
-          transition={{ type: "spring", damping: 30, stiffness: 400 }}
-          className="fixed bottom-20 left-0 right-0 z-20 md:hidden"
-        >
-          <div className="glass-panel rounded-t-3xl max-h-[70vh] overflow-hidden">
+    <div 
+      className={`fixed bottom-20 left-0 right-0 z-20 md:hidden transition-transform duration-300 ease-out ${
+        showMobileControls 
+          ? (isMobileExpanded ? 'translate-y-0' : 'translate-y-[calc(100%-180px)]')
+          : 'translate-y-full'
+      }`}
+    >
+      <div className="glass-panel rounded-t-3xl max-h-[70vh] overflow-hidden">
             {/* Drag Handle */}
             <button
               onClick={() => setIsMobileExpanded(!isMobileExpanded)}
@@ -385,19 +382,16 @@ export function UIControls({
               </div>
             </div>
             
-            {/* Expanded Controls */}
-            <AnimatePresence mode="wait">
+            {/* Expanded Controls - CSS transition for stability */}
+            <div 
+              className={`px-4 pb-6 space-y-6 overflow-y-auto max-h-[40vh] transition-all duration-200 ${
+                isMobileExpanded ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden pointer-events-none'
+              }`}
+              style={{ overscrollBehavior: 'contain' }}
+              ref={mobileScrollRef}
+            >
               {isMobileExpanded && (
-                <motion.div 
-                  key="mobile-expanded-controls"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="px-4 pb-6 space-y-6 overflow-y-auto max-h-[40vh]"
-                  style={{ overscrollBehavior: 'contain' }}
-                  ref={mobileScrollRef}
-                >
+                <>
                   {/* Intensity Slider */}
                   <div className="space-y-3">
                     <div className="flex justify-between">
@@ -565,54 +559,42 @@ export function UIControls({
                       Save
                     </Button>
                   </div>
-                </motion.div>
+                </>
               )}
-            </AnimatePresence>
+            </div>
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    </div>
   );
 
-  // Desktop bottom panel
+  // Desktop bottom panel - using CSS transitions instead of AnimatePresence
   const DesktopBottomPanel = () => (
     <div className="hidden md:block">
       {/* Toggle button when panel is hidden */}
-      <AnimatePresence mode="wait">
-        {!isDesktopPanelVisible && (
-          <motion.div
-            key="show-controls-button"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.15 }}
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-20"
-          >
-            <Button
-              variant="outline"
-              onClick={() => setIsDesktopPanelVisible(true)}
-              className="glass-panel flex items-center gap-2"
-              data-testid="button-show-panel"
-            >
-              <Settings className="w-4 h-4" />
-              <span>Show Controls</span>
-              <ChevronUp className="w-4 h-4" />
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div 
+        className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-20 transition-all duration-200 ${
+          isDesktopPanelVisible 
+            ? 'opacity-0 pointer-events-none translate-y-4' 
+            : 'opacity-100 pointer-events-auto translate-y-0'
+        }`}
+      >
+        <Button
+          variant="outline"
+          onClick={() => setIsDesktopPanelVisible(true)}
+          className="glass-panel flex items-center gap-2"
+          data-testid="button-show-panel"
+        >
+          <Settings className="w-4 h-4" />
+          <span>Show Controls</span>
+          <ChevronUp className="w-4 h-4" />
+        </Button>
+      </div>
 
-      {/* Main bottom panel */}
-      <AnimatePresence mode="wait">
-        {isDesktopPanelVisible && (
-          <motion.div 
-            key="desktop-bottom-panel"
-            initial={{ y: 100, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 100, opacity: 0 }}
-            transition={{ type: "spring", damping: 30, stiffness: 400 }}
-            className="fixed bottom-0 left-0 right-0 glass-panel z-10 border-t border-white/10"
-          >
+      {/* Main bottom panel - CSS transition based */}
+      <div 
+        className={`fixed bottom-0 left-0 right-0 glass-panel z-10 border-t border-white/10 transition-transform duration-300 ease-out ${
+          isDesktopPanelVisible ? 'translate-y-0' : 'translate-y-full'
+        }`}
+      >
             {/* Panel Header with hide button */}
             <div className="flex items-center justify-between gap-4 px-6 py-2 border-b border-white/10">
               <div className="flex items-center gap-4 flex-wrap">
@@ -1023,9 +1005,7 @@ export function UIControls({
                 </div>
               </div>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
     </div>
   );
 
