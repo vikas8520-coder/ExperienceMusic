@@ -910,26 +910,38 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
   }
 
   return (
-    <Canvas
-      gl={{ 
-        antialias: true, 
-        toneMapping: THREE.ACESFilmicToneMapping,
-        powerPreference: "high-performance",
-        alpha: false,
-        stencil: false,
-        depth: true,
-      }}
-      camera={{ position: [0, 0, 15], fov: 45 }}
-      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 0, pointerEvents: "none" }}
-      dpr={[2, Math.min(window.devicePixelRatio, 3)]}
-      onCreated={({ gl }) => {
-        if (!gl.getContext()) {
-          setHasError(true);
-        }
+    <div 
+      style={{ 
+        position: "absolute", 
+        top: 0, 
+        left: 0, 
+        width: "100%", 
+        height: "100%", 
+        zIndex: 0, 
+        pointerEvents: "none",
+        touchAction: "none",
       }}
     >
-      <color attach="background" args={['#050508']} />
-      <OrbitControls makeDefault enableZoom={false} enablePan={false} enableRotate={false} />
+      <Canvas
+        gl={{ 
+          antialias: true, 
+          toneMapping: THREE.ACESFilmicToneMapping,
+          powerPreference: "high-performance",
+          alpha: false,
+          stencil: false,
+          depth: true,
+        }}
+        camera={{ position: [0, 0, 15], fov: 45 }}
+        style={{ width: "100%", height: "100%", pointerEvents: "none" }}
+        dpr={[2, Math.min(window.devicePixelRatio, 3)]}
+        events={() => ({ enabled: false, priority: 0 })}
+        onCreated={({ gl }) => {
+          if (!gl.getContext()) {
+            setHasError(true);
+          }
+        }}
+      >
+        <color attach="background" args={['#050508']} />
       
       {backgroundImage && activeFilters.map((filterId, index) => (
         <BackgroundImage 
@@ -984,6 +996,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
 
       <AudioReactiveEffects getAudioData={getAudioData} settings={settings} />
     </Canvas>
+    </div>
   );
 }
 
