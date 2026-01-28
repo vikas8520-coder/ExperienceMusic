@@ -186,7 +186,7 @@ export function UIControls({
 
   // Mobile floating controls (always visible)
   const MobileFloatingControls = () => (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 md:hidden">
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 md:hidden" style={{ pointerEvents: 'auto' }}>
       {/* Mini Timeline for Mobile */}
       {duration > 0 && (
         <div className="flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-full px-3 py-1.5">
@@ -308,11 +308,12 @@ export function UIControls({
   // Mobile bottom sheet - using CSS transitions for stability
   const MobileBottomSheet = () => (
     <div 
-      className={`fixed bottom-20 left-0 right-0 z-20 md:hidden transition-transform duration-300 ease-out ${
+      className={`fixed bottom-20 left-0 right-0 z-40 md:hidden transition-transform duration-300 ease-out ${
         showMobileControls 
           ? (isMobileExpanded ? 'translate-y-0' : 'translate-y-[calc(100%-180px)]')
           : 'translate-y-full'
       }`}
+      style={{ pointerEvents: 'auto' }}
     >
       <div className="glass-panel rounded-t-3xl max-h-[70vh] overflow-hidden">
             {/* Drag Handle */}
@@ -571,7 +572,7 @@ export function UIControls({
     <div className="hidden md:block">
       {/* Toggle button when panel is hidden */}
       <div 
-        className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-20 transition-all duration-200 ${
+        className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 transition-all duration-200 ${
           isDesktopPanelVisible 
             ? 'opacity-0 pointer-events-none translate-y-4' 
             : 'opacity-100 pointer-events-auto translate-y-0'
@@ -591,9 +592,10 @@ export function UIControls({
 
       {/* Main bottom panel - CSS transition based */}
       <div 
-        className={`fixed bottom-0 left-0 right-0 glass-panel z-10 border-t border-white/10 transition-transform duration-300 ease-out ${
+        className={`fixed bottom-0 left-0 right-0 glass-panel z-50 border-t border-white/10 transition-transform duration-300 ease-out ${
           isDesktopPanelVisible ? 'translate-y-0' : 'translate-y-full'
         }`}
+        style={{ pointerEvents: 'auto' }}
       >
             {/* Panel Header with hide button */}
             <div className="flex items-center justify-between gap-4 px-6 py-2 border-b border-white/10">

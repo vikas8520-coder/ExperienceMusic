@@ -920,8 +920,10 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
         depth: true,
       }}
       camera={{ position: [0, 0, 15], fov: 45 }}
-      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 0 }}
+      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", zIndex: 0, pointerEvents: "auto" }}
       dpr={[2, Math.min(window.devicePixelRatio, 3)]}
+      eventSource={document.getElementById("root")!}
+      eventPrefix="client"
       onCreated={({ gl }) => {
         if (!gl.getContext()) {
           setHasError(true);
