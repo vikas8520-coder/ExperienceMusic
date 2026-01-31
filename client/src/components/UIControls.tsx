@@ -599,7 +599,7 @@ export function UIControls({
                     <SelectTrigger className={`bg-black/50 border-white/10 font-mono h-10 ${!settings.presetEnabled ? 'opacity-50' : ''}`} data-testid="select-preset">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-background border-white/10">
+                    <SelectContent className="bg-background border-white/10 z-[9999]" sideOffset={5}>
                       {presets.map((preset) => (
                         <SelectItem key={preset} value={preset} className="font-mono focus:bg-primary/20">
                           {preset}
