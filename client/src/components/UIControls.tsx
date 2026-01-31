@@ -526,12 +526,13 @@ export function UIControls({
 
       {/* Main bottom panel - CSS transition based */}
       <div 
-        className={`fixed bottom-0 left-0 right-0 glass-panel settings-panel z-50 border-t border-white/10 transition-transform duration-300 ease-out ${
+        className={`fixed bottom-0 left-0 right-0 glass-panel z-50 border-t border-white/10 transition-transform duration-300 ease-out ${
           isDesktopPanelVisible ? 'translate-y-0' : 'translate-y-full'
         }`}
+        style={{ pointerEvents: 'auto' }}
       >
             {/* Panel Header with hide button */}
-            <div className="flex items-center justify-between gap-4 px-6 py-2 border-b border-white/10">
+            <div className="flex items-center justify-between gap-4 px-6 py-2 border-b border-white/10 shrink-0">
               <div className="flex items-center gap-4 flex-wrap">
                 <h1 className="text-lg font-bold font-display text-primary text-glow tracking-widest">
                   AURAL<span className="text-foreground">VIS</span>
@@ -568,15 +569,16 @@ export function UIControls({
             {/* Scrollable content */}
             <div 
               ref={desktopScrollRef} 
-              className="overflow-x-auto overflow-y-auto max-h-[60vh] p-4 scrollbar-thin" 
+              className="settings-panel overflow-x-auto overflow-y-auto p-4" 
               style={{ 
+                maxHeight: 'calc(60vh - 50px)',
                 overscrollBehavior: 'contain',
                 pointerEvents: 'auto',
                 touchAction: 'pan-x pan-y',
                 WebkitOverflowScrolling: 'touch',
               }}
             >
-              <div className="flex gap-6 min-w-max">
+              <div className="flex gap-6" style={{ minWidth: 'max-content' }}>
                 
                 {/* Quick Actions Section */}
                 <div className="flex flex-col gap-3 min-w-[200px]">

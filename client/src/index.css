@@ -60,12 +60,39 @@
   
   .settings-panel {
     pointer-events: auto !important;
-    overflow-x: auto;
+    overflow: auto;
     touch-action: pan-x pan-y;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    position: relative;
+    z-index: 100;
   }
   
   .settings-panel * {
     pointer-events: auto;
+  }
+  
+  .settings-panel::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  
+  .settings-panel::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.5);
+    border-radius: 6px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  
+  .settings-panel::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.7);
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  
+  .settings-panel::-webkit-scrollbar-track {
+    background: hsl(var(--background) / 0.3);
+    border-radius: 6px;
   }
 }
 
