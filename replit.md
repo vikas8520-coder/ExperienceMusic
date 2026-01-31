@@ -49,6 +49,14 @@ Preferred communication style: Simple, everyday language.
 - **Fallback**: 2D animated visualization with pulsing rings using the selected color palette
 - **Thumbnail Integration**: Background image works in both WebGL and fallback modes
 
+### Quality Enhancements
+- **Post-Processing**: High-quality bloom (4x multisampling, large kernel), smooth chromatic aberration, vignette effects
+- **Smooth Transitions**: Fade effect when switching between visual presets via PresetTransition component
+- **Audio Interpolation**: Smooth lerping of audio data for fluid visual response
+- **Error Handling**: ErrorBoundary component for graceful error recovery with restart option
+- **Keyboard Shortcuts**: Space (play/pause), Arrow keys (volume/seek), F (fullscreen), M (mute with volume preservation)
+- **Mute Toggle**: Preserves previous volume level for seamless unmute
+
 ### Data Flow
 1. User uploads audio file → stored as blob URL
 2. Audio element connected to Web Audio API AnalyserNode
