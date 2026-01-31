@@ -1,0 +1,201 @@
+Got it — those images are basically **cymatics / Chladni-style resonance patterns**: “sound syncing with matter” where certain frequencies create **stable standing-wave nodes** and the particles/liquid collect into those shapes.
+
+Here’s a practical way to add **presets like that** in your app, without needing a full physics simulation (but still *feels* physically grounded).
+
+---
+
+## The visual language you want
+
+To sell “natural resonant frequency,” your presets should show 3 things clearly:
+
+1. **Standing waves** (stable, symmetric node lines)
+2. **Matter accumulation** (sand/grains/particles collect on nodes)
+3. **Mode changes** (pattern “snaps” into a new geometry when frequency shifts)
+
+So your visuals should **not** just wiggle; they should **lock into patterns**.
+
+---
+
+## Preset pack: “Resonance” (like your images)
+
+### Preset 01 — **Cymatic Sand Plate**
+
+**Look:** like the purple granular pattern (top image).
+**Mechanic:** render a “plate” height field (standing wave) + advect grains toward nodes.
+
+**Audio mapping**
+
+* `fundamentalFreq (dominant peak)` → selects a **mode** (pattern family)
+* `bass energy` → overall vibration intensity (grain movement)
+* `high energy` → grain sparkle / micro jitter
+* `kick` → brief “burst” that pushes grains then they settle back into nodes
+
+**What makes it feel real**
+
+* Grains **migrate and settle**, not just shimmer.
+* Pattern changes are **quantized** (snap between modes) rather than continuous mush.
+
+---
+
+### Preset 02 — **Water Membrane Orb**
+
+**Look:** like the blue circular fluid resonance (bottom image).
+**Mechanic:** spherical/round membrane standing wave + refraction + caustic-like highlights.
+
+**Audio mapping**
+
+* `mid energy` → membrane deformation amount
+* `dominantFreq` → rotation of nodal structure / number of lobes
+* `sub` → slow “breathing pressure”
+* `highs` → glints/caustic flicker
+
+**What makes it feel real**
+
+* “Nodes” stay relatively stable; amplitude changes thicken/thin the ridges.
+* Highlights move like light on liquid, not like noise.
+
+---
+
+### Preset 03 — **Chladni Geometry**
+
+**Look:** clean sacred-geometry style node lines (very “Apple but psych”).
+**Mechanic:** 2D mode shapes (Bessel/sine combinations) projected onto a disk/plate.
+
+**Audio mapping**
+
+* `dominantFreq` → integers `(m, n)` controlling mode shape
+* `bass` → thickness of node lines
+* `mids` → secondary perturbation (subtle)
+* `highs` → edge shimmer / micro particles
+
+**What makes it feel real**
+
+* Modes are **integer-based** (like real resonance modes).
+  Example: as dominant frequency rises, pattern steps through (2,1) → (3,1) → (4,2)…
+
+---
+
+### Preset 04 — **Resonant Field Lines**
+
+**Look:** magnetic-field style curves that “organize” into symmetric lattices.
+**Mechanic:** vector field aligned to standing-wave gradient; particles flow then stabilize.
+
+**Audio mapping**
+
+* `sub/bass` → field strength
+* `dominantFreq` → symmetry count
+* `highs` → filament noise
+
+**What makes it feel real**
+
+* Field lines converge toward stable attractors (nodes).
+
+---
+
+## The real trick: “dominant frequency → mode selection”
+
+Instead of using raw FFT bands only, compute **dominant peak frequency** each frame:
+
+* Do FFT → find strongest peak (or top 2 peaks)
+* Smooth it (so it doesn’t jump wildly)
+* Map it into a “mode index”:
+
+Example:
+
+* 80–120 Hz → Mode 1
+* 120–180 Hz → Mode 2
+* 180–260 Hz → Mode 3
+  …and so on
+
+This is what creates that **“resonance snap”** effect.
+
+---
+
+## Implementation strategy (fast + high quality)
+
+### Option A (recommended): **Procedural cymatics shader + particle “matter” layer**
+
+You do **two passes**:
+
+**Pass 1: Standing-wave field (shader)**
+
+* Create a scalar field `F(x,y)` where `F=0` are node lines.
+* Visualize node lines + ridges with smoothstep contours.
+
+**Pass 2: Matter accumulation**
+
+* Render particles/grains
+* Each frame, apply a force that pulls grains toward the node set:
+
+  * `force = -sign(F) * normalize(∇F)` (moves particles toward F=0)
+* Add damping so they “settle”
+
+This looks extremely close to cymatics without heavy fluid sim.
+
+### Option B: Full fluid sim
+
+Looks amazing but expensive + complex, especially on mobile. You can add later.
+
+---
+
+## Concrete “preset parameters” you can store
+
+Each preset can be a JSON config like:
+
+* `shape`: `"plate" | "disk" | "sphere"`
+* `modeSet`: list of (m,n) or symmetry integers
+* `nodeSharpness`: how crisp the lines are
+* `matterDensity`: particle count / grain size
+* `settleSpeed`: how quickly matter settles into nodes
+* `burstOnKick`: how strong the kick pushes matter away
+* `palette`: (purple sand / icy blue liquid)
+* `post`: bloom, chromatic aberration (subtle)
+
+This makes your “preset system” clean and scalable.
+
+---
+
+## How to make it “feel natural” (non-negotiables)
+
+If you do these 4, it will read as real resonance:
+
+1. **Quantize mode switching** (don’t continuously morph shapes)
+2. **Matter drifts + settles** (particles move into the lines)
+3. **Amplitude affects thickness/intensity**, not the topology
+4. **Kick causes a temporary disruption**, then pattern re-stabilizes
+
+---
+
+## Quick direction for your tech stack
+
+Since you’ve been working with **React + R3F + @react-three/postprocessing**, you can implement this as:
+
+* Fullscreen plane with a **custom shader material** (field + contours)
+* Particle system (instanced points) updated on CPU or GPU
+* Postprocessing: Bloom + slight Chromatic Aberration + Noise
+
+---
+
+## Next: I can give you working code
+
+Tell me which platform you’re building this preset system on:
+
+1. **React + Three.js / R3F (web)**
+2. **React Native / Expo GL**
+3. Something else
+
+And tell me how you’re playing audio:
+
+* `<audio>` element?
+* WebAudio buffer?
+* streaming?
+
+Once you say “R3F + audio element” (or similar), I’ll paste a ready-to-run component:
+
+* analyser → dominant frequency + bands
+* mode quantization
+* cymatics shader plane
+* “sand” particles that accumulate on nodes
+* kick burst + settle
+
+That will get you *exactly* the vibe in your screenshots.

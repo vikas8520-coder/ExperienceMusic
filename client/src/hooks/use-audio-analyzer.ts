@@ -7,6 +7,8 @@ export interface AudioData {
   high: number;     // 2000-10000Hz - sparkles, glitch, aberration
   energy: number;   // Overall energy
   kick: number;     // Beat/kick detection (peak hold)
+  dominantFreq: number;  // Dominant frequency in Hz for cymatics mode selection
+  modeIndex: number;     // Quantized mode index (1-8) for resonance snapping
   frequencyData: Uint8Array;
 }
 
@@ -24,11 +26,11 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
   const lastAudioElementRef = useRef<HTMLAudioElement | null>(null);
   
   // Smoothed values for each band
-  const smoothedRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, lastBass: 0 });
+  const smoothedRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, lastBass: 0, dominantFreq: 200, modeIndex: 1 });
 
   const getAudioData = useCallback((): AudioData => {
     if (!analyzerRef.current || !dataArrayRef.current) {
-      return { sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, frequencyData: new Uint8Array(0) };
+      return { sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, dominantFreq: 200, modeIndex: 1, frequencyData: new Uint8Array(0) };
     }
 
     analyzerRef.current.getByteFrequencyData(dataArrayRef.current);
@@ -97,6 +99,38 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
     // Energy is weighted average (bass/sub matter more for "feel")
     const energy = s.sub * 0.3 + s.bass * 0.35 + s.mid * 0.2 + s.high * 0.15;
 
+    // Dominant frequency detection for cymatics mode selection
+    // Find the strongest peak in the 60-500Hz range (most relevant for resonance patterns)
+    const freqRangeStart = Math.ceil(60 / hzPerBin);
+    const freqRangeEnd = Math.min(Math.ceil(500 / hzPerBin), bufferLength);
+    let maxAmp = 0;
+    let maxBin = freqRangeStart;
+    for (let i = freqRangeStart; i < freqRangeEnd; i++) {
+      if (data[i] > maxAmp) {
+        maxAmp = data[i];
+        maxBin = i;
+      }
+    }
+    const rawDominantFreq = maxBin * hzPerBin;
+    
+    // Smooth dominant frequency with slow EMA (prevents jittery mode changes)
+    s.dominantFreq = ema(rawDominantFreq, s.dominantFreq, 0.1);
+    
+    // Quantize to mode index (1-8) based on frequency bands
+    // This creates the "resonance snap" effect where patterns lock into stable modes
+    let newModeIndex = 1;
+    if (s.dominantFreq < 80) newModeIndex = 1;
+    else if (s.dominantFreq < 120) newModeIndex = 2;
+    else if (s.dominantFreq < 160) newModeIndex = 3;
+    else if (s.dominantFreq < 200) newModeIndex = 4;
+    else if (s.dominantFreq < 260) newModeIndex = 5;
+    else if (s.dominantFreq < 340) newModeIndex = 6;
+    else if (s.dominantFreq < 440) newModeIndex = 7;
+    else newModeIndex = 8;
+    
+    // Slowly transition mode index to avoid rapid flipping
+    s.modeIndex = Math.round(ema(newModeIndex, s.modeIndex, 0.15));
+
     return { 
       sub: Math.min(s.sub, 1),
       bass: Math.min(s.bass, 1), 
@@ -104,6 +138,8 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
       high: Math.min(s.high, 1), 
       energy: Math.min(energy, 1),
       kick: Math.min(s.kick, 1),
+      dominantFreq: s.dominantFreq,
+      modeIndex: Math.max(1, Math.min(8, s.modeIndex)),
       frequencyData: data 
     };
   }, []);

@@ -606,6 +606,394 @@ function CosmicWeb({ getAudioData, settings }: { getAudioData: () => AudioData, 
   );
 }
 
+// === PRESET 8: Cymatic Sand Plate ===
+// Particles settle into standing-wave node patterns like Chladni figures
+function CymaticSandPlate({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
+  const pointsRef = useRef<THREE.Points>(null);
+  const velocitiesRef = useRef<Float32Array | null>(null);
+  const lastKickRef = useRef(0);
+  const particleCount = 2500;
+  
+  const positions = useMemo(() => {
+    const pos = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * 10;
+      pos[i * 3 + 1] = (Math.random() - 0.5) * 10;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 0.2;
+    }
+    return pos;
+  }, []);
+
+  const colors = useMemo(() => {
+    const col = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      col[i * 3] = 0.7;
+      col[i * 3 + 1] = 0.6;
+      col[i * 3 + 2] = 0.5;
+    }
+    return col;
+  }, []);
+
+  useEffect(() => {
+    velocitiesRef.current = new Float32Array(particleCount * 3);
+  }, []);
+
+  useFrame((state) => {
+    if (!pointsRef.current || !velocitiesRef.current) return;
+    const { bass, high, kick, modeIndex, energy } = getAudioData();
+    const time = state.clock.getElapsedTime();
+    
+    const posAttr = pointsRef.current.geometry.attributes.position;
+    const colorAttr = pointsRef.current.geometry.attributes.color;
+    const vel = velocitiesRef.current;
+    
+    // Mode determines the wave pattern (m, n) integers
+    const modePatterns = [[2, 2], [3, 2], [3, 3], [4, 3], [4, 4], [5, 4], [5, 5], [6, 5]];
+    const [m, n] = modePatterns[Math.max(0, Math.min(7, modeIndex - 1))];
+    
+    // Kick burst detection (only on rising edge)
+    const kickBurst = kick > 0.3 && kick > lastKickRef.current + 0.1 ? kick * 0.4 : 0;
+    lastKickRef.current = kick;
+    
+    // Vibration intensity from bass
+    const vibration = bass * settings.intensity * 0.3;
+    
+    for (let i = 0; i < particleCount; i++) {
+      const x = posAttr.getX(i);
+      const y = posAttr.getY(i);
+      const z = posAttr.getZ(i);
+      
+      // Standing wave: sin(m*x)*sin(n*y) - nodes at zero crossings
+      const waveValue = Math.sin(m * x * 0.5) * Math.sin(n * y * 0.5);
+      
+      // Analytical gradient toward node lines (faster than finite difference)
+      const dx = 0.5 * m * Math.cos(m * x * 0.5) * Math.sin(n * y * 0.5);
+      const dy = 0.5 * n * Math.sin(m * x * 0.5) * Math.cos(n * y * 0.5);
+      
+      // Force toward nodes: particles move to where wave = 0
+      const settleSpeed = 0.02 * settings.speed * energy;
+      const forceX = -Math.sign(waveValue) * dx * settleSpeed;
+      const forceY = -Math.sign(waveValue) * dy * settleSpeed;
+      
+      // Apply forces + kick burst (deterministic per particle to avoid noise)
+      vel[i * 3] += forceX;
+      vel[i * 3 + 1] += forceY;
+      
+      if (kickBurst > 0) {
+        const angle = Math.atan2(y, x) + i * 0.01;
+        vel[i * 3] += Math.cos(angle) * kickBurst;
+        vel[i * 3 + 1] += Math.sin(angle) * kickBurst;
+      }
+      
+      vel[i * 3 + 2] = Math.sin(time * 4 + i * 0.1) * vibration * 0.08;
+      
+      // Strong damping for stable settling
+      vel[i * 3] *= 0.92;
+      vel[i * 3 + 1] *= 0.92;
+      
+      posAttr.setXYZ(i,
+        Math.max(-5, Math.min(5, x + vel[i * 3])),
+        Math.max(-5, Math.min(5, y + vel[i * 3 + 1])),
+        z * 0.85 + vel[i * 3 + 2]
+      );
+      
+      // Color: particles on nodes glow brighter
+      const nodeProximity = 1 - Math.min(1, Math.abs(waveValue));
+      const palette = settings.colorPalette;
+      const color = new THREE.Color(palette[i % palette.length]);
+      color.offsetHSL(0, 0, nodeProximity * 0.4 + high * 0.15);
+      colorAttr.setXYZ(i, color.r, color.g, color.b);
+    }
+    
+    posAttr.needsUpdate = true;
+    colorAttr.needsUpdate = true;
+  });
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute
+          attach="attributes-position"
+          count={particleCount}
+          array={positions}
+          itemSize={3}
+          usage={THREE.DynamicDrawUsage}
+        />
+        <bufferAttribute
+          attach="attributes-color"
+          count={particleCount}
+          array={colors}
+          itemSize={3}
+          usage={THREE.DynamicDrawUsage}
+        />
+      </bufferGeometry>
+      <pointsMaterial
+        size={0.08}
+        vertexColors
+        transparent
+        opacity={0.9}
+        blending={THREE.AdditiveBlending}
+        sizeAttenuation
+      />
+    </points>
+  );
+}
+
+// === PRESET 9: Water Membrane Orb ===
+// Spherical membrane with standing wave deformations like liquid resonance
+function WaterMembraneOrb({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const originalPositions = useRef<Float32Array | null>(null);
+
+  useFrame((state) => {
+    if (!meshRef.current) return;
+    const { sub, bass, mid, high, modeIndex, energy } = getAudioData();
+    const time = state.clock.getElapsedTime() * settings.speed;
+    
+    const geometry = meshRef.current.geometry as THREE.BufferGeometry;
+    const positionAttr = geometry.attributes.position;
+    
+    if (!originalPositions.current) {
+      originalPositions.current = new Float32Array(positionAttr.array);
+    }
+    
+    // Mode controls the number of lobes
+    const lobes = modeIndex + 2;
+    const breathScale = 1 + sub * 0.15;
+    
+    for (let i = 0; i < positionAttr.count; i++) {
+      const ox = originalPositions.current[i * 3];
+      const oy = originalPositions.current[i * 3 + 1];
+      const oz = originalPositions.current[i * 3 + 2];
+      
+      // Spherical coordinates
+      const r = Math.sqrt(ox * ox + oy * oy + oz * oz);
+      const theta = Math.atan2(oy, ox);
+      const phi = Math.acos(oz / (r || 1));
+      
+      // Standing wave on sphere surface (spherical harmonics simplified)
+      const wave1 = Math.sin(lobes * theta + time) * Math.sin(phi * 3);
+      const wave2 = Math.cos((lobes + 1) * theta - time * 0.7) * Math.sin(phi * 2);
+      const displacement = (wave1 * mid + wave2 * bass) * settings.intensity * 0.3;
+      
+      // Caustic shimmer from highs
+      const shimmer = high * 0.05 * Math.sin(time * 8 + i * 0.1);
+      
+      const newR = (r + displacement + shimmer) * breathScale;
+      const nx = ox / r || 0;
+      const ny = oy / r || 0;
+      const nz = oz / r || 0;
+      
+      positionAttr.setXYZ(i, nx * newR, ny * newR, nz * newR);
+    }
+    
+    positionAttr.needsUpdate = true;
+    
+    // Slow rotation
+    meshRef.current.rotation.y = time * 0.2;
+    meshRef.current.rotation.x = Math.sin(time * 0.3) * 0.1;
+  });
+
+  const colors = settings.colorPalette;
+  
+  return (
+    <mesh ref={meshRef}>
+      <icosahedronGeometry args={[3, 5]} />
+      <meshStandardMaterial
+        color={colors[0] || "#00ccff"}
+        emissive={colors[1] || "#0066aa"}
+        emissiveIntensity={0.4}
+        transparent
+        opacity={0.7}
+        metalness={0.3}
+        roughness={0.2}
+      />
+    </mesh>
+  );
+}
+
+// === PRESET 10: Chladni Geometry ===
+// Clean sacred-geometry style node lines on a plate
+function ChladniGeometry({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+
+  const chladniShader = useMemo(() => ({
+    uniforms: {
+      uTime: { value: 0 },
+      uM: { value: 3 },
+      uN: { value: 2 },
+      uBass: { value: 0 },
+      uMid: { value: 0 },
+      uHigh: { value: 0 },
+      uColor1: { value: new THREE.Color("#ffffff") },
+      uColor2: { value: new THREE.Color("#6600ff") },
+      uIntensity: { value: 1.0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uM;
+      uniform float uN;
+      uniform float uBass;
+      uniform float uMid;
+      uniform float uHigh;
+      uniform vec3 uColor1;
+      uniform vec3 uColor2;
+      uniform float uIntensity;
+      varying vec2 vUv;
+      
+      void main() {
+        vec2 uv = vUv * 2.0 - 1.0;
+        
+        // Chladni pattern: sin(m*x)*sin(n*y) - sin(n*x)*sin(m*y) = 0 at nodes
+        float m = uM;
+        float n = uN;
+        float pattern1 = sin(m * uv.x * 3.14159) * sin(n * uv.y * 3.14159);
+        float pattern2 = sin(n * uv.x * 3.14159) * sin(m * uv.y * 3.14159);
+        float chladni = pattern1 - pattern2;
+        
+        // Node lines (where chladni ≈ 0)
+        float thickness = 0.1 + uBass * 0.1;
+        float node = 1.0 - smoothstep(0.0, thickness * uIntensity, abs(chladni));
+        
+        // Edge shimmer from highs
+        float shimmer = uHigh * 0.3 * sin(uTime * 5.0 + length(uv) * 10.0);
+        node = clamp(node + shimmer, 0.0, 1.0);
+        
+        // Color blend
+        vec3 color = mix(uColor2, uColor1, node);
+        
+        // Fade edges
+        float dist = length(uv);
+        float fade = 1.0 - smoothstep(0.8, 1.0, dist);
+        
+        gl_FragColor = vec4(color, node * fade * 0.9);
+      }
+    `
+  }), []);
+
+  useFrame((state) => {
+    if (!materialRef.current) return;
+    const { bass, mid, high, modeIndex } = getAudioData();
+    const time = state.clock.getElapsedTime() * settings.speed;
+    
+    // Mode patterns for (m, n)
+    const patterns = [[2, 3], [3, 4], [4, 5], [3, 5], [4, 6], [5, 6], [5, 7], [6, 7]];
+    const [m, n] = patterns[Math.max(0, Math.min(7, modeIndex - 1))];
+    
+    materialRef.current.uniforms.uTime.value = time;
+    materialRef.current.uniforms.uM.value = m;
+    materialRef.current.uniforms.uN.value = n;
+    materialRef.current.uniforms.uBass.value = bass;
+    materialRef.current.uniforms.uMid.value = mid;
+    materialRef.current.uniforms.uHigh.value = high;
+    materialRef.current.uniforms.uIntensity.value = settings.intensity;
+    
+    const colors = settings.colorPalette;
+    materialRef.current.uniforms.uColor1.value.set(colors[0] || "#ffffff");
+    materialRef.current.uniforms.uColor2.value.set(colors[1] || "#6600ff");
+  });
+
+  return (
+    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]}>
+      <planeGeometry args={[12, 12, 1, 1]} />
+      <shaderMaterial
+        ref={materialRef}
+        {...chladniShader}
+        transparent
+        side={THREE.DoubleSide}
+        blending={THREE.AdditiveBlending}
+      />
+    </mesh>
+  );
+}
+
+// === PRESET 11: Resonant Field Lines ===
+// Magnetic-field style curves that organize into symmetric lattices (optimized)
+function ResonantFieldLines({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const lineCount = 36;
+  const pointsPerLine = 35;
+  
+  // Pre-create line objects with reusable geometries
+  const lineObjects = useMemo(() => {
+    const lines: THREE.Line[] = [];
+    for (let i = 0; i < lineCount; i++) {
+      const positions = new Float32Array(pointsPerLine * 3);
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const material = new THREE.LineBasicMaterial({ 
+        color: 0xffffff, 
+        transparent: true, 
+        opacity: 0.75 
+      });
+      lines.push(new THREE.Line(geometry, material));
+    }
+    return lines;
+  }, []);
+
+  // Cleanup geometries and materials on unmount
+  useEffect(() => {
+    return () => {
+      lineObjects.forEach((line) => {
+        line.geometry.dispose();
+        (line.material as THREE.LineBasicMaterial).dispose();
+      });
+    };
+  }, [lineObjects]);
+
+  useFrame((state) => {
+    if (!groupRef.current) return;
+    const { sub, bass, mid, high, modeIndex, energy } = getAudioData();
+    const time = state.clock.getElapsedTime() * settings.speed;
+    
+    const symmetry = modeIndex + 2;
+    const fieldStrength = (sub + bass) * 0.5 * settings.intensity;
+    
+    lineObjects.forEach((line, idx) => {
+      const geometry = line.geometry as THREE.BufferGeometry;
+      const posAttr = geometry.attributes.position as THREE.BufferAttribute;
+      const angle = (idx / lineCount) * Math.PI * 2;
+      
+      for (let j = 0; j < pointsPerLine; j++) {
+        const t = j / pointsPerLine;
+        const baseRadius = 1.5 + t * 3;
+        const symMod = Math.sin(angle * symmetry + time) * fieldStrength;
+        const r = baseRadius * (1 + symMod * 0.3);
+        const spiralAngle = angle + t * Math.PI * 2.5 + time * 0.15;
+        const x = Math.cos(spiralAngle) * r;
+        const y = (t - 0.5) * 7 + Math.sin(time * 0.7 + t * 4) * mid * 0.4;
+        const z = Math.sin(spiralAngle) * r;
+        posAttr.setXYZ(j, x, y, z);
+      }
+      posAttr.needsUpdate = true;
+      
+      const material = line.material as THREE.LineBasicMaterial;
+      const colorIdx = idx % settings.colorPalette.length;
+      const color = new THREE.Color(settings.colorPalette[colorIdx]);
+      color.offsetHSL(Math.sin(time * 0.5 + idx * 0.2) * 0.05, 0, high * 0.15 + energy * 0.1);
+      material.color = color;
+    });
+    
+    groupRef.current.rotation.y = time * 0.08;
+  });
+
+  return (
+    <group ref={groupRef}>
+      {lineObjects.map((line, idx) => (
+        <primitive key={idx} object={line} />
+      ))}
+    </group>
+  );
+}
+
 // Psy trance shader material for background image
 const PsyFilterMaterial = shaderMaterial(
   {
@@ -850,7 +1238,7 @@ function ZoomableScene({
 }
 
 function AudioReactiveEffects({ getAudioData, settings }: { getAudioData: () => AudioData; settings: any }) {
-  const audioDataRef = useRef<AudioData>({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, frequencyData: new Uint8Array(0) });
+  const audioDataRef = useRef<AudioData>({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, dominantFreq: 200, modeIndex: 1, frequencyData: new Uint8Array(0) });
   
   useFrame(() => {
     audioDataRef.current = getAudioData();
@@ -890,7 +1278,7 @@ function PsyPresetWrapper({
   opacity?: number;
   blending?: THREE.Blending;
 }) {
-  const audioDataRef = useRef<AudioData>({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, frequencyData: new Uint8Array(0) });
+  const audioDataRef = useRef<AudioData>({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, dominantFreq: 200, modeIndex: 1, frequencyData: new Uint8Array(0) });
   
   useFrame(() => {
     audioDataRef.current = getAudioData();
@@ -1027,6 +1415,10 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
               {settings.presetName === "Audio Bars" && <AudioBars getAudioData={getAudioData} settings={settings} />}
               {settings.presetName === "Geometric Kaleidoscope" && <GeometricKaleidoscope getAudioData={getAudioData} settings={settings} />}
               {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
+              {settings.presetName === "Cymatic Sand Plate" && <CymaticSandPlate getAudioData={getAudioData} settings={settings} />}
+              {settings.presetName === "Water Membrane Orb" && <WaterMembraneOrb getAudioData={getAudioData} settings={settings} />}
+              {settings.presetName === "Chladni Geometry" && <ChladniGeometry getAudioData={getAudioData} settings={settings} />}
+              {settings.presetName === "Resonant Field Lines" && <ResonantFieldLines getAudioData={getAudioData} settings={settings} />}
               
               {isPsyPreset && (
                 <PsyPresetWrapper 
