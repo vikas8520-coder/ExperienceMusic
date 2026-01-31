@@ -10,6 +10,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Upload, Save, Disc, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { colorPalettes, presets, imageFilters, psyOverlays, type PresetName, type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
@@ -582,55 +583,83 @@ export function UIControls({
                   
                   <div className="flex flex-wrap gap-2">
                     {/* Upload */}
-                    <div className="relative">
-                      <input
-                        type="file"
-                        accept="audio/*"
-                        onChange={onFileUpload}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        data-testid="input-audio-upload"
-                      />
-                      <Button variant="outline" size="sm" className="border-primary/50 text-primary">
-                        <Upload className="mr-1 h-4 w-4" />
-                        Upload
-                      </Button>
-                    </div>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept="audio/*"
+                            onChange={onFileUpload}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            data-testid="input-audio-upload"
+                          />
+                          <Button variant="outline" size="sm" className="border-primary/50 text-primary">
+                            <Upload className="mr-1 h-4 w-4" />
+                            Upload
+                          </Button>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Upload an audio file to visualize</p>
+                      </TooltipContent>
+                    </Tooltip>
                     
                     {/* Record */}
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className={`text-xs border-destructive/50 text-destructive ${isRecording ? 'animate-pulse bg-destructive/20' : ''}`}
-                      onClick={onToggleRecording}
-                      data-testid="button-record"
-                    >
-                      <Disc className={`mr-1 h-3 w-3 ${isRecording ? 'animate-spin' : ''}`} />
-                      {isRecording ? "Stop" : "Record"}
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className={`text-xs border-destructive/50 text-destructive ${isRecording ? 'animate-pulse bg-destructive/20' : ''}`}
+                          onClick={onToggleRecording}
+                          data-testid="button-record"
+                        >
+                          <Disc className={`mr-1 h-3 w-3 ${isRecording ? 'animate-spin' : ''}`} />
+                          {isRecording ? "Stop" : "Record"}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{isRecording ? "Stop recording the visualization" : "Record the visualization as video"}</p>
+                      </TooltipContent>
+                    </Tooltip>
                     
                     {/* Fullscreen */}
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="text-xs"
-                      onClick={onToggleFullscreen}
-                      data-testid="button-fullscreen"
-                    >
-                      {isFullscreen ? <Minimize className="mr-1 h-3 w-3" /> : <Maximize className="mr-1 h-3 w-3" />}
-                      {isFullscreen ? "Exit" : "Full"}
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="text-xs"
+                          onClick={onToggleFullscreen}
+                          data-testid="button-fullscreen"
+                        >
+                          {isFullscreen ? <Minimize className="mr-1 h-3 w-3" /> : <Maximize className="mr-1 h-3 w-3" />}
+                          {isFullscreen ? "Exit" : "Full"}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{isFullscreen ? "Exit fullscreen mode" : "Enter fullscreen mode"} (F)</p>
+                      </TooltipContent>
+                    </Tooltip>
                     
                     {/* Save to Library */}
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="text-xs"
-                      onClick={onSaveToLibrary}
-                      data-testid="button-save-library"
-                    >
-                      <FolderPlus className="mr-1 h-3 w-3" />
-                      Save
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="text-xs"
+                          onClick={onSaveToLibrary}
+                          data-testid="button-save-library"
+                        >
+                          <FolderPlus className="mr-1 h-3 w-3" />
+                          Save
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Save track to your library</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                 </div>
 

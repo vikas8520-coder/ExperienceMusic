@@ -28,6 +28,7 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
+  const previousVolumeRef = useRef(1);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
   const [isRecording, setIsRecording] = useState(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
@@ -144,6 +145,80 @@ export default function Home() {
   }, []);
 
   const { getAudioData, destNode } = useAudioAnalyzer(audioRef.current, audioFile);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing in an input field
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      switch (e.code) {
+        case 'Space':
+          e.preventDefault();
+          if (audioRef.current && audioFile) {
+            if (isPlaying) {
+              audioRef.current.pause();
+              setIsPlaying(false);
+            } else {
+              audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+            }
+          }
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          setVolume(prev => {
+            const newVol = Math.min(1, prev + 0.1);
+            if (audioRef.current) audioRef.current.volume = newVol;
+            return newVol;
+          });
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          setVolume(prev => {
+            const newVol = Math.max(0, prev - 0.1);
+            if (audioRef.current) audioRef.current.volume = newVol;
+            return newVol;
+          });
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (audioRef.current) {
+            audioRef.current.currentTime = Math.max(0, audioRef.current.currentTime - 5);
+          }
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (audioRef.current && duration) {
+            audioRef.current.currentTime = Math.min(duration, audioRef.current.currentTime + 5);
+          }
+          break;
+        case 'KeyF':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'KeyM':
+          e.preventDefault();
+          setVolume(prev => {
+            if (prev > 0) {
+              previousVolumeRef.current = prev;
+              if (audioRef.current) audioRef.current.volume = 0;
+              return 0;
+            } else {
+              const restoreVol = previousVolumeRef.current > 0 ? previousVolumeRef.current : 1;
+              if (audioRef.current) audioRef.current.volume = restoreVol;
+              return restoreVol;
+            }
+          });
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [audioFile, isPlaying, duration, toggleFullscreen]);
 
   // Audio time/duration tracking
   useEffect(() => {

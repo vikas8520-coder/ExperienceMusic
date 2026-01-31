@@ -1,7 +1,8 @@
-import { useMemo } from "react";
-import { Play, Pause, SkipBack, SkipForward, Volume2, ChevronDown, ChevronUp } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, ChevronDown, ChevronUp, Keyboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type Props = {
   isOpen: boolean;
@@ -26,6 +27,16 @@ function formatTime(sec: number) {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+const KeyboardShortcutsHint = () => (
+  <div className="flex flex-wrap gap-3 text-xs text-white/50 justify-center">
+    <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/70">Space</kbd> Play/Pause</span>
+    <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/70">←/→</kbd> Seek</span>
+    <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/70">↑/↓</kbd> Volume</span>
+    <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/70">F</kbd> Fullscreen</span>
+    <span className="flex items-center gap-1"><kbd className="px-1.5 py-0.5 bg-white/10 rounded text-white/70">M</kbd> Mute</span>
+  </div>
+);
+
 export function TopPlayerDrawer({
   isOpen,
   onToggle,
@@ -41,10 +52,24 @@ export function TopPlayerDrawer({
   title = "Now Playing",
   hasLibraryTracks,
 }: Props) {
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [previousVolume, setPreviousVolume] = useState(1);
+  
   const progressPercent = useMemo(() => {
     if (!duration || !isFinite(duration)) return 0;
     return Math.min(100, Math.max(0, (currentTime / duration) * 100));
   }, [currentTime, duration]);
+  
+  const isMuted = volume === 0;
+  
+  const handleMuteToggle = () => {
+    if (isMuted) {
+      onVolume(previousVolume > 0 ? previousVolume : 1);
+    } else {
+      setPreviousVolume(volume);
+      onVolume(0);
+    }
+  };
 
   return (
     <div
@@ -140,7 +165,22 @@ export function TopPlayerDrawer({
               </div>
 
               <div className="flex items-center gap-2 w-32">
-                <Volume2 className="w-4 h-4 text-white/60 shrink-0" />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={(e) => { e.stopPropagation(); handleMuteToggle(); }}
+                      className="w-8 h-8 text-white/60 hover:text-white shrink-0"
+                      data-testid="button-mute"
+                    >
+                      {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>{isMuted ? "Unmute" : "Mute"} (M)</p>
+                  </TooltipContent>
+                </Tooltip>
                 <Slider
                   value={[volume]}
                   min={0}
@@ -151,14 +191,37 @@ export function TopPlayerDrawer({
                   data-testid="slider-volume"
                 />
               </div>
+              
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={(e) => { e.stopPropagation(); setShowShortcuts(!showShortcuts); }}
+                    className="w-8 h-8 text-white/50 hover:text-white hidden md:flex"
+                    data-testid="button-shortcuts"
+                  >
+                    <Keyboard className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Keyboard shortcuts</p>
+                </TooltipContent>
+              </Tooltip>
             </div>
 
-            <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-primary/80 to-primary rounded-full transition-[width] duration-100 ease-linear"
+                className="h-full bg-gradient-to-r from-primary/80 via-primary to-primary/80 rounded-full transition-[width] duration-100 ease-linear"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
+            
+            {showShortcuts && (
+              <div className="pt-2 border-t border-white/10">
+                <KeyboardShortcutsHint />
+              </div>
+            )}
           </div>
         )}
       </div>

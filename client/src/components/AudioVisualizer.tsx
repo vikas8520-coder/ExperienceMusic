@@ -887,6 +887,41 @@ function PsyPresetWrapper({
   );
 }
 
+function PresetTransition({ children, presetName }: { children: React.ReactNode; presetName: string }) {
+  const [opacity, setOpacity] = useState(1);
+  const [currentPreset, setCurrentPreset] = useState(presetName);
+  const [displayedChildren, setDisplayedChildren] = useState(children);
+  
+  useEffect(() => {
+    if (presetName !== currentPreset) {
+      setOpacity(0);
+      const timer = setTimeout(() => {
+        setCurrentPreset(presetName);
+        setDisplayedChildren(children);
+        setOpacity(1);
+      }, 200);
+      return () => clearTimeout(timer);
+    } else {
+      setDisplayedChildren(children);
+    }
+  }, [presetName, children, currentPreset]);
+  
+  return (
+    <group>
+      <mesh position={[0, 0, 50]} renderOrder={9999}>
+        <planeGeometry args={[200, 200]} />
+        <meshBasicMaterial 
+          color="#050508" 
+          transparent 
+          opacity={1 - opacity} 
+          depthTest={false}
+        />
+      </mesh>
+      {displayedChildren}
+    </group>
+  );
+}
+
 function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: AudioVisualizerProps) {
   const [hasError, setHasError] = useState(false);
   
@@ -959,27 +994,29 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
       <pointLight position={[-10, -10, -10]} intensity={0.5} color="#ff00ff" />
       
       <ZoomableScene zoom={zoom}>
-        {settings.presetEnabled !== false && (
-          <>
-            {settings.presetName === "Energy Rings" && <EnergyRings getAudioData={getAudioData} settings={settings} />}
-            {settings.presetName === "Psy Tunnel" && <PsyTunnel getAudioData={getAudioData} settings={settings} />}
-            {settings.presetName === "Particle Field" && <ParticleField getAudioData={getAudioData} settings={settings} />}
-            {settings.presetName === "Waveform Sphere" && <WaveformSphere getAudioData={getAudioData} settings={settings} />}
-            {settings.presetName === "Audio Bars" && <AudioBars getAudioData={getAudioData} settings={settings} />}
-            {settings.presetName === "Geometric Kaleidoscope" && <GeometricKaleidoscope getAudioData={getAudioData} settings={settings} />}
-            {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
-            
-            {isPsyPreset && (
-              <PsyPresetWrapper 
-                preset={presetToPsyPresetName(settings.presetName)} 
-                getAudioData={getAudioData}
-                intensity={settings.intensity}
-                speed={settings.speed}
-                opacity={0.95}
-              />
-            )}
-          </>
-        )}
+        <PresetTransition presetName={settings.presetName}>
+          {settings.presetEnabled !== false && (
+            <>
+              {settings.presetName === "Energy Rings" && <EnergyRings getAudioData={getAudioData} settings={settings} />}
+              {settings.presetName === "Psy Tunnel" && <PsyTunnel getAudioData={getAudioData} settings={settings} />}
+              {settings.presetName === "Particle Field" && <ParticleField getAudioData={getAudioData} settings={settings} />}
+              {settings.presetName === "Waveform Sphere" && <WaveformSphere getAudioData={getAudioData} settings={settings} />}
+              {settings.presetName === "Audio Bars" && <AudioBars getAudioData={getAudioData} settings={settings} />}
+              {settings.presetName === "Geometric Kaleidoscope" && <GeometricKaleidoscope getAudioData={getAudioData} settings={settings} />}
+              {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
+              
+              {isPsyPreset && (
+                <PsyPresetWrapper 
+                  preset={presetToPsyPresetName(settings.presetName)} 
+                  getAudioData={getAudioData}
+                  intensity={settings.intensity}
+                  speed={settings.speed}
+                  opacity={0.95}
+                />
+              )}
+            </>
+          )}
+        </PresetTransition>
       </ZoomableScene>
 
       {activeOverlays.map((overlayId) => (
