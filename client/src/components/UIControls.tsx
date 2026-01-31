@@ -249,7 +249,7 @@ export function UIControls({
           : 'translate-y-full'
       }`}
     >
-      <div className="glass-panel settings-panel rounded-t-3xl max-h-[70vh] overflow-y-auto scrollbar-thin">
+      <div className="glass-panel settings-panel rounded-t-3xl max-h-[70vh] overflow-y-auto scrollbar-thin" style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}>
             {/* Drag Handle */}
             <button
               onClick={() => setIsMobileExpanded(!isMobileExpanded)}
@@ -573,6 +573,7 @@ export function UIControls({
                 overscrollBehavior: 'contain',
                 pointerEvents: 'auto',
                 touchAction: 'pan-x pan-y',
+                WebkitOverflowScrolling: 'touch',
               }}
             >
               <div className="flex gap-6 min-w-max">

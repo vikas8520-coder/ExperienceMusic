@@ -81,18 +81,28 @@
   @apply bg-primary/30 rounded-full hover:bg-primary/50 transition-colors;
 }
 
-/* Thin scrollbar utility for settings panels */
+/* Scrollbar utility for settings panels */
 .scrollbar-thin {
-  scrollbar-width: thin;
-  scrollbar-color: hsl(var(--primary) / 0.4) transparent;
+  scrollbar-width: auto;
+  scrollbar-color: hsl(var(--primary) / 0.5) hsl(var(--background) / 0.3);
 }
 .scrollbar-thin::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 .scrollbar-thin::-webkit-scrollbar-track {
-  @apply bg-white/5 rounded-full;
+  @apply bg-white/10 rounded-full;
+  margin: 4px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  @apply bg-primary/40 rounded-full hover:bg-primary/60 transition-colors;
+  @apply bg-primary/50 rounded-full;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  cursor: pointer;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  @apply bg-primary/70;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:active {
+  @apply bg-primary/90;
 }
