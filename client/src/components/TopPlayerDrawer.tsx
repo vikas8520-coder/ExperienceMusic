@@ -48,13 +48,13 @@ export function TopPlayerDrawer({
 
   return (
     <div
-      data-testid="bottom-player-drawer"
-      className="fixed bottom-0 left-0 right-0 z-[9999] transition-transform duration-200 ease-out"
+      data-testid="top-player-drawer"
+      className="fixed top-0 left-0 right-0 z-[9999] transition-transform duration-200 ease-out"
       style={{
-        transform: isOpen ? "translateY(0)" : "translateY(calc(100% - 48px))",
+        transform: isOpen ? "translateY(0)" : "translateY(calc(-100% + 48px))",
       }}
     >
-      <div className="bg-black/90 backdrop-blur-xl border-t border-white/10">
+      <div className="bg-black/90 backdrop-blur-xl border-b border-white/10">
         <div
           onClick={onToggle}
           className="h-12 flex items-center justify-between px-4 cursor-pointer select-none hover-elevate"
@@ -79,9 +79,9 @@ export function TopPlayerDrawer({
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
             {isOpen ? (
-              <ChevronDown className="w-4 h-4 text-white/70" />
-            ) : (
               <ChevronUp className="w-4 h-4 text-white/70" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-white/70" />
             )}
           </div>
         </div>

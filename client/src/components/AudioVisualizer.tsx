@@ -911,7 +911,6 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
 
   return (
     <div 
-      className="canvas-container"
       style={{ 
         position: "absolute", 
         top: 0, 
