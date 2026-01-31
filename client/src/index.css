@@ -61,11 +61,31 @@
   .settings-panel {
     pointer-events: auto !important;
     overflow-x: auto;
-    touch-action: pan-x pan-y;
+    overflow-y: auto;
+    touch-action: pan-x pan-y pinch-zoom;
+    -webkit-overflow-scrolling: touch;
+    will-change: transform;
+    transform: translateZ(0);
+    isolation: isolate;
+    contain: layout style;
+    position: relative;
+    z-index: 100;
   }
   
   .settings-panel * {
     pointer-events: auto;
+  }
+  
+  .canvas-container {
+    pointer-events: none !important;
+    touch-action: none;
+    contain: strict;
+    isolation: isolate;
+    z-index: 0;
+  }
+  
+  .canvas-container canvas {
+    pointer-events: none !important;
   }
 }
 
