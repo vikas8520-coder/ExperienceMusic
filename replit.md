@@ -34,9 +34,18 @@ Preferred communication style: Simple, everyday language.
 
 ### Audio Processing
 - **Analysis**: Web Audio API with AnalyserNode for real-time frequency extraction
-- **Frequency Bands**: Bass (20-140Hz), Mid (140-2000Hz), High (2000Hz+) extracted from FFT data
+- **Frequency Bands**: Enhanced psychedelic-optimized frequency analysis:
+  - **Sub (20-60Hz)**: Slow, heavy motion - drives global breathing/pulsing effects
+  - **Bass (60-250Hz)**: Bloom intensity, breathing, zoom effects
+  - **Mid (250-2000Hz)**: Rotation, shape deformation, particle density
+  - **High (2000-10000Hz)**: Sparkles, glitch, chromatic aberration
+  - **Kick Detection**: Beat/transient detection for sudden visual impacts
+- **Smoothing**: Per-band EMA (exponential moving average) with different rates:
+  - Sub: Very slow smoothing for body/feel
+  - Bass: Medium smoothing for punch
+  - Mid: Medium-fast for geometry
+  - High: Fast for sparkle responsiveness
 - **Recording**: MediaRecorder API for WebM/Opus audio capture
-- **Playback**: AudioWorklet for streaming PCM16 audio playback
 - **Source Management**: Audio analyzer hook tracks MediaElementSource to avoid recreation errors and properly reconnects on source changes
 
 ### Track Library

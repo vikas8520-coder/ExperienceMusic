@@ -115,25 +115,32 @@ function EnergyRings({ getAudioData, settings }: { getAudioData: () => AudioData
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
-    const { bass, mid, high } = getAudioData();
+    const { sub, bass, mid, high, kick } = getAudioData();
     const time = state.clock.getElapsedTime();
 
-    groupRef.current.rotation.z += delta * 0.1 * settings.speed;
+    // Sub drives slow global rotation, kick adds sudden twists
+    groupRef.current.rotation.z += delta * (0.1 + sub * 0.3 + kick * 0.5) * settings.speed;
     groupRef.current.rotation.x = Math.sin(time * 0.2) * 0.2 * (mid * settings.intensity);
+    groupRef.current.rotation.y = Math.cos(time * 0.15) * 0.1 * (sub * settings.intensity);
 
     ringsRef.current.forEach((mesh, i) => {
       if (!mesh) return;
       const t = time * settings.speed;
       const offset = i * 0.5;
       
-      const scale = 1 + (bass * settings.intensity * 2) * (Math.sin(t + offset) * 0.5 + 0.5);
-      mesh.scale.setScalar(scale * (i * 0.2 + 0.5));
+      // Bass + kick drive scale pulsing, sub adds slow breathing
+      const breathing = 1 + sub * 0.3 * Math.sin(t * 0.5 + offset);
+      const pulse = bass * settings.intensity * 2 * (Math.sin(t + offset) * 0.5 + 0.5);
+      const kickPop = kick * 0.5;
+      const scale = (breathing + pulse + kickPop) * (i * 0.2 + 0.5);
+      mesh.scale.setScalar(scale);
 
       const mat = materialsRef.current[i];
       if (mat) {
         const colorIndex = i % settings.colorPalette.length;
         const color = new THREE.Color(settings.colorPalette[colorIndex]);
-        const boost = high * settings.intensity * 5;
+        // High drives sparkle, kick adds flash
+        const boost = (high * 4 + kick * 2) * settings.intensity;
         mat.emissive.setRGB(
           color.r * (0.2 + boost),
           color.g * (0.2 + boost),
@@ -197,11 +204,16 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
 
   useFrame((state) => {
     if (!pointsRef.current) return;
-    const { bass, high, energy } = getAudioData();
+    const { sub, bass, mid, high, kick, energy } = getAudioData();
     const time = state.clock.getElapsedTime();
 
     const positionsAttr = pointsRef.current.geometry.attributes.position;
     const colorsAttr = pointsRef.current.geometry.attributes.color;
+
+    // Sub provides global "breath", bass drives speed, mid adds turbulence
+    const breathScale = 1 + sub * 0.3;
+    const speedMult = 1 + bass * 2;
+    const turbulence = mid * 0.5 + high * 0.3;
 
     for (let i = 0; i < count; i++) {
       const x = positions[i * 3];
@@ -211,15 +223,16 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
       const amp = energy * settings.intensity * 2;
       
       positionsAttr.setXYZ(i, 
-        x + Math.sin(time + z) * 0.02 * amp,
-        y + Math.cos(time + x) * 0.02 * amp,
-        z
+        x * breathScale + Math.sin(time * speedMult + z) * 0.02 * amp + turbulence * Math.sin(time * 3 + i) * 0.1,
+        y * breathScale + Math.cos(time * speedMult + x) * 0.02 * amp + turbulence * Math.cos(time * 3 + i) * 0.1,
+        z * breathScale
       );
 
       const color = new THREE.Color(settings.colorPalette[i % settings.colorPalette.length]);
       color.offsetHSL(0, 0, (bass - 0.5) * 0.5);
       
-      if (Math.random() < high * 0.1) {
+      // High drives sparkles, kick adds flash bursts
+      if (Math.random() < high * 0.1 + kick * 0.2) {
         color.setScalar(1);
       }
       
@@ -229,7 +242,9 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
     positionsAttr.needsUpdate = true;
     colorsAttr.needsUpdate = true;
     
-    pointsRef.current.rotation.y = time * 0.05 * settings.speed;
+    // Rotation driven by mids, kick adds sudden shifts
+    pointsRef.current.rotation.y = time * 0.05 * settings.speed + kick * 0.2;
+    pointsRef.current.rotation.x = sub * 0.1 * Math.sin(time * 0.3);
   });
 
   return (
@@ -268,7 +283,7 @@ function WaveformSphere({ getAudioData, settings }: { getAudioData: () => AudioD
 
   useFrame((state) => {
     if (!meshRef.current) return;
-    const { bass, mid, high, frequencyData } = getAudioData();
+    const { sub, bass, mid, high, kick, frequencyData } = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
     const geometry = meshRef.current.geometry as THREE.BufferGeometry;
     const positionAttr = geometry.attributes.position;
@@ -276,6 +291,9 @@ function WaveformSphere({ getAudioData, settings }: { getAudioData: () => AudioD
     if (!originalPositions.current) {
       originalPositions.current = new Float32Array(positionAttr.array);
     }
+
+    // Sub creates breathing scale, kick adds sudden expansion
+    const globalScale = 1 + sub * 0.2 + kick * 0.3;
 
     for (let i = 0; i < positionAttr.count; i++) {
       const ox = originalPositions.current[i * 3];
@@ -285,8 +303,10 @@ function WaveformSphere({ getAudioData, settings }: { getAudioData: () => AudioD
       const freqIndex = Math.floor((i / positionAttr.count) * (frequencyData?.length || 128));
       const freqValue = (frequencyData?.[freqIndex] || 0) / 255;
       
-      const displacement = freqValue * settings.intensity * 0.5;
+      // Bass drives displacement magnitude, high adds detail
+      const displacement = freqValue * settings.intensity * 0.5 * (1 + bass * 0.5);
       const wave = Math.sin(time * 2 + i * 0.1) * 0.1 * mid * settings.intensity;
+      const sparkle = high * 0.05 * Math.sin(time * 10 + i);
       
       const length = Math.sqrt(ox * ox + oy * oy + oz * oz);
       const nx = ox / length;
@@ -295,16 +315,17 @@ function WaveformSphere({ getAudioData, settings }: { getAudioData: () => AudioD
       
       positionAttr.setXYZ(
         i,
-        ox + nx * (displacement + wave),
-        oy + ny * (displacement + wave),
-        oz + nz * (displacement + wave)
+        (ox + nx * (displacement + wave + sparkle)) * globalScale,
+        (oy + ny * (displacement + wave + sparkle)) * globalScale,
+        (oz + nz * (displacement + wave + sparkle)) * globalScale
       );
     }
     
     positionAttr.needsUpdate = true;
     
-    meshRef.current.rotation.y = time * 0.3;
-    meshRef.current.rotation.x = Math.sin(time * 0.5) * 0.2;
+    // Mid drives rotation, kick adds sudden twists
+    meshRef.current.rotation.y = time * 0.3 * (1 + mid * 0.5) + kick * 0.3;
+    meshRef.current.rotation.x = Math.sin(time * 0.5) * 0.2 * (1 + sub * 0.3);
   });
 
   const colors = settings.colorPalette;
@@ -829,19 +850,21 @@ function ZoomableScene({
 }
 
 function AudioReactiveEffects({ getAudioData, settings }: { getAudioData: () => AudioData; settings: any }) {
-  const audioDataRef = useRef<AudioData>({ bass: 0, mid: 0, high: 0, energy: 0, frequencyData: new Uint8Array(0) });
+  const audioDataRef = useRef<AudioData>({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, frequencyData: new Uint8Array(0) });
   
   useFrame(() => {
     audioDataRef.current = getAudioData();
   });
   
-  const { bass, mid, high } = audioDataRef.current;
+  const { sub, bass, mid, high, kick } = audioDataRef.current;
   
   return (
     <Effects
+      sub={sub}
       bass={bass}
       mid={mid}
       high={high}
+      kick={kick}
       intensity={settings.intensity}
       bloomOn={true}
       chromaOn={true}
@@ -867,7 +890,7 @@ function PsyPresetWrapper({
   opacity?: number;
   blending?: THREE.Blending;
 }) {
-  const audioDataRef = useRef<AudioData>({ bass: 0, mid: 0, high: 0, energy: 0, frequencyData: new Uint8Array(0) });
+  const audioDataRef = useRef<AudioData>({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, frequencyData: new Uint8Array(0) });
   
   useFrame(() => {
     audioDataRef.current = getAudioData();

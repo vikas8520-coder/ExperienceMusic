@@ -1,11 +1,18 @@
 import { useEffect, useRef, useCallback } from "react";
 
 export interface AudioData {
-  bass: number;
-  mid: number;
-  high: number;
-  energy: number;
+  sub: number;      // 20-60Hz - slow heavy motion, global pulse
+  bass: number;     // 60-250Hz - bloom, breathing, zoom
+  mid: number;      // 250-2000Hz - rotation, shape, density
+  high: number;     // 2000-10000Hz - sparkles, glitch, aberration
+  energy: number;   // Overall energy
+  kick: number;     // Beat/kick detection (peak hold)
   frequencyData: Uint8Array;
+}
+
+// Smooth value with EMA (exponential moving average)
+function ema(current: number, previous: number, alpha: number): number {
+  return alpha * current + (1 - alpha) * previous;
 }
 
 export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc: string | null) {
@@ -15,37 +22,90 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   const destNodeRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const lastAudioElementRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Smoothed values for each band
+  const smoothedRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, lastBass: 0 });
 
   const getAudioData = useCallback((): AudioData => {
     if (!analyzerRef.current || !dataArrayRef.current) {
-      return { bass: 0, mid: 0, high: 0, energy: 0, frequencyData: new Uint8Array(0) };
+      return { sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, frequencyData: new Uint8Array(0) };
     }
 
     analyzerRef.current.getByteFrequencyData(dataArrayRef.current);
     const data = dataArrayRef.current;
     const bufferLength = analyzerRef.current.frequencyBinCount;
+    
+    // Sample rate is typically 44100Hz or 48000Hz
+    // With fftSize 2048, we get 1024 bins
+    // Each bin = sampleRate / fftSize Hz
+    // At 44100Hz: each bin ≈ 21.5Hz
+    // Bin index = frequency / (sampleRate / fftSize)
+    
+    const sampleRate = audioContextRef.current?.sampleRate || 44100;
+    const hzPerBin = sampleRate / 2048;
+    
+    // Calculate bin indices for each frequency range
+    const subEnd = Math.ceil(60 / hzPerBin);      // ~3 bins
+    const bassStart = Math.ceil(60 / hzPerBin);   // ~3
+    const bassEnd = Math.ceil(250 / hzPerBin);    // ~12
+    const midStart = Math.ceil(250 / hzPerBin);   // ~12
+    const midEnd = Math.ceil(2000 / hzPerBin);    // ~93
+    const highStart = Math.ceil(2000 / hzPerBin); // ~93
+    const highEnd = Math.min(Math.ceil(10000 / hzPerBin), bufferLength); // ~465
 
-    // Bass: ~20Hz - 140Hz
+    // Sub: 20-60Hz - slow, heavy motion
+    let subSum = 0;
+    for (let i = 1; i < subEnd; i++) subSum += data[i] || 0;
+    const subRaw = subEnd > 1 ? (subSum / (subEnd - 1)) / 255 : 0;
+
+    // Bass: 60-250Hz - bloom, breathing
     let bassSum = 0;
-    for (let i = 1; i < 8; i++) bassSum += data[i] || 0;
-    const bass = Math.min((bassSum / 7) / 255, 1);
+    for (let i = bassStart; i < bassEnd; i++) bassSum += data[i] || 0;
+    const bassRaw = bassEnd > bassStart ? (bassSum / (bassEnd - bassStart)) / 255 : 0;
 
-    // Mid: ~140Hz - 2000Hz
+    // Mid: 250-2000Hz - rotation, shape
     let midSum = 0;
-    for (let i = 8; i < 100; i++) midSum += data[i] || 0;
-    const mid = Math.min((midSum / 92) / 255, 1);
+    for (let i = midStart; i < midEnd; i++) midSum += data[i] || 0;
+    const midRaw = midEnd > midStart ? (midSum / (midEnd - midStart)) / 255 : 0;
 
-    // High: ~2000Hz+
+    // High: 2000-10000Hz - sparkles, glitch
     let highSum = 0;
-    let highCount = 0;
-    for (let i = 100; i < bufferLength; i++) {
-      highSum += data[i] || 0;
-      highCount++;
-    }
-    const high = highCount > 0 ? Math.min((highSum / highCount) / 255, 1) : 0;
+    for (let i = highStart; i < highEnd; i++) highSum += data[i] || 0;
+    const highRaw = highEnd > highStart ? (highSum / (highEnd - highStart)) / 255 : 0;
 
-    const energy = (bass + mid + high) / 3;
-    return { bass, mid, high, energy, frequencyData: data };
+    // Apply EMA smoothing with different rates per band
+    // Sub: very slow (low alpha = more smoothing)
+    // Bass: medium
+    // Mid: medium-fast
+    // High: fast (high alpha = less smoothing for sparkle responsiveness)
+    const s = smoothedRef.current;
+    s.sub = ema(subRaw, s.sub, 0.15);
+    s.bass = ema(bassRaw, s.bass, 0.35);
+    s.mid = ema(midRaw, s.mid, 0.45);
+    s.high = ema(highRaw, s.high, 0.6);
+
+    // Kick/beat detection: detect sudden bass increases
+    const bassJump = bassRaw - s.lastBass;
+    const kickThreshold = 0.15;
+    if (bassJump > kickThreshold) {
+      s.kick = Math.min(s.kick + bassJump * 2, 1);
+    } else {
+      s.kick = Math.max(s.kick * 0.85, 0); // Decay
+    }
+    s.lastBass = bassRaw;
+
+    // Energy is weighted average (bass/sub matter more for "feel")
+    const energy = s.sub * 0.3 + s.bass * 0.35 + s.mid * 0.2 + s.high * 0.15;
+
+    return { 
+      sub: Math.min(s.sub, 1),
+      bass: Math.min(s.bass, 1), 
+      mid: Math.min(s.mid, 1), 
+      high: Math.min(s.high, 1), 
+      energy: Math.min(energy, 1),
+      kick: Math.min(s.kick, 1),
+      frequencyData: data 
+    };
   }, []);
 
   // Initialize or reconnect audio when element or source changes
@@ -65,10 +125,10 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
     
     const ctx = audioContextRef.current!;
 
-    // Create new analyzer
+    // Create new analyzer with higher FFT for better frequency resolution
     const analyzer = ctx.createAnalyser();
     analyzer.fftSize = 2048;
-    analyzer.smoothingTimeConstant = 0.8;
+    analyzer.smoothingTimeConstant = 0.6; // Less smoothing in analyzer, we do our own EMA
     
     // Disconnect old analyzer if exists
     if (analyzerRef.current) {

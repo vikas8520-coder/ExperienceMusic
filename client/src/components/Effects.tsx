@@ -6,9 +6,11 @@ import { useFrame } from "@react-three/fiber";
 import { Kaleidoscope } from "./KaleidoscopeEffect";
 
 type Props = {
-  bass: number;
-  mid: number;
-  high: number;
+  sub?: number;      // 20-60Hz: slow heavy motion, global pulse
+  bass: number;      // 60-250Hz: bloom, breathing, zoom
+  mid: number;       // 250-2kHz: rotation, shape, density
+  high: number;      // 2k-10kHz: sparkles, glitch, aberration
+  kick?: number;     // Beat detection: sudden impacts
   enabled?: boolean;
   afterimageOn?: boolean;
   bloomOn?: boolean;
@@ -27,9 +29,11 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export function Effects({
+  sub = 0,
   bass,
   mid,
   high,
+  kick = 0,
   enabled = true,
   afterimageOn = false,
   bloomOn = true,
@@ -45,19 +49,28 @@ export function Effects({
 }: Props) {
   const kaleidoRef = useRef<any>(null);
   const angleRef = useRef(0);
+  const smoothSubRef = useRef(0);
   const smoothBassRef = useRef(0);
   const smoothMidRef = useRef(0);
   const smoothHighRef = useRef(0);
+  const smoothKickRef = useRef(0);
   
+  const rawSub = clamp01(sub);
   const b = clamp01(bass);
   const m = clamp01(mid);
   const h = clamp01(high);
+  const k = clamp01(kick);
 
   useFrame((_, delta) => {
     const smoothFactor = 1 - Math.exp(-8 * delta);
+    const slowSmooth = 1 - Math.exp(-3 * delta);  // Slower for sub
+    const fastSmooth = 1 - Math.exp(-15 * delta); // Faster for kick
+    
+    smoothSubRef.current = lerp(smoothSubRef.current, rawSub, slowSmooth);
     smoothBassRef.current = lerp(smoothBassRef.current, b, smoothFactor);
     smoothMidRef.current = lerp(smoothMidRef.current, m, smoothFactor);
     smoothHighRef.current = lerp(smoothHighRef.current, h, smoothFactor);
+    smoothKickRef.current = lerp(smoothKickRef.current, k, fastSmooth);
     
     if (kaleidoOn && kaleidoRef.current) {
       angleRef.current += (0.2 + smoothMidRef.current * 0.8 + smoothHighRef.current * 0.5) * motion * delta;
@@ -67,19 +80,32 @@ export function Effects({
     }
   });
 
+  const ssub = smoothSubRef.current || rawSub;
   const sb = smoothBassRef.current || b;
   const sm = smoothMidRef.current || m;
   const sh = smoothHighRef.current || h;
+  const sk = smoothKickRef.current || k;
 
-  const bloomIntensity = (0.4 + sb * 2.0) * intensity;
-  const bloomLuminanceThreshold = 0.25 + (1 - sh) * 0.25;
+  // Bloom: Driven by sub + bass for heavy, breathing glow
+  // Sub provides the slow "body" feel, bass provides the punch
+  const bloomIntensity = (0.3 + ssub * 0.8 + sb * 1.8 + sk * 0.6) * intensity;
+  const bloomLuminanceThreshold = 0.2 + (1 - sh) * 0.25;
   
+  // Chromatic aberration: Driven by highs for sparkle/glitch effect
+  // Kick adds extra punch on beats
   const chromaOffset = useMemo(() => {
-    const amt = (0.0015 + h * 0.01) * intensity;
+    const amt = (0.001 + h * 0.012 + kick * 0.005) * intensity;
     return new THREE.Vector2(amt, -amt * 0.85);
-  }, [h, intensity]);
+  }, [h, kick, intensity]);
 
-  const kaleidoSides = 6 + Math.floor(sh * 12);
+  // Noise: Driven by highs for texture, sub for subtle body
+  const noiseAmount = 0.02 + sh * 0.06 + ssub * 0.02;
+
+  // Vignette: Pulses with sub for "breathing" effect
+  const vignetteAmount = clamp01(vignetteStrength + ssub * 0.15 + sb * 0.1);
+
+  // Kaleidoscope: Mids control rotation, energy controls sides
+  const kaleidoSides = 6 + Math.floor((sm + sh) * 6);
   const kaleidoIntensity = clamp01(kaleidoStrength * (0.4 + sb * 0.3 + sh * 0.3));
 
   if (!enabled) return null;
@@ -100,13 +126,13 @@ export function Effects({
         modulationOffset={0.4}
       />
       <Noise 
-        opacity={noiseOn ? 0.03 + sh * 0.06 : 0} 
+        opacity={noiseOn ? noiseAmount : 0} 
         blendFunction={BlendFunction.SOFT_LIGHT}
       />
       <Vignette
         eskil={false}
         offset={0.25}
-        darkness={vignetteOn ? clamp01(vignetteStrength + sb * 0.2) : 0}
+        darkness={vignetteOn ? vignetteAmount : 0}
         blendFunction={BlendFunction.NORMAL}
       />
       <Kaleidoscope
