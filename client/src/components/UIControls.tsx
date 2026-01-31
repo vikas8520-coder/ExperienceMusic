@@ -249,7 +249,7 @@ export function UIControls({
           : 'translate-y-full'
       }`}
     >
-      <div className="glass-panel settings-panel rounded-t-3xl max-h-[70vh] overflow-hidden">
+      <div className="glass-panel settings-panel rounded-t-3xl max-h-[70vh] overflow-y-auto scrollbar-thin">
             {/* Drag Handle */}
             <button
               onClick={() => setIsMobileExpanded(!isMobileExpanded)}
@@ -565,10 +565,10 @@ export function UIControls({
               </div>
             </div>
 
-            {/* Scrollable horizontal content */}
+            {/* Scrollable content */}
             <div 
               ref={desktopScrollRef} 
-              className="overflow-x-auto p-4" 
+              className="overflow-x-auto overflow-y-auto max-h-[60vh] p-4 scrollbar-thin" 
               style={{ 
                 overscrollBehavior: 'contain',
                 pointerEvents: 'auto',

@@ -80,3 +80,19 @@
 ::-webkit-scrollbar-thumb {
   @apply bg-primary/30 rounded-full hover:bg-primary/50 transition-colors;
 }
+
+/* Thin scrollbar utility for settings panels */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary) / 0.4) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  @apply bg-white/5 rounded-full;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  @apply bg-primary/40 rounded-full hover:bg-primary/60 transition-colors;
+}
