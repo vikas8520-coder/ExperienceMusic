@@ -566,26 +566,104 @@ export function UIControls({
               </div>
             </div>
 
-            {/* Scrollable content */}
+            {/* Reorganized Grid Layout */}
             <div 
               ref={desktopScrollRef} 
-              className="settings-panel overflow-x-auto overflow-y-auto p-4" 
+              className="settings-panel overflow-y-auto p-4" 
               style={{ 
-                maxHeight: 'calc(60vh - 50px)',
+                maxHeight: 'calc(70vh - 50px)',
                 overscrollBehavior: 'contain',
                 pointerEvents: 'auto',
-                touchAction: 'pan-x pan-y',
+                touchAction: 'pan-y',
                 WebkitOverflowScrolling: 'touch',
               }}
             >
-              <div className="flex gap-6" style={{ minWidth: 'max-content' }}>
+              {/* Row 1: Main Controls */}
+              <div className="grid grid-cols-12 gap-4 mb-4">
                 
-                {/* Quick Actions Section */}
-                <div className="flex flex-col gap-3 min-w-[200px]">
-                  <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Quick Actions</Label>
-                  
-                  <div className="flex flex-wrap gap-2">
-                    {/* Upload */}
+                {/* Preset Selection - Most Important */}
+                <div className="col-span-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs uppercase tracking-widest text-primary font-bold">Preset</Label>
+                    <Switch
+                      checked={settings.presetEnabled}
+                      onCheckedChange={(checked) => { saveScrollPositions(); setSettings({ ...settings, presetEnabled: checked }); }}
+                      data-testid="switch-preset-toggle"
+                    />
+                  </div>
+                  <Select
+                    value={settings.presetName}
+                    onValueChange={(val) => { saveScrollPositions(); setSettings({ ...settings, presetName: val as PresetName }); }}
+                    disabled={!settings.presetEnabled}
+                  >
+                    <SelectTrigger className={`bg-black/50 border-white/10 font-mono h-10 ${!settings.presetEnabled ? 'opacity-50' : ''}`} data-testid="select-preset">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-background border-white/10">
+                      {presets.map((preset) => (
+                        <SelectItem key={preset} value={preset} className="font-mono focus:bg-primary/20">
+                          {preset}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Color Palette */}
+                <div className="col-span-4 space-y-2">
+                  <Label className="text-xs uppercase tracking-widest text-accent font-bold">Color Palette</Label>
+                  <div className="flex gap-2 flex-wrap">
+                    {colorPalettes.map((palette) => (
+                      <button
+                        key={palette.name}
+                        onClick={() => { saveScrollPositions(); setSettings({ ...settings, colorPalette: palette.colors }); }}
+                        className={`w-7 h-7 rounded-full border-2 transition-all hover:scale-110 ${
+                          JSON.stringify(settings.colorPalette) === JSON.stringify(palette.colors)
+                            ? "border-white ring-2 ring-primary/50 scale-110"
+                            : "border-transparent opacity-60 hover:opacity-100"
+                        }`}
+                        style={{ background: `linear-gradient(135deg, ${palette.colors[0]}, ${palette.colors[1]})` }}
+                        title={palette.name}
+                        data-testid={`button-palette-${palette.name.toLowerCase().replace(/\s/g, '-')}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sliders */}
+                <div className="col-span-3 space-y-3">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="uppercase tracking-widest text-muted-foreground">Intensity</span>
+                      <span className="font-mono text-primary">{settings.intensity.toFixed(1)}</span>
+                    </div>
+                    <Slider
+                      min={0} max={3} step={0.1}
+                      value={[settings.intensity]}
+                      onValueChange={([val]) => updateSetting('intensity', val)}
+                      className="[&>.absolute]:bg-primary"
+                      data-testid="slider-intensity"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="uppercase tracking-widest text-muted-foreground">Speed</span>
+                      <span className="font-mono text-secondary">{settings.speed.toFixed(1)}</span>
+                    </div>
+                    <Slider
+                      min={0} max={2} step={0.1}
+                      value={[settings.speed]}
+                      onValueChange={([val]) => updateSetting('speed', val)}
+                      className="[&>.absolute]:bg-secondary"
+                      data-testid="slider-speed"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="col-span-2 space-y-2">
+                  <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Actions</Label>
+                  <div className="flex flex-wrap gap-1">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="relative">
@@ -596,90 +674,77 @@ export function UIControls({
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             data-testid="input-audio-upload"
                           />
-                          <Button variant="outline" size="sm" className="border-primary/50 text-primary">
-                            <Upload className="mr-1 h-4 w-4" />
-                            Upload
+                          <Button variant="outline" size="icon" className="h-8 w-8 border-primary/50">
+                            <Upload className="h-4 w-4 text-primary" />
                           </Button>
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Upload an audio file to visualize</p>
-                      </TooltipContent>
+                      <TooltipContent><p>Upload audio</p></TooltipContent>
                     </Tooltip>
-                    
-                    {/* Record */}
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button 
                           variant="outline" 
-                          size="sm"
-                          className={`text-xs border-destructive/50 text-destructive ${isRecording ? 'animate-pulse bg-destructive/20' : ''}`}
+                          size="icon"
+                          className={`h-8 w-8 ${isRecording ? 'animate-pulse bg-destructive/20 border-destructive' : 'border-destructive/50'}`}
                           onClick={onToggleRecording}
                           data-testid="button-record"
                         >
-                          <Disc className={`mr-1 h-3 w-3 ${isRecording ? 'animate-spin' : ''}`} />
-                          {isRecording ? "Stop" : "Record"}
+                          <Disc className={`h-4 w-4 text-destructive ${isRecording ? 'animate-spin' : ''}`} />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{isRecording ? "Stop recording the visualization" : "Record the visualization as video"}</p>
-                      </TooltipContent>
+                      <TooltipContent><p>{isRecording ? "Stop recording" : "Record"}</p></TooltipContent>
                     </Tooltip>
-                    
-                    {/* Fullscreen */}
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button 
                           variant="outline" 
-                          size="sm"
-                          className="text-xs"
+                          size="icon"
+                          className="h-8 w-8"
                           onClick={onToggleFullscreen}
                           data-testid="button-fullscreen"
                         >
-                          {isFullscreen ? <Minimize className="mr-1 h-3 w-3" /> : <Maximize className="mr-1 h-3 w-3" />}
-                          {isFullscreen ? "Exit" : "Full"}
+                          {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{isFullscreen ? "Exit fullscreen mode" : "Enter fullscreen mode"} (F)</p>
-                      </TooltipContent>
+                      <TooltipContent><p>Fullscreen (F)</p></TooltipContent>
                     </Tooltip>
-                    
-                    {/* Save to Library */}
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button 
                           variant="outline" 
-                          size="sm"
-                          className="text-xs"
+                          size="icon"
+                          className="h-8 w-8"
                           onClick={onSaveToLibrary}
                           data-testid="button-save-library"
                         >
-                          <FolderPlus className="mr-1 h-3 w-3" />
-                          Save
+                          <FolderPlus className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>
-                        <p>Save track to your library</p>
-                      </TooltipContent>
+                      <TooltipContent><p>Save to Library</p></TooltipContent>
                     </Tooltip>
                   </div>
                 </div>
+              </div>
 
-                <div className="w-px bg-white/10 self-stretch" />
+              {/* Divider */}
+              <div className="h-px bg-white/10 mb-4" />
 
-                {/* Artwork Section */}
-                <div className="flex flex-col gap-2 min-w-40">
-                  <div className="flex justify-between items-center gap-2">
+              {/* Row 2: Effects & Overlays */}
+              <div className="grid grid-cols-12 gap-4">
+                
+                {/* Artwork + AI */}
+                <div className="col-span-2 space-y-2">
+                  <div className="flex items-center gap-2">
                     <Label className="text-xs uppercase tracking-widest text-accent font-bold">Artwork</Label>
                     {isAnalyzing && <Loader2 className="w-3 h-3 text-primary animate-spin" />}
                   </div>
-                  <div className="relative w-24 h-24 rounded-lg border border-white/10 bg-black/50 overflow-hidden group cursor-pointer">
+                  <div className="relative w-16 h-16 rounded-lg border border-white/10 bg-black/50 overflow-hidden cursor-pointer">
                     {displayThumbnail ? (
                       <img src={displayThumbnail} alt="Thumbnail" className="w-full h-full object-cover" data-testid="img-thumbnail" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                        <ImagePlus className="w-6 h-6 opacity-30" />
+                      <div className="w-full h-full flex items-center justify-center">
+                        <ImagePlus className="w-5 h-5 opacity-30" />
                       </div>
                     )}
                     <input
@@ -694,104 +759,20 @@ export function UIControls({
                     <Button 
                       variant="outline" 
                       size="sm"
-                      className="text-xs border-accent/50 text-accent"
+                      className="text-[10px] h-7 border-accent/50 text-accent w-full"
                       onClick={applyAIPalette}
                       data-testid="button-apply-ai-palette"
                     >
                       <Sparkles className="mr-1 h-3 w-3" />
-                      Apply AI
+                      AI Colors
                     </Button>
                   )}
                 </div>
 
-                <div className="w-px bg-white/10 self-stretch" />
-
-                {/* Preset & Visual Settings */}
-                <div className="flex flex-col gap-3 min-w-48">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label className="text-xs uppercase tracking-widest text-primary font-bold">Preset</Label>
-                    <Switch
-                      checked={settings.presetEnabled}
-                      onCheckedChange={(checked) => { saveScrollPositions(); setSettings({ ...settings, presetEnabled: checked }); }}
-                      data-testid="switch-preset-toggle"
-                    />
-                  </div>
-                  <Select
-                    value={settings.presetName}
-                    onValueChange={(val) => { saveScrollPositions(); setSettings({ ...settings, presetName: val as PresetName }); }}
-                    disabled={!settings.presetEnabled}
-                  >
-                    <SelectTrigger className={`bg-black/50 border-white/10 font-mono h-9 text-sm ${!settings.presetEnabled ? 'opacity-50' : ''}`} data-testid="select-preset">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-background border-white/10">
-                      {presets.map((preset) => (
-                        <SelectItem key={preset} value={preset} className="font-mono focus:bg-primary/20">
-                          {preset}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                      <span className="uppercase tracking-widest">Intensity</span>
-                      <span className="font-mono text-primary">{settings.intensity.toFixed(1)}</span>
-                    </div>
-                    <Slider
-                      min={0} max={3} step={0.1}
-                      value={[settings.intensity]}
-                      onValueChange={([val]) => updateSetting('intensity', val)}
-                      className="[&>.absolute]:bg-primary"
-                      data-testid="slider-intensity"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs">
-                      <span className="uppercase tracking-widest">Speed</span>
-                      <span className="font-mono text-secondary">{settings.speed.toFixed(1)}</span>
-                    </div>
-                    <Slider
-                      min={0} max={2} step={0.1}
-                      value={[settings.speed]}
-                      onValueChange={([val]) => updateSetting('speed', val)}
-                      className="[&>.absolute]:bg-secondary"
-                      data-testid="slider-speed"
-                    />
-                  </div>
-                </div>
-
-                <div className="w-px bg-white/10 self-stretch" />
-
-                {/* Color Palette */}
-                <div className="flex flex-col gap-2 min-w-48">
-                  <Label className="text-xs uppercase tracking-widest text-accent font-bold">Palette</Label>
-                  <div className="flex gap-2 flex-wrap">
-                    {colorPalettes.map((palette) => (
-                      <button
-                        key={palette.name}
-                        onClick={() => { saveScrollPositions(); setSettings({ ...settings, colorPalette: palette.colors }); }}
-                        className={`w-8 h-8 rounded-full border-2 transition-all hover:scale-110 ${
-                          JSON.stringify(settings.colorPalette) === JSON.stringify(palette.colors)
-                            ? "border-white ring-2 ring-primary/50 scale-110"
-                            : "border-transparent opacity-60 hover:opacity-100"
-                        }`}
-                        style={{ background: `linear-gradient(135deg, ${palette.colors[0]}, ${palette.colors[1]})` }}
-                        title={palette.name}
-                        data-testid={`button-palette-${palette.name.toLowerCase().replace(/\s/g, '-')}`}
-                      />
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground" data-testid="text-palette-name">{currentPaletteName}</p>
-                </div>
-
-                <div className="w-px bg-white/10 self-stretch" />
-
-                {/* Artwork Filters */}
-                <div className="flex flex-col gap-2 min-w-56">
-                  <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Filters</Label>
-                  <div className="flex gap-1 flex-wrap max-w-56">
+                {/* Filters */}
+                <div className="col-span-4 space-y-2">
+                  <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Image Filters</Label>
+                  <div className="flex gap-1 flex-wrap">
                     {imageFilters.filter(f => f.id !== "none").map((filter) => {
                       const isActive = settings.imageFilters.includes(filter.id);
                       return (
@@ -807,7 +788,7 @@ export function UIControls({
                               imageFilters: newFilters.length === 0 ? ["none"] : newFilters 
                             });
                           }}
-                          className={`text-[10px] py-1 px-2 rounded border transition-all ${
+                          className={`text-[10px] py-1.5 px-2.5 rounded-md border transition-all ${
                             isActive 
                               ? "border-purple-500 bg-purple-500/20 text-purple-300" 
                               : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
@@ -821,12 +802,10 @@ export function UIControls({
                   </div>
                 </div>
 
-                <div className="w-px bg-white/10 self-stretch" />
-
                 {/* Psy Overlays */}
-                <div className="flex flex-col gap-2 min-w-44">
+                <div className="col-span-4 space-y-2">
                   <Label className="text-xs uppercase tracking-widest text-cyan-400 font-bold">Psy Overlays</Label>
-                  <div className="flex gap-1 flex-wrap max-w-44">
+                  <div className="flex gap-1 flex-wrap">
                     {psyOverlays.map((overlay) => {
                       const currentOverlays = settings.psyOverlays || [];
                       const isActive = currentOverlays.includes(overlay.id);
@@ -843,7 +822,7 @@ export function UIControls({
                               psyOverlays: newOverlays 
                             });
                           }}
-                          className={`text-[10px] py-1 px-2 rounded border transition-all ${
+                          className={`text-[10px] py-1.5 px-2.5 rounded-md border transition-all ${
                             isActive 
                               ? "border-cyan-500 bg-cyan-500/20 text-cyan-300" 
                               : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
@@ -855,32 +834,32 @@ export function UIControls({
                       );
                     })}
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Layer on top of any preset</p>
+                  <p className="text-[10px] text-muted-foreground">Layer effects on top of presets</p>
                 </div>
 
-                <div className="w-px bg-white/10 self-stretch" />
-
-                {/* Save Actions */}
-                <div className="flex flex-col gap-2 min-w-32">
+                {/* Save Options */}
+                <div className="col-span-2 space-y-2">
                   <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Save</Label>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className="justify-start text-xs"
-                    onClick={onSavePreset}
-                    data-testid="button-save-preset"
-                  >
-                    <Save className="mr-2 h-3 w-3" /> Save Preset
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className="justify-start text-xs"
-                    onClick={onSaveToLibrary}
-                    data-testid="button-save-library"
-                  >
-                    <FolderPlus className="mr-2 h-3 w-3" /> Save to Library
-                  </Button>
+                  <div className="space-y-1">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      className="w-full justify-start text-xs h-8"
+                      onClick={onSavePreset}
+                      data-testid="button-save-preset"
+                    >
+                      <Save className="mr-2 h-3 w-3" /> Preset
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      className="w-full justify-start text-xs h-8"
+                      onClick={onSaveToLibrary}
+                      data-testid="button-save-library-alt"
+                    >
+                      <FolderPlus className="mr-2 h-3 w-3" /> Library
+                    </Button>
+                  </div>
                   {zoom !== undefined && (
                     <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                       <ZoomIn className="h-3 w-3" />
