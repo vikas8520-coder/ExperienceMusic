@@ -13,7 +13,20 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Upload, Save, Disc, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { colorPalettes, presets, imageFilters, psyOverlays, type PresetName, type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
+import { 
+  colorPalettes, 
+  presets, 
+  imageFilters, 
+  psyOverlays, 
+  colorModes,
+  moodPresets,
+  type PresetName, 
+  type ImageFilterId, 
+  type PsyOverlayId,
+  type ColorSettings,
+  type ColorModeId,
+  type MoodPresetId
+} from "@/lib/visualizer-presets";
 
 interface UIControlsProps {
   isPlaying: boolean;
@@ -29,6 +42,8 @@ interface UIControlsProps {
     psyOverlays: PsyOverlayId[];
   };
   setSettings: (s: any) => void;
+  colorSettings: ColorSettings;
+  setColorSettings: (s: ColorSettings) => void;
   isRecording: boolean;
   onToggleRecording: () => void;
   onSavePreset: () => void;
@@ -73,6 +88,8 @@ export function UIControls({
   onFileUpload,
   settings,
   setSettings,
+  colorSettings,
+  setColorSettings,
   isRecording,
   onToggleRecording,
   onSavePreset,
@@ -177,12 +194,20 @@ export function UIControls({
     reader.readAsDataURL(file);
   };
 
+  const updateColorSetting = useCallback(<K extends keyof ColorSettings>(key: K, value: ColorSettings[K]) => {
+    saveScrollPositions();
+    setColorSettings({ ...colorSettings, [key]: value });
+  }, [colorSettings, setColorSettings, saveScrollPositions]);
+
   const applyAIPalette = () => {
     if (analysis?.colorPalette) {
       saveScrollPositions();
-      setSettings({ ...settings, colorPalette: analysis.colorPalette });
+      setColorSettings({ ...colorSettings, mode: "ai", aiColors: analysis.colorPalette });
     }
   };
+  
+  // Color mode display name
+  const currentColorModeName = colorModes.find(m => m.id === colorSettings.mode)?.name || "Gradient";
 
   // Mobile floating controls (simplified - player controls moved to top drawer)
   const MobileFloatingControls = () => (
@@ -298,22 +323,101 @@ export function UIControls({
                 </Select>
               </div>
               
-              {/* Color Palette Row */}
-              <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
-                {colorPalettes.map((palette) => (
-                  <button
-                    key={palette.name}
-                    onClick={() => { saveScrollPositions(); setSettings({ ...settings, colorPalette: palette.colors }); }}
-                    className={`flex-shrink-0 w-10 h-10 rounded-full border-2 transition-all ${
-                      JSON.stringify(settings.colorPalette) === JSON.stringify(palette.colors)
-                        ? "border-white ring-2 ring-primary/50 scale-110"
-                        : "border-transparent opacity-60"
-                    }`}
-                    style={{ background: `linear-gradient(135deg, ${palette.colors[0]}, ${palette.colors[1]})` }}
-                    title={palette.name}
-                    data-testid={`button-palette-mobile-${palette.name.toLowerCase().replace(/\s/g, '-')}`}
-                  />
-                ))}
+              {/* Color Mode Selector */}
+              <div className="space-y-3">
+                <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
+                  {colorModes.filter(m => m.id !== "ai" && m.id !== "custom").map((mode) => (
+                    <button
+                      key={mode.id}
+                      onClick={() => updateColorSetting("mode", mode.id)}
+                      className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs transition-all ${
+                        colorSettings.mode === mode.id
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-white/10 text-white/70"
+                      }`}
+                      data-testid={`button-color-mode-mobile-${mode.id}`}
+                    >
+                      {mode.name}
+                    </button>
+                  ))}
+                </div>
+                
+                {/* Color Pickers based on mode */}
+                <div className="flex gap-3 items-center">
+                  {(colorSettings.mode === "single" || colorSettings.mode === "gradient" || colorSettings.mode === "triadic") && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={colorSettings.primaryColor}
+                        onChange={(e) => updateColorSetting("primaryColor", e.target.value)}
+                        className="w-10 h-10 rounded-lg cursor-pointer border-0"
+                        data-testid="input-color-primary-mobile"
+                      />
+                      {(colorSettings.mode === "gradient" || colorSettings.mode === "triadic") && (
+                        <input
+                          type="color"
+                          value={colorSettings.secondaryColor}
+                          onChange={(e) => updateColorSetting("secondaryColor", e.target.value)}
+                          className="w-10 h-10 rounded-lg cursor-pointer border-0"
+                          data-testid="input-color-secondary-mobile"
+                        />
+                      )}
+                      {colorSettings.mode === "triadic" && (
+                        <input
+                          type="color"
+                          value={colorSettings.tertiaryColor}
+                          onChange={(e) => updateColorSetting("tertiaryColor", e.target.value)}
+                          className="w-10 h-10 rounded-lg cursor-pointer border-0"
+                          data-testid="input-color-tertiary-mobile"
+                        />
+                      )}
+                    </div>
+                  )}
+                  
+                  {colorSettings.mode === "mood" && (
+                    <div className="flex gap-2 overflow-x-auto flex-1">
+                      {moodPresets.map((mood) => (
+                        <button
+                          key={mood.id}
+                          onClick={() => updateColorSetting("moodPreset", mood.id)}
+                          className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs transition-all ${
+                            colorSettings.moodPreset === mood.id
+                              ? "ring-2 ring-white"
+                              : "opacity-60"
+                          }`}
+                          style={{ background: `linear-gradient(135deg, ${mood.colors[0]}, ${mood.colors[1]})` }}
+                          data-testid={`button-mood-mobile-${mood.id}`}
+                        >
+                          {mood.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {colorSettings.mode === "spectrum" && (
+                    <div className="flex-1 flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Speed</span>
+                      <Slider
+                        min={0.1} max={3} step={0.1}
+                        value={[colorSettings.spectrumSpeed]}
+                        onValueChange={([val]) => updateColorSetting("spectrumSpeed", val)}
+                        className="flex-1"
+                        data-testid="slider-spectrum-speed-mobile"
+                      />
+                    </div>
+                  )}
+                </div>
+                
+                {/* Color Preview */}
+                <div className="flex gap-1 h-6 rounded-lg overflow-hidden">
+                  {settings.colorPalette.map((color, idx) => (
+                    <div
+                      key={idx}
+                      className="flex-1"
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
             
@@ -609,22 +713,106 @@ export function UIControls({
                   </Select>
                 </div>
 
-                {/* Color Palette */}
+                {/* Color Mode */}
                 <div className="col-span-4 space-y-2">
-                  <Label className="text-xs uppercase tracking-widest text-accent font-bold">Color Palette</Label>
-                  <div className="flex gap-2 flex-wrap">
-                    {colorPalettes.map((palette) => (
+                  <Label className="text-xs uppercase tracking-widest text-accent font-bold">Color Mode</Label>
+                  
+                  {/* Mode Selector */}
+                  <div className="flex gap-1 flex-wrap">
+                    {colorModes.filter(m => m.id !== "ai" && m.id !== "custom").map((mode) => (
                       <button
-                        key={palette.name}
-                        onClick={() => { saveScrollPositions(); setSettings({ ...settings, colorPalette: palette.colors }); }}
-                        className={`w-7 h-7 rounded-full border-2 transition-all hover:scale-110 ${
-                          JSON.stringify(settings.colorPalette) === JSON.stringify(palette.colors)
-                            ? "border-white ring-2 ring-primary/50 scale-110"
-                            : "border-transparent opacity-60 hover:opacity-100"
+                        key={mode.id}
+                        onClick={() => updateColorSetting("mode", mode.id)}
+                        className={`px-2 py-1 rounded text-[10px] transition-all ${
+                          colorSettings.mode === mode.id
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-white/10 text-white/60 hover:bg-white/20"
                         }`}
-                        style={{ background: `linear-gradient(135deg, ${palette.colors[0]}, ${palette.colors[1]})` }}
-                        title={palette.name}
-                        data-testid={`button-palette-${palette.name.toLowerCase().replace(/\s/g, '-')}`}
+                        title={mode.description}
+                        data-testid={`button-color-mode-${mode.id}`}
+                      >
+                        {mode.name}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {/* Color Pickers / Options based on mode */}
+                  <div className="flex gap-2 items-center flex-wrap">
+                    {(colorSettings.mode === "single" || colorSettings.mode === "gradient" || colorSettings.mode === "triadic") && (
+                      <>
+                        <input
+                          type="color"
+                          value={colorSettings.primaryColor}
+                          onChange={(e) => updateColorSetting("primaryColor", e.target.value)}
+                          className="w-7 h-7 rounded cursor-pointer border-0"
+                          title="Primary Color"
+                          data-testid="input-color-primary"
+                        />
+                        {(colorSettings.mode === "gradient" || colorSettings.mode === "triadic") && (
+                          <input
+                            type="color"
+                            value={colorSettings.secondaryColor}
+                            onChange={(e) => updateColorSetting("secondaryColor", e.target.value)}
+                            className="w-7 h-7 rounded cursor-pointer border-0"
+                            title="Secondary Color"
+                            data-testid="input-color-secondary"
+                          />
+                        )}
+                        {colorSettings.mode === "triadic" && (
+                          <input
+                            type="color"
+                            value={colorSettings.tertiaryColor}
+                            onChange={(e) => updateColorSetting("tertiaryColor", e.target.value)}
+                            className="w-7 h-7 rounded cursor-pointer border-0"
+                            title="Tertiary Color"
+                            data-testid="input-color-tertiary"
+                          />
+                        )}
+                      </>
+                    )}
+                    
+                    {colorSettings.mode === "mood" && (
+                      <div className="flex gap-1 flex-wrap">
+                        {moodPresets.map((mood) => (
+                          <button
+                            key={mood.id}
+                            onClick={() => updateColorSetting("moodPreset", mood.id)}
+                            className={`px-2 py-1 rounded text-[10px] transition-all ${
+                              colorSettings.moodPreset === mood.id
+                                ? "ring-1 ring-white"
+                                : "opacity-50 hover:opacity-80"
+                            }`}
+                            style={{ background: `linear-gradient(135deg, ${mood.colors[0]}, ${mood.colors[1]})` }}
+                            data-testid={`button-mood-${mood.id}`}
+                          >
+                            {mood.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {colorSettings.mode === "spectrum" && (
+                      <div className="flex-1 flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground">Speed</span>
+                        <Slider
+                          min={0.1} max={3} step={0.1}
+                          value={[colorSettings.spectrumSpeed]}
+                          onValueChange={([val]) => updateColorSetting("spectrumSpeed", val)}
+                          className="flex-1"
+                          data-testid="slider-spectrum-speed"
+                        />
+                        <span className="text-[10px] font-mono">{colorSettings.spectrumSpeed.toFixed(1)}x</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Color Preview Bar */}
+                  <div className="flex gap-0.5 h-4 rounded overflow-hidden">
+                    {settings.colorPalette.map((color, idx) => (
+                      <div
+                        key={idx}
+                        className="flex-1"
+                        style={{ backgroundColor: color }}
                       />
                     ))}
                   </div>

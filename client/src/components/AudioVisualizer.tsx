@@ -90,24 +90,28 @@ function FallbackVisualizer({ settings, backgroundImage }: { settings: any; back
   );
 }
 
-// === PRESET 1: Energy Rings ===
+// === PRESET 1: Energy Rings (PREMIUM) ===
 function EnergyRings({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
   const groupRef = useRef<THREE.Group>(null);
   const ringsRef = useRef<THREE.Mesh[]>([]);
   const materialsRef = useRef<THREE.MeshStandardMaterial[]>([]);
+  const smoothedAudioRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, energy: 0 });
 
-  const geometry = useMemo(() => new THREE.TorusGeometry(1, 0.02, 16, 100), []);
-  const count = 15;
+  // Premium: Higher detail geometry with more segments
+  const geometry = useMemo(() => new THREE.TorusGeometry(1, 0.025, 24, 128), []);
+  const count = 24; // More rings for denser effect
 
   const materials = useMemo(() => {
     return Array.from({ length: count }).map((_, i) => {
       const colorIndex = i % settings.colorPalette.length;
       const mat = new THREE.MeshStandardMaterial({
         color: "#000000",
-        roughness: 0.1,
-        metalness: 0.8,
+        roughness: 0.05,
+        metalness: 0.95,
         emissive: new THREE.Color(settings.colorPalette[colorIndex]),
-        emissiveIntensity: 1
+        emissiveIntensity: 1.5,
+        transparent: true,
+        opacity: 0.9
       });
       return mat;
     });
@@ -115,37 +119,59 @@ function EnergyRings({ getAudioData, settings }: { getAudioData: () => AudioData
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
-    const { sub, bass, mid, high, kick } = getAudioData();
+    const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime();
+    
+    // Premium: Smooth audio interpolation for fluid motion
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    const smooth = smoothedAudioRef.current;
+    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.08);
+    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.12);
+    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.15);
+    smooth.high = lerp(smooth.high, audioRaw.high, 0.2);
+    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
+    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.1);
 
-    // Sub drives slow global rotation, kick adds sudden twists
-    groupRef.current.rotation.z += delta * (0.1 + sub * 0.3 + kick * 0.5) * settings.speed;
-    groupRef.current.rotation.x = Math.sin(time * 0.2) * 0.2 * (mid * settings.intensity);
-    groupRef.current.rotation.y = Math.cos(time * 0.15) * 0.1 * (sub * settings.intensity);
+    // Premium: Complex multi-axis rotation with smooth transitions
+    const baseSpeed = 0.08 * settings.speed;
+    groupRef.current.rotation.z += delta * (baseSpeed + smooth.sub * 0.2 + smooth.kick * 0.4);
+    groupRef.current.rotation.x = Math.sin(time * 0.15) * 0.25 * (1 + smooth.mid * settings.intensity);
+    groupRef.current.rotation.y = Math.cos(time * 0.1) * 0.15 * (1 + smooth.sub * settings.intensity * 0.5);
 
     ringsRef.current.forEach((mesh, i) => {
       if (!mesh) return;
       const t = time * settings.speed;
-      const offset = i * 0.5;
+      const offset = i * 0.3;
+      const layerDepth = i / count;
       
-      // Bass + kick drive scale pulsing, sub adds slow breathing
-      const breathing = 1 + sub * 0.3 * Math.sin(t * 0.5 + offset);
-      const pulse = bass * settings.intensity * 2 * (Math.sin(t + offset) * 0.5 + 0.5);
-      const kickPop = kick * 0.5;
-      const scale = (breathing + pulse + kickPop) * (i * 0.2 + 0.5);
+      // Premium: Multi-layered scaling with organic feel
+      const breathing = 1 + smooth.sub * 0.25 * Math.sin(t * 0.4 + offset);
+      const pulse = smooth.bass * settings.intensity * 1.5 * (Math.sin(t * 1.5 + offset) * 0.5 + 0.5);
+      const waveform = smooth.mid * 0.3 * Math.sin(t * 2 + i * 0.2);
+      const kickPop = smooth.kick * 0.6 * (1 - layerDepth * 0.5);
+      const baseScale = (i * 0.15 + 0.4);
+      const scale = baseScale * (breathing + pulse + waveform + kickPop);
       mesh.scale.setScalar(scale);
+      
+      // Premium: Individual ring rotation for depth
+      mesh.rotation.x = Math.PI / 2 + Math.sin(t * 0.3 + offset) * 0.1 * smooth.mid;
+      mesh.rotation.y = Math.cos(t * 0.25 + offset) * 0.08 * smooth.high;
 
       const mat = materialsRef.current[i];
       if (mat) {
         const colorIndex = i % settings.colorPalette.length;
-        const color = new THREE.Color(settings.colorPalette[colorIndex]);
-        // High drives sparkle, kick adds flash
-        const boost = (high * 4 + kick * 2) * settings.intensity;
-        mat.emissive.setRGB(
-          color.r * (0.2 + boost),
-          color.g * (0.2 + boost),
-          color.b * (0.2 + boost)
-        );
+        // Premium: Dynamic color shifting based on audio (reusing mat.emissive)
+        mat.emissive.set(settings.colorPalette[colorIndex]);
+        const hueShift = smooth.high * 0.05 * Math.sin(t + i * 0.5);
+        mat.emissive.offsetHSL(hueShift, 0, smooth.energy * 0.1);
+        
+        const boost = (smooth.high * 3 + smooth.kick * 2.5 + smooth.energy) * settings.intensity;
+        mat.emissive.multiplyScalar(0.3 + boost);
+        mat.emissive.r = Math.min(mat.emissive.r, 1);
+        mat.emissive.g = Math.min(mat.emissive.g, 1);
+        mat.emissive.b = Math.min(mat.emissive.b, 1);
+        mat.emissiveIntensity = 1.2 + smooth.bass * settings.intensity;
+        mat.opacity = 0.7 + smooth.energy * 0.3;
       }
     });
   });
@@ -183,68 +209,118 @@ function PsyTunnel({ getAudioData, settings }: { getAudioData: () => AudioData, 
   );
 }
 
-// === PRESET 3: Particle Field ===
+// === PRESET 3: Particle Field (PREMIUM) ===
 function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
   const pointsRef = useRef<THREE.Points>(null);
-  const count = 2000;
+  const count = 5000; // Premium: More particles for denser field
+  const smoothedAudioRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, energy: 0 });
+  const tempColor = useMemo(() => new THREE.Color(), []);
+  const tempColor2 = useMemo(() => new THREE.Color(), []);
   
-  const [positions, colors] = useMemo(() => {
+  const [positions, colors, basePositions] = useMemo(() => {
     const pos = new Float32Array(count * 3);
     const col = new Float32Array(count * 3);
+    const basePos = new Float32Array(count * 3);
+    
     for (let i = 0; i < count; i++) {
-      pos[i * 3] = (Math.random() - 0.5) * 50;
-      pos[i * 3 + 1] = (Math.random() - 0.5) * 50;
-      pos[i * 3 + 2] = (Math.random() - 0.5) * 50;
+      // Premium: Spherical distribution for more organic look
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos((Math.random() * 2) - 1);
+      const radius = 15 + Math.random() * 25;
+      
+      const x = radius * Math.sin(phi) * Math.cos(theta);
+      const y = radius * Math.sin(phi) * Math.sin(theta);
+      const z = radius * Math.cos(phi);
+      
+      pos[i * 3] = x;
+      pos[i * 3 + 1] = y;
+      pos[i * 3 + 2] = z;
+      basePos[i * 3] = x;
+      basePos[i * 3 + 1] = y;
+      basePos[i * 3 + 2] = z;
       col[i * 3] = 1;
       col[i * 3 + 1] = 1;
       col[i * 3 + 2] = 1;
     }
-    return [pos, col];
+    return [pos, col, basePos];
   }, []);
 
   useFrame((state) => {
     if (!pointsRef.current) return;
-    const { sub, bass, mid, high, kick, energy } = getAudioData();
+    const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime();
+    
+    // Premium: Smooth audio interpolation
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    const smooth = smoothedAudioRef.current;
+    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.06);
+    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.1);
+    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.12);
+    smooth.high = lerp(smooth.high, audioRaw.high, 0.18);
+    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.2);
+    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.08);
 
     const positionsAttr = pointsRef.current.geometry.attributes.position;
     const colorsAttr = pointsRef.current.geometry.attributes.color;
+    
+    // Premium: Dynamic global size based on audio
+    const material = pointsRef.current.material as THREE.PointsMaterial;
+    if (material) {
+      material.size = 0.12 + smooth.energy * 0.15 * settings.intensity + smooth.bass * 0.08;
+    }
 
-    // Sub provides global "breath", bass drives speed, mid adds turbulence
-    const breathScale = 1 + sub * 0.3;
-    const speedMult = 1 + bass * 2;
-    const turbulence = mid * 0.5 + high * 0.3;
+    // Premium: Complex audio-driven motion
+    const breathScale = 1 + smooth.sub * 0.2;
+    const pulseScale = 1 + smooth.bass * 0.3 * settings.intensity;
+    const turbulenceAmp = (smooth.mid * 0.4 + smooth.high * 0.3) * settings.intensity;
 
     for (let i = 0; i < count; i++) {
-      const x = positions[i * 3];
-      const y = positions[i * 3 + 1];
-      const z = positions[i * 3 + 2];
+      const bx = basePositions[i * 3];
+      const by = basePositions[i * 3 + 1];
+      const bz = basePositions[i * 3 + 2];
       
-      const amp = energy * settings.intensity * 2;
+      // Premium: Layered noise motion
+      const noiseX = Math.sin(time * 0.5 + bz * 0.1) * turbulenceAmp * 2;
+      const noiseY = Math.cos(time * 0.4 + bx * 0.1) * turbulenceAmp * 2;
+      const noiseZ = Math.sin(time * 0.3 + by * 0.1) * turbulenceAmp;
+      
+      // Spiral motion on kick
+      const spiralAngle = smooth.kick * 0.3 * (i / count);
+      const sx = bx * Math.cos(spiralAngle) - by * Math.sin(spiralAngle);
+      const sy = bx * Math.sin(spiralAngle) + by * Math.cos(spiralAngle);
       
       positionsAttr.setXYZ(i, 
-        x * breathScale + Math.sin(time * speedMult + z) * 0.02 * amp + turbulence * Math.sin(time * 3 + i) * 0.1,
-        y * breathScale + Math.cos(time * speedMult + x) * 0.02 * amp + turbulence * Math.cos(time * 3 + i) * 0.1,
-        z * breathScale
+        sx * breathScale * pulseScale + noiseX,
+        sy * breathScale * pulseScale + noiseY,
+        bz * breathScale + noiseZ
       );
 
-      const color = new THREE.Color(settings.colorPalette[i % settings.colorPalette.length]);
-      color.offsetHSL(0, 0, (bass - 0.5) * 0.5);
+      // Premium: Dynamic color with smooth transitions (reusing Color objects)
+      const colorPhase = (i / count + time * 0.1 * settings.speed) % 1;
+      const colorIdx = Math.floor(colorPhase * settings.colorPalette.length);
+      const nextColorIdx = (colorIdx + 1) % settings.colorPalette.length;
+      const colorBlend = (colorPhase * settings.colorPalette.length) % 1;
       
-      // High drives sparkles, kick adds flash bursts
-      if (Math.random() < high * 0.1 + kick * 0.2) {
-        color.setScalar(1);
+      tempColor.set(settings.colorPalette[colorIdx]);
+      tempColor2.set(settings.colorPalette[nextColorIdx]);
+      tempColor.lerp(tempColor2, colorBlend);
+      
+      // High frequencies add sparkle
+      const sparkle = smooth.high * 0.4 + smooth.kick * 0.5;
+      if (Math.random() < sparkle * 0.05) {
+        tempColor.offsetHSL(0, -0.5, 0.4);
       }
       
-      colorsAttr.setXYZ(i, color.r, color.g, color.b);
+      colorsAttr.setXYZ(i, tempColor.r, tempColor.g, tempColor.b);
     }
     
     positionsAttr.needsUpdate = true;
     colorsAttr.needsUpdate = true;
     
-    // Rotation driven by mids, kick adds sudden shifts
-    pointsRef.current.rotation.y = time * 0.05 * settings.speed + kick * 0.2;
-    pointsRef.current.rotation.x = sub * 0.1 * Math.sin(time * 0.3);
+    // Premium: Smooth multi-axis rotation
+    pointsRef.current.rotation.y += 0.002 * settings.speed * (1 + smooth.mid * 0.5);
+    pointsRef.current.rotation.x = smooth.sub * 0.15 * Math.sin(time * 0.2);
+    pointsRef.current.rotation.z = smooth.high * 0.05 * Math.cos(time * 0.3);
   });
 
   return (
@@ -266,118 +342,166 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.2}
+        size={0.15}
         vertexColors
         transparent
-        opacity={0.8}
+        opacity={0.85}
         blending={THREE.AdditiveBlending}
+        sizeAttenuation
       />
     </points>
   );
 }
 
-// === PRESET 4: Waveform Sphere ===
+// === PRESET 4: Waveform Sphere (PREMIUM) ===
 function WaveformSphere({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const originalPositions = useRef<Float32Array | null>(null);
+  const smoothedAudioRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, energy: 0 });
 
   useFrame((state) => {
     if (!meshRef.current) return;
-    const { sub, bass, mid, high, kick, frequencyData } = getAudioData();
+    const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
     const geometry = meshRef.current.geometry as THREE.BufferGeometry;
     const positionAttr = geometry.attributes.position;
+
+    // Premium: Smooth audio interpolation
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    const smooth = smoothedAudioRef.current;
+    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.08);
+    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.12);
+    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.15);
+    smooth.high = lerp(smooth.high, audioRaw.high, 0.2);
+    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
+    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.1);
 
     if (!originalPositions.current) {
       originalPositions.current = new Float32Array(positionAttr.array);
     }
 
-    // Sub creates breathing scale, kick adds sudden expansion
-    const globalScale = 1 + sub * 0.2 + kick * 0.3;
+    // Premium: Multi-layered breathing and scaling
+    const globalScale = 1 + smooth.sub * 0.15 + smooth.kick * 0.25 + smooth.energy * 0.1;
 
     for (let i = 0; i < positionAttr.count; i++) {
       const ox = originalPositions.current[i * 3];
       const oy = originalPositions.current[i * 3 + 1];
       const oz = originalPositions.current[i * 3 + 2];
       
-      const freqIndex = Math.floor((i / positionAttr.count) * (frequencyData?.length || 128));
-      const freqValue = (frequencyData?.[freqIndex] || 0) / 255;
+      const freqIndex = Math.floor((i / positionAttr.count) * (audioRaw.frequencyData?.length || 128));
+      const freqValue = (audioRaw.frequencyData?.[freqIndex] || 0) / 255;
       
-      // Bass drives displacement magnitude, high adds detail
-      const displacement = freqValue * settings.intensity * 0.5 * (1 + bass * 0.5);
-      const wave = Math.sin(time * 2 + i * 0.1) * 0.1 * mid * settings.intensity;
-      const sparkle = high * 0.05 * Math.sin(time * 10 + i);
+      // Premium: Layered displacement with frequency bands
+      const bassDisp = smooth.bass * 0.3 * Math.sin(time * 0.5 + i * 0.02);
+      const midDisp = smooth.mid * 0.2 * Math.sin(time * 1.5 + i * 0.05);
+      const highDisp = smooth.high * 0.1 * Math.sin(time * 4 + i * 0.1);
+      const freqDisp = freqValue * settings.intensity * 0.4;
+      const kickPulse = smooth.kick * 0.3;
       
       const length = Math.sqrt(ox * ox + oy * oy + oz * oz);
       const nx = ox / length;
       const ny = oy / length;
       const nz = oz / length;
       
+      const totalDisp = freqDisp + bassDisp + midDisp + highDisp + kickPulse;
+      
       positionAttr.setXYZ(
         i,
-        (ox + nx * (displacement + wave + sparkle)) * globalScale,
-        (oy + ny * (displacement + wave + sparkle)) * globalScale,
-        (oz + nz * (displacement + wave + sparkle)) * globalScale
+        (ox + nx * totalDisp) * globalScale,
+        (oy + ny * totalDisp) * globalScale,
+        (oz + nz * totalDisp) * globalScale
       );
     }
     
     positionAttr.needsUpdate = true;
     
-    // Mid drives rotation, kick adds sudden twists
-    meshRef.current.rotation.y = time * 0.3 * (1 + mid * 0.5) + kick * 0.3;
-    meshRef.current.rotation.x = Math.sin(time * 0.5) * 0.2 * (1 + sub * 0.3);
+    // Premium: Organic rotation with smooth transitions
+    meshRef.current.rotation.y += 0.003 * (1 + smooth.mid * 0.5);
+    meshRef.current.rotation.x = Math.sin(time * 0.3) * 0.15 * (1 + smooth.sub * 0.3);
+    meshRef.current.rotation.z = Math.cos(time * 0.25) * 0.08 * smooth.high;
+    
+    // Premium: Dynamic material properties
+    const mat = meshRef.current.material as THREE.MeshStandardMaterial;
+    if (mat) {
+      mat.emissiveIntensity = 0.5 + smooth.energy * 0.8 * settings.intensity;
+    }
   });
 
   const colors = settings.colorPalette;
   
   return (
     <mesh ref={meshRef}>
-      <icosahedronGeometry args={[3, 4]} />
+      <icosahedronGeometry args={[3, 6]} />
       <meshStandardMaterial
         color={colors[0]}
         emissive={colors[1]}
-        emissiveIntensity={0.5}
+        emissiveIntensity={0.6}
         wireframe
         transparent
-        opacity={0.9}
+        opacity={0.92}
+        metalness={0.3}
+        roughness={0.5}
       />
     </mesh>
   );
 }
 
-// === PRESET 5: Audio Bars ===
+// === PRESET 5: Audio Bars (PREMIUM) ===
 function AudioBars({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const barCount = 64;
+  const barCount = 128; // Premium: Double the bars
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const smoothedHeights = useRef<Float32Array>(new Float32Array(barCount));
+  const smoothedAudioRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, energy: 0 });
 
   useFrame((state) => {
     if (!meshRef.current) return;
-    const { frequencyData, energy } = getAudioData();
+    const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
+    
+    // Premium: Smooth audio interpolation
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    const smooth = smoothedAudioRef.current;
+    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.1);
+    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.15);
+    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.18);
+    smooth.high = lerp(smooth.high, audioRaw.high, 0.22);
+    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
+    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.12);
+
+    // Premium: Global breathing from sub frequencies
+    const breathScale = 1 + smooth.sub * 0.15;
+    const radiusPulse = 5 + smooth.bass * 1.5 * settings.intensity;
 
     for (let i = 0; i < barCount; i++) {
-      const freqIndex = Math.floor((i / barCount) * (frequencyData?.length || 128));
-      const freqValue = (frequencyData?.[freqIndex] || 0) / 255;
+      const freqIndex = Math.floor((i / barCount) * (audioRaw.frequencyData?.length || 128));
+      const freqValue = (audioRaw.frequencyData?.[freqIndex] || 0) / 255;
+      
+      // Premium: Smooth height transitions
+      const targetHeight = 0.3 + freqValue * 10 * settings.intensity + smooth.kick * 2;
+      smoothedHeights.current[i] = lerp(smoothedHeights.current[i], targetHeight, 0.2);
+      const height = smoothedHeights.current[i];
       
       const angle = (i / barCount) * Math.PI * 2;
-      const radius = 5;
+      const waveOffset = Math.sin(time * 2 + i * 0.15) * 0.3 * smooth.mid;
       
-      const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius;
-      const height = 0.5 + freqValue * 8 * settings.intensity;
+      const x = Math.cos(angle) * (radiusPulse + waveOffset);
+      const z = Math.sin(angle) * (radiusPulse + waveOffset);
       
-      dummy.position.set(x, height / 2, z);
-      dummy.scale.set(0.3, height, 0.3);
+      dummy.position.set(x * breathScale, height / 2, z * breathScale);
+      dummy.scale.set(0.18, height, 0.18);
       dummy.rotation.set(0, -angle, 0);
       dummy.updateMatrix();
       
       meshRef.current.setMatrixAt(i, dummy.matrix);
       
-      const color = new THREE.Color(settings.colorPalette[i % settings.colorPalette.length]);
-      const hsl = { h: 0, s: 0, l: 0 };
-      color.getHSL(hsl);
-      color.setHSL(hsl.h, hsl.s, 0.3 + freqValue * 0.7);
+      // Premium: Dynamic color based on frequency and audio
+      const colorPhase = (i / barCount + time * 0.05) % 1;
+      const colorIdx = Math.floor(colorPhase * settings.colorPalette.length);
+      const color = new THREE.Color(settings.colorPalette[colorIdx % settings.colorPalette.length]);
+      
+      // Brightness based on frequency value
+      color.offsetHSL(smooth.high * 0.02, 0, freqValue * 0.3 + smooth.energy * 0.2);
       meshRef.current.setColorAt(i, color);
     }
     
@@ -395,53 +519,84 @@ function AudioBars({ getAudioData, settings }: { getAudioData: () => AudioData, 
   );
 }
 
-// === PRESET 6: Geometric Kaleidoscope ===
+// === PRESET 6: Geometric Kaleidoscope (PREMIUM) ===
 function GeometricKaleidoscope({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
   const groupRef = useRef<THREE.Group>(null);
   const meshRefs = useRef<THREE.Mesh[]>([]);
+  const smoothedAudioRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, energy: 0 });
+  
+  // Premium: More varied geometries with higher detail
   const geometries = useMemo(() => [
-    new THREE.OctahedronGeometry(1),
-    new THREE.TetrahedronGeometry(1),
-    new THREE.IcosahedronGeometry(1),
-    new THREE.DodecahedronGeometry(0.8),
+    new THREE.OctahedronGeometry(1, 1),
+    new THREE.TetrahedronGeometry(1, 1),
+    new THREE.IcosahedronGeometry(1, 1),
+    new THREE.DodecahedronGeometry(0.8, 1),
+    new THREE.TorusKnotGeometry(0.5, 0.2, 64, 8),
+    new THREE.TorusGeometry(0.6, 0.2, 16, 32),
   ], []);
 
-  const count = 24;
+  const count = 42; // Premium: More shapes
 
   useFrame((state) => {
     if (!groupRef.current) return;
-    const { bass, mid, high, energy } = getAudioData();
+    const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
+    
+    // Premium: Smooth audio interpolation
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    const smooth = smoothedAudioRef.current;
+    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.08);
+    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.12);
+    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.15);
+    smooth.high = lerp(smooth.high, audioRaw.high, 0.2);
+    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
+    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.1);
 
-    groupRef.current.rotation.y = time * 0.1;
-    groupRef.current.rotation.x = Math.sin(time * 0.3) * 0.3 * mid;
+    // Premium: Multi-axis rotation with smooth audio reactivity
+    groupRef.current.rotation.y += 0.002 * (1 + smooth.mid * 0.5);
+    groupRef.current.rotation.x = Math.sin(time * 0.2) * 0.25 * (1 + smooth.sub * 0.3);
+    groupRef.current.rotation.z = Math.cos(time * 0.15) * 0.1 * smooth.high;
 
     meshRefs.current.forEach((mesh, i) => {
       if (!mesh) return;
       
-      const layer = Math.floor(i / 6);
-      const angleInLayer = (i % 6) / 6 * Math.PI * 2;
-      const layerRadius = 2 + layer * 2.5;
+      const layer = Math.floor(i / 7);
+      const angleInLayer = (i % 7) / 7 * Math.PI * 2;
+      const layerRadius = 2 + layer * 2.2;
       
-      const x = Math.cos(angleInLayer + time * (0.5 + layer * 0.2)) * layerRadius;
-      const y = Math.sin(time * 2 + i) * (bass * settings.intensity * 2);
-      const z = Math.sin(angleInLayer + time * (0.5 + layer * 0.2)) * layerRadius;
+      // Premium: Organic movement with audio-driven oscillation
+      const orbitSpeed = 0.3 + layer * 0.12;
+      const bassWave = smooth.bass * 0.8 * Math.sin(time * 1.5 + i * 0.3);
+      const midWave = smooth.mid * 0.4 * Math.cos(time * 2 + i * 0.5);
+      
+      const x = Math.cos(angleInLayer + time * orbitSpeed) * (layerRadius + bassWave);
+      const y = Math.sin(time * 1.5 + i * 0.4) * (1 + smooth.bass * settings.intensity * 2) + midWave;
+      const z = Math.sin(angleInLayer + time * orbitSpeed) * (layerRadius + bassWave);
       
       mesh.position.set(x, y, z);
       
-      const rotSpeed = (layer + 1) * 0.5;
-      mesh.rotation.x = time * rotSpeed + i;
-      mesh.rotation.y = time * rotSpeed * 0.7;
-      mesh.rotation.z = Math.sin(time + i) * 0.5;
+      // Premium: Varied rotation speeds with smooth transitions
+      const rotSpeed = (layer + 1) * 0.3;
+      mesh.rotation.x += 0.01 * rotSpeed * (1 + smooth.mid * 0.5);
+      mesh.rotation.y += 0.008 * rotSpeed * (1 + smooth.high * 0.3);
+      mesh.rotation.z = Math.sin(time * 0.5 + i * 0.2) * 0.4 * (1 + smooth.kick * 0.5);
       
-      const scale = 0.5 + energy * settings.intensity + Math.sin(time * 3 + i) * 0.2;
-      mesh.scale.setScalar(scale);
+      // Premium: Dynamic scaling with kick response
+      const baseScale = 0.4 + (layer * 0.1);
+      const energyScale = smooth.energy * settings.intensity * 0.6;
+      const kickPop = smooth.kick * 0.4;
+      const breathe = Math.sin(time * 1.5 + i * 0.3) * 0.15;
+      mesh.scale.setScalar(baseScale + energyScale + kickPop + breathe);
       
+      // Premium: Dynamic color with hue shifting
       const mat = mesh.material as THREE.MeshStandardMaterial;
       if (mat) {
-        const color = new THREE.Color(settings.colorPalette[i % settings.colorPalette.length]);
+        const colorPhase = (i / count + time * 0.02) % 1;
+        const colorIdx = Math.floor(colorPhase * settings.colorPalette.length);
+        const color = new THREE.Color(settings.colorPalette[colorIdx % settings.colorPalette.length]);
+        color.offsetHSL(smooth.high * 0.03, 0, smooth.energy * 0.15);
         mat.emissive.copy(color);
-        mat.emissiveIntensity = 0.3 + high * settings.intensity * 2;
+        mat.emissiveIntensity = 0.4 + smooth.high * settings.intensity * 1.5 + smooth.kick * 0.5;
       }
     });
   });
@@ -458,10 +613,10 @@ function GeometricKaleidoscope({ getAudioData, settings }: { getAudioData: () =>
             color="#000000"
             emissive={settings.colorPalette[i % settings.colorPalette.length]}
             emissiveIntensity={1}
-            roughness={0.2}
-            metalness={0.8}
+            roughness={0.15}
+            metalness={0.9}
             transparent
-            opacity={0.9}
+            opacity={0.92}
           />
         </mesh>
       ))}
@@ -469,27 +624,36 @@ function GeometricKaleidoscope({ getAudioData, settings }: { getAudioData: () =>
   );
 }
 
-// === PRESET 7: Cosmic Web ===
+// === PRESET 7: Cosmic Web (PREMIUM) ===
 function CosmicWeb({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
   const pointsRef = useRef<THREE.Points>(null);
   const linesRef = useRef<THREE.LineSegments>(null);
-  const nodeCount = 100;
+  const nodeCount = 120; // Premium: Optimized node count for performance
+  const smoothedAudioRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, energy: 0 });
+  const tempColor = useMemo(() => new THREE.Color(), []); // Reused color object
   
-  const [nodePositions, velocities] = useMemo(() => {
+  const [nodePositions, velocities, basePositions] = useMemo(() => {
     const pos = new Float32Array(nodeCount * 3);
     const vel = new Float32Array(nodeCount * 3);
+    const base = new Float32Array(nodeCount * 3);
     for (let i = 0; i < nodeCount; i++) {
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      const r = 5 + Math.random() * 10;
-      pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-      pos[i * 3 + 2] = r * Math.cos(phi);
-      vel[i * 3] = (Math.random() - 0.5) * 0.02;
-      vel[i * 3 + 1] = (Math.random() - 0.5) * 0.02;
-      vel[i * 3 + 2] = (Math.random() - 0.5) * 0.02;
+      const r = 6 + Math.random() * 12;
+      const x = r * Math.sin(phi) * Math.cos(theta);
+      const y = r * Math.sin(phi) * Math.sin(theta);
+      const z = r * Math.cos(phi);
+      pos[i * 3] = x;
+      pos[i * 3 + 1] = y;
+      pos[i * 3 + 2] = z;
+      base[i * 3] = x;
+      base[i * 3 + 1] = y;
+      base[i * 3 + 2] = z;
+      vel[i * 3] = (Math.random() - 0.5) * 0.03;
+      vel[i * 3 + 1] = (Math.random() - 0.5) * 0.03;
+      vel[i * 3 + 2] = (Math.random() - 0.5) * 0.03;
     }
-    return [pos, vel];
+    return [pos, vel, base];
   }, []);
 
   const linePositions = useMemo(() => {
@@ -502,16 +666,40 @@ function CosmicWeb({ getAudioData, settings }: { getAudioData: () => AudioData, 
 
   useFrame((state) => {
     if (!pointsRef.current || !linesRef.current) return;
-    const { bass, mid, high, energy } = getAudioData();
+    const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
+    
+    // Premium: Smooth audio interpolation
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    const smooth = smoothedAudioRef.current;
+    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.08);
+    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.12);
+    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.15);
+    smooth.high = lerp(smooth.high, audioRaw.high, 0.2);
+    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
+    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.1);
 
     const posAttr = pointsRef.current.geometry.attributes.position;
-    const connectionThreshold = 4 + energy * settings.intensity * 3;
+    
+    // Premium: Dynamic connection threshold based on multiple audio bands
+    const connectionThreshold = 3.5 + smooth.energy * settings.intensity * 2.5 + smooth.bass * 1.5;
+    
+    // Premium: Breathing effect from sub frequencies
+    const breathScale = 1 + smooth.sub * 0.15;
     
     for (let i = 0; i < nodeCount; i++) {
-      const x = nodePositions[i * 3] + Math.sin(time + i) * velocities[i * 3] * energy * 10;
-      const y = nodePositions[i * 3 + 1] + Math.cos(time + i * 1.3) * velocities[i * 3 + 1] * energy * 10;
-      const z = nodePositions[i * 3 + 2] + Math.sin(time * 0.7 + i) * velocities[i * 3 + 2] * energy * 10;
+      const bx = basePositions[i * 3];
+      const by = basePositions[i * 3 + 1];
+      const bz = basePositions[i * 3 + 2];
+      
+      // Premium: Layered noise motion with multiple frequencies
+      const noise1 = Math.sin(time * 0.5 + i * 0.1) * velocities[i * 3] * smooth.energy * 15;
+      const noise2 = Math.cos(time * 0.7 + i * 0.13) * velocities[i * 3 + 1] * smooth.mid * 8;
+      const noise3 = Math.sin(time * 0.3 + i * 0.17) * velocities[i * 3 + 2] * smooth.bass * 6;
+      
+      const x = (bx + noise1 + noise3) * breathScale;
+      const y = (by + noise2) * breathScale;
+      const z = (bz + noise1 * 0.5 + noise2 * 0.5) * breathScale;
       
       posAttr.setXYZ(i, x, y, z);
     }
@@ -522,25 +710,35 @@ function CosmicWeb({ getAudioData, settings }: { getAudioData: () => AudioData, 
     const linePosAttr = lineGeom.attributes.position;
     const lineColorAttr = lineGeom.attributes.color;
 
+    // Premium: Optimized connection calculation
     for (let i = 0; i < nodeCount; i++) {
+      const x1 = posAttr.getX(i);
+      const y1 = posAttr.getY(i);
+      const z1 = posAttr.getZ(i);
+      
       for (let j = i + 1; j < nodeCount; j++) {
-        const x1 = posAttr.getX(i);
-        const y1 = posAttr.getY(i);
-        const z1 = posAttr.getZ(i);
         const x2 = posAttr.getX(j);
         const y2 = posAttr.getY(j);
         const z2 = posAttr.getZ(j);
         
-        const dist = Math.sqrt((x2-x1)**2 + (y2-y1)**2 + (z2-z1)**2);
+        const dx = x2 - x1, dy = y2 - y1, dz = z2 - z1;
+        const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
         
         if (dist < connectionThreshold && lineIndex < nodeCount * nodeCount * 2) {
           linePosAttr.setXYZ(lineIndex * 2, x1, y1, z1);
           linePosAttr.setXYZ(lineIndex * 2 + 1, x2, y2, z2);
           
-          const color = new THREE.Color(settings.colorPalette[(i + j) % settings.colorPalette.length]);
-          const alpha = 1 - dist / connectionThreshold;
-          lineColorAttr.setXYZ(lineIndex * 2, color.r * alpha, color.g * alpha, color.b * alpha);
-          lineColorAttr.setXYZ(lineIndex * 2 + 1, color.r * alpha, color.g * alpha, color.b * alpha);
+          // Premium: Gradient colors along connections (reusing tempColor)
+          const colorPhase = ((i + j) / nodeCount + time * 0.02) % 1;
+          const colorIdx = Math.floor(colorPhase * settings.colorPalette.length);
+          tempColor.set(settings.colorPalette[colorIdx % settings.colorPalette.length]);
+          
+          // Brightness based on distance and audio
+          const alpha = (1 - dist / connectionThreshold) * (0.6 + smooth.high * 0.4);
+          tempColor.offsetHSL(smooth.high * 0.02, 0, smooth.energy * 0.1);
+          
+          lineColorAttr.setXYZ(lineIndex * 2, tempColor.r * alpha, tempColor.g * alpha, tempColor.b * alpha);
+          lineColorAttr.setXYZ(lineIndex * 2 + 1, tempColor.r * alpha * 0.7, tempColor.g * alpha * 0.7, tempColor.b * alpha * 0.7);
           
           lineIndex++;
         }
@@ -554,8 +752,11 @@ function CosmicWeb({ getAudioData, settings }: { getAudioData: () => AudioData, 
     linePosAttr.needsUpdate = true;
     lineColorAttr.needsUpdate = true;
     
-    pointsRef.current.rotation.y = time * 0.1;
-    linesRef.current.rotation.y = time * 0.1;
+    // Premium: Smooth multi-axis rotation
+    pointsRef.current.rotation.y += 0.002 * (1 + smooth.mid * 0.3);
+    pointsRef.current.rotation.x = smooth.sub * 0.1 * Math.sin(time * 0.2);
+    linesRef.current.rotation.y = pointsRef.current.rotation.y;
+    linesRef.current.rotation.x = pointsRef.current.rotation.x;
   });
 
   return (

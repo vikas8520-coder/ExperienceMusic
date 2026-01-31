@@ -4,7 +4,17 @@ import { UIControls, type ThumbnailAnalysis } from "@/components/UIControls";
 import { TrackLibrary } from "@/components/TrackLibrary";
 import { TopPlayerDrawer } from "@/components/TopPlayerDrawer";
 import { useAudioAnalyzer } from "@/hooks/use-audio-analyzer";
-import { colorPalettes, type PresetName, type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
+import { 
+  colorPalettes, 
+  type PresetName, 
+  type ImageFilterId, 
+  type PsyOverlayId,
+  type ColorSettings,
+  type ColorModeId,
+  type MoodPresetId,
+  defaultColorSettings,
+  generateColorPalette
+} from "@/lib/visualizer-presets";
 import { useCreatePreset } from "@/hooks/use-presets";
 import { useToast } from "@/hooks/use-toast";
 
@@ -64,15 +74,34 @@ export default function Home() {
   const { toast } = useToast();
   const createPreset = useCreatePreset();
 
+  const [colorSettings, setColorSettings] = useState<ColorSettings>(defaultColorSettings);
+  const [colorTime, setColorTime] = useState(0);
+  
+  // Update color time for spectrum mode
+  useEffect(() => {
+    if (colorSettings.mode === "spectrum") {
+      const interval = setInterval(() => {
+        setColorTime(t => t + 0.1);
+      }, 100);
+      return () => clearInterval(interval);
+    }
+  }, [colorSettings.mode]);
+  
   const [settings, setSettings] = useState({
     intensity: 1.0,
     speed: 0.5,
-    colorPalette: colorPalettes[0].colors,
+    colorPalette: generateColorPalette(defaultColorSettings),
     presetName: "Energy Rings" as PresetName,
     presetEnabled: true,
     imageFilters: ["none"] as ImageFilterId[],
     psyOverlays: [] as PsyOverlayId[],
   });
+  
+  // Update color palette when color settings or time changes
+  useEffect(() => {
+    const newPalette = generateColorPalette(colorSettings, colorTime);
+    setSettings(prev => ({ ...prev, colorPalette: newPalette }));
+  }, [colorSettings, colorTime]);
 
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -568,6 +597,8 @@ export default function Home() {
         onFileUpload={handleFileUpload}
         settings={settings}
         setSettings={setSettings}
+        colorSettings={colorSettings}
+        setColorSettings={setColorSettings}
         isRecording={isRecording}
         onToggleRecording={toggleRecording}
         onSavePreset={handleSavePreset}

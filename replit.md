@@ -71,6 +71,20 @@ Preferred communication style: Simple, everyday language.
 - **Keyboard Shortcuts**: Space (play/pause), Arrow keys (volume/seek), F (fullscreen), M (mute with volume preservation)
 - **Mute Toggle**: Preserves previous volume level for seamless unmute
 
+### Premium Visual Presets
+All 7 main presets upgraded to premium quality with:
+- **Smooth Audio Interpolation**: Per-band lerp smoothing (sub: 0.06-0.08, bass: 0.1-0.15, mid: 0.12-0.18, high: 0.18-0.22, kick: 0.2-0.25)
+- **Higher Detail Geometries**:
+  - EnergyRings: 24 rings, 128 torus segments, multi-axis rotation
+  - ParticleField: 5000 particles, spherical distribution, dynamic global size
+  - WaveformSphere: 6 subdivisions, layered displacement
+  - AudioBars: 128 bars, smooth height transitions
+  - GeometricKaleidoscope: 42 shapes, 6 geometry types
+  - CosmicWeb: 120 nodes with optimized connection calculation
+- **Multi-Layered Audio Reactivity**: Separate responses for sub/bass/mid/high/kick/energy per preset
+- **Dynamic Material Properties**: Emissive intensity, opacity, and color shift based on audio
+- **Performance Optimizations**: Reused Color objects, dynamic material sizes
+
 ### Data Flow
 1. User uploads audio file → stored as blob URL
 2. Audio element connected to Web Audio API AnalyserNode
