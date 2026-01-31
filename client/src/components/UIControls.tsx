@@ -13,7 +13,6 @@ import {
 import { Upload, Save, Disc, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { colorPalettes, presets, imageFilters, psyOverlays, type PresetName, type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
-import { motion, AnimatePresence } from "framer-motion";
 
 interface UIControlsProps {
   isPlaying: boolean;
