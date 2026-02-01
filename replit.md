@@ -63,6 +63,28 @@ Preferred communication style: Simple, everyday language.
 - **Fallback**: 2D animated visualization with pulsing rings using the selected color palette
 - **Thumbnail Integration**: Background image works in both WebGL and fallback modes
 
+### Premium Image Filters
+GPU-accelerated shader-based image filters applied to background thumbnails with audio-reactive modulation:
+
+**Filter Effects (9 types):**
+- **None**: Clean display with subtle vignette
+- **Kaleidoscope**: Multi-layer kaleidoscope with glow, radial brightness, audio-reactive segment count
+- **Mirror Fractal**: Multi-iteration fractal reflections with chromatic aberration and HSL color cycling
+- **Color Shift**: HSL-based hue rotation with wave distortion and film grain
+- **Invert Pulse**: Smooth wave-based inversion zones with audio-reactive color tints
+- **Mosaic**: Smooth-edged tiles with variable size based on energy, tile glow effects
+- **RGB Split**: Radial chromatic aberration with barrel distortion and scan lines
+- **Liquid Wave**: Complex multi-layer wave distortion with FBM noise and caustic highlights
+- **Zoom Pulse**: Multi-sample radial motion blur with radial glow and chromatic edges
+
+**Premium Shader Features:**
+- High-quality noise (hash-based) and FBM (5 octaves) for organic textures
+- HSL color space manipulation for natural color transitions
+- Barrel distortion for realistic lens effects
+- Film grain overlay for cinematic feel
+- Dynamic vignette per filter
+- Per-band audio reactivity (bass, mid, high, energy)
+
 ### Quality Enhancements
 - **Post-Processing**: High-quality bloom (4x multisampling, large kernel), smooth chromatic aberration, vignette effects
 - **Smooth Transitions**: Fade effect when switching between visual presets via PresetTransition component

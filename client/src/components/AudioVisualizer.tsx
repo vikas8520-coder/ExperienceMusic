@@ -3071,7 +3071,7 @@ function ResonantFieldLines({ getAudioData, settings }: { getAudioData: () => Au
   );
 }
 
-// Psy trance shader material for background image
+// Premium Image Filter Shader Material
 const PsyFilterMaterial = shaderMaterial(
   {
     uTexture: null,
@@ -3079,6 +3079,9 @@ const PsyFilterMaterial = shaderMaterial(
     uIntensity: 1.0,
     uFilterType: 0,
     uEnergy: 0,
+    uBass: 0,
+    uMid: 0,
+    uHigh: 0,
   },
   // Vertex shader
   `
@@ -3088,135 +3091,345 @@ const PsyFilterMaterial = shaderMaterial(
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `,
-  // Fragment shader
+  // Fragment shader - Premium Quality Filters
   `
     uniform sampler2D uTexture;
     uniform float uTime;
     uniform float uIntensity;
     uniform int uFilterType;
     uniform float uEnergy;
+    uniform float uBass;
+    uniform float uMid;
+    uniform float uHigh;
     varying vec2 vUv;
     
     #define PI 3.14159265359
+    #define TAU 6.28318530718
     
-    vec2 kaleidoscope(vec2 uv, float segments) {
+    // High-quality noise function
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+    
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      f = f * f * (3.0 - 2.0 * f); // Smoothstep
+      float a = hash(i);
+      float b = hash(i + vec2(1.0, 0.0));
+      float c = hash(i + vec2(0.0, 1.0));
+      float d = hash(i + vec2(1.0, 1.0));
+      return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+    }
+    
+    // Fractal brownian motion for organic textures
+    float fbm(vec2 p) {
+      float value = 0.0;
+      float amplitude = 0.5;
+      float frequency = 1.0;
+      for (int i = 0; i < 5; i++) {
+        value += amplitude * noise(p * frequency);
+        frequency *= 2.0;
+        amplitude *= 0.5;
+      }
+      return value;
+    }
+    
+    // Premium kaleidoscope with smooth edges
+    vec2 kaleidoscopePremium(vec2 uv, float segments, float rotation) {
+      vec2 centered = uv - 0.5;
+      float angle = atan(centered.y, centered.x) + rotation;
+      float radius = length(centered);
+      float segmentAngle = TAU / segments;
+      angle = mod(angle, segmentAngle);
+      angle = abs(angle - segmentAngle * 0.5);
+      // Smooth edge blending
+      float edgeFade = smoothstep(0.0, 0.02, abs(angle - segmentAngle * 0.25));
+      vec2 result = vec2(cos(angle), sin(angle)) * radius + 0.5;
+      return result;
+    }
+    
+    // Premium fractal mirror with multiple reflections
+    vec2 fractalMirror(vec2 uv, float time) {
       vec2 centered = uv - 0.5;
       float angle = atan(centered.y, centered.x);
       float radius = length(centered);
-      float segmentAngle = PI * 2.0 / segments;
-      angle = mod(angle, segmentAngle);
-      angle = abs(angle - segmentAngle * 0.5);
-      return vec2(cos(angle), sin(angle)) * radius + 0.5;
+      
+      // Multiple reflection layers
+      for (int i = 0; i < 3; i++) {
+        float fi = float(i);
+        centered = abs(centered) - 0.2 * (1.0 + sin(time * 0.5 + fi));
+        float a = time * 0.2 * (fi + 1.0);
+        mat2 rot = mat2(cos(a), -sin(a), sin(a), cos(a));
+        centered *= rot;
+      }
+      
+      return centered + 0.5;
     }
     
-    vec2 mirror(vec2 uv) {
+    // HSL to RGB conversion for premium color manipulation
+    vec3 hsl2rgb(vec3 hsl) {
+      float h = hsl.x;
+      float s = hsl.y;
+      float l = hsl.z;
+      float c = (1.0 - abs(2.0 * l - 1.0)) * s;
+      float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
+      float m = l - c / 2.0;
+      vec3 rgb;
+      if (h < 1.0/6.0) rgb = vec3(c, x, 0.0);
+      else if (h < 2.0/6.0) rgb = vec3(x, c, 0.0);
+      else if (h < 3.0/6.0) rgb = vec3(0.0, c, x);
+      else if (h < 4.0/6.0) rgb = vec3(0.0, x, c);
+      else if (h < 5.0/6.0) rgb = vec3(x, 0.0, c);
+      else rgb = vec3(c, 0.0, x);
+      return rgb + m;
+    }
+    
+    // RGB to HSL for premium color shifts
+    vec3 rgb2hsl(vec3 rgb) {
+      float maxC = max(rgb.r, max(rgb.g, rgb.b));
+      float minC = min(rgb.r, min(rgb.g, rgb.b));
+      float l = (maxC + minC) / 2.0;
+      float s = 0.0;
+      float h = 0.0;
+      if (maxC != minC) {
+        float d = maxC - minC;
+        s = l > 0.5 ? d / (2.0 - maxC - minC) : d / (maxC + minC);
+        if (maxC == rgb.r) h = (rgb.g - rgb.b) / d + (rgb.g < rgb.b ? 6.0 : 0.0);
+        else if (maxC == rgb.g) h = (rgb.b - rgb.r) / d + 2.0;
+        else h = (rgb.r - rgb.g) / d + 4.0;
+        h /= 6.0;
+      }
+      return vec3(h, s, l);
+    }
+    
+    // Premium chromatic aberration
+    vec3 chromaticAberration(sampler2D tex, vec2 uv, float amount) {
+      vec2 dir = normalize(uv - 0.5);
+      float dist = length(uv - 0.5);
+      float aberration = amount * dist * dist;
+      float r = texture2D(tex, uv + dir * aberration).r;
+      float g = texture2D(tex, uv).g;
+      float b = texture2D(tex, uv - dir * aberration).b;
+      return vec3(r, g, b);
+    }
+    
+    // Barrel distortion for premium lens effects
+    vec2 barrelDistort(vec2 uv, float amount) {
       vec2 centered = uv - 0.5;
-      float angle = atan(centered.y, centered.x) + uTime * 0.3;
-      float radius = length(centered);
-      vec2 mirrored = vec2(abs(centered.x), abs(centered.y));
-      float wave = sin(angle * 4.0 + uTime) * 0.1 * uIntensity;
-      return mirrored + 0.5 + wave;
+      float dist = length(centered);
+      float distortion = 1.0 + dist * dist * amount;
+      return centered * distortion + 0.5;
     }
     
-    vec3 colorShift(vec3 color, float shift) {
-      float r = color.r;
-      float g = color.g;
-      float b = color.b;
-      float angle = shift * PI * 2.0;
-      mat3 rotation = mat3(
-        0.299 + 0.701 * cos(angle), 0.587 - 0.587 * cos(angle), 0.114 - 0.114 * cos(angle),
-        0.299 - 0.299 * cos(angle), 0.587 + 0.413 * cos(angle), 0.114 - 0.114 * cos(angle),
-        0.299 - 0.299 * cos(angle), 0.587 - 0.587 * cos(angle), 0.114 + 0.886 * cos(angle)
-      );
-      return rotation * color;
+    // Film grain effect
+    float filmGrain(vec2 uv, float time, float amount) {
+      return (hash(uv * 1000.0 + time * 100.0) - 0.5) * amount;
     }
     
-    vec2 wave(vec2 uv) {
-      float waveX = sin(uv.y * 10.0 + uTime * 2.0) * 0.02 * uIntensity;
-      float waveY = cos(uv.x * 10.0 + uTime * 2.0) * 0.02 * uIntensity;
-      return uv + vec2(waveX, waveY);
-    }
-    
-    vec2 pixelate(vec2 uv, float pixels) {
-      float dx = 1.0 / pixels;
-      float dy = 1.0 / pixels;
-      return vec2(dx * floor(uv.x / dx), dy * floor(uv.y / dy));
+    // Vignette effect
+    float vignette(vec2 uv, float radius, float softness) {
+      float dist = length(uv - 0.5);
+      return 1.0 - smoothstep(radius - softness, radius + softness, dist);
     }
     
     void main() {
       vec2 uv = vUv;
       vec3 color;
-      float opacity = 0.35;
+      float opacity = 0.4;
+      float audioMod = uEnergy * 0.5 + uBass * 0.3 + uMid * 0.2;
       
-      // Filter type 0: None
+      // Filter type 0: None (Enhanced with subtle vignette)
       if (uFilterType == 0) {
         color = texture2D(uTexture, uv).rgb;
+        color *= vignette(uv, 0.85, 0.3);
       }
-      // Filter type 1: Kaleidoscope
+      
+      // Filter type 1: Premium Kaleidoscope with glow
       else if (uFilterType == 1) {
-        float segments = 6.0 + uEnergy * 6.0;
-        vec2 kUv = kaleidoscope(uv, segments);
-        kUv = fract(kUv + uTime * 0.05);
-        color = texture2D(uTexture, kUv).rgb;
+        float segments = 6.0 + floor(uEnergy * 6.0);
+        float rotation = uTime * 0.2 + uBass * 0.5;
+        vec2 kUv = kaleidoscopePremium(uv, segments, rotation);
+        
+        // Multi-layer sampling for glow effect
+        vec3 baseColor = texture2D(uTexture, fract(kUv + uTime * 0.03)).rgb;
+        vec3 glowColor = texture2D(uTexture, fract(kUv * 1.02 + uTime * 0.03)).rgb;
+        color = mix(baseColor, glowColor, 0.3 + uHigh * 0.2);
+        
+        // Add radial glow
+        float radialGlow = 1.0 - length(uv - 0.5) * 1.5;
+        color += color * radialGlow * 0.3 * uEnergy;
+        color *= vignette(uv, 0.7, 0.4);
+        opacity = 0.55;
+      }
+      
+      // Filter type 2: Premium Fractal Mirror
+      else if (uFilterType == 2) {
+        vec2 mUv = fractalMirror(uv, uTime);
+        mUv = fract(mUv);
+        
+        // Chromatic aberration on mirror
+        color = chromaticAberration(uTexture, mUv, 0.02 * uIntensity);
+        
+        // Color cycling based on position
+        vec3 hsl = rgb2hsl(color);
+        hsl.x = fract(hsl.x + uTime * 0.05 + length(uv - 0.5) * 0.2);
+        hsl.y = min(1.0, hsl.y * (1.0 + uMid * 0.3));
+        color = hsl2rgb(hsl);
+        
+        color *= vignette(uv, 0.75, 0.35);
         opacity = 0.5;
       }
-      // Filter type 2: Mirror Fractal
-      else if (uFilterType == 2) {
-        vec2 mUv = mirror(uv);
-        mUv = fract(mUv);
-        color = texture2D(uTexture, mUv).rgb;
-        color = mix(color, colorShift(color, uTime * 0.1), 0.3);
+      
+      // Filter type 3: Premium Color Shift with gradient mapping
+      else if (uFilterType == 3) {
+        vec2 distortUv = uv + vec2(
+          sin(uv.y * 8.0 + uTime * 2.0) * 0.01 * uBass,
+          cos(uv.x * 8.0 + uTime * 2.0) * 0.01 * uBass
+        );
+        color = texture2D(uTexture, distortUv).rgb;
+        
+        // Premium HSL-based color cycling
+        vec3 hsl = rgb2hsl(color);
+        hsl.x = fract(hsl.x + uTime * 0.15 + uEnergy * 0.3);
+        hsl.s = min(1.0, hsl.s * (1.2 + uHigh * 0.3));
+        hsl.z = hsl.z * (0.9 + uEnergy * 0.2);
+        color = hsl2rgb(hsl);
+        
+        // Add subtle grain
+        color += filmGrain(uv, uTime, 0.03);
+        color *= vignette(uv, 0.8, 0.3);
         opacity = 0.45;
       }
-      // Filter type 3: Color Shift
-      else if (uFilterType == 3) {
-        color = texture2D(uTexture, uv).rgb;
-        float shift = uTime * 0.2 + uEnergy * 0.5;
-        color = colorShift(color, shift);
-        color = mix(color, vec3(1.0) - color, sin(uTime) * 0.2 + 0.2);
-        opacity = 0.4;
-      }
-      // Filter type 4: Invert Pulse
+      
+      // Filter type 4: Premium Invert with smooth transitions
       else if (uFilterType == 4) {
         color = texture2D(uTexture, uv).rgb;
-        float pulse = (sin(uTime * 2.0) * 0.5 + 0.5) * uEnergy;
-        color = mix(color, vec3(1.0) - color, pulse);
-        opacity = 0.4;
+        
+        // Smooth wave-based inversion
+        float wave = sin(uv.x * 6.0 + uTime * 3.0) * sin(uv.y * 6.0 + uTime * 2.0);
+        float invertAmount = smoothstep(-0.5, 0.5, wave) * (0.5 + uEnergy * 0.5);
+        
+        vec3 inverted = vec3(1.0) - color;
+        color = mix(color, inverted, invertAmount);
+        
+        // Add subtle color tint based on audio
+        color.r += uBass * 0.1;
+        color.b += uHigh * 0.1;
+        
+        color *= vignette(uv, 0.8, 0.3);
+        opacity = 0.45;
       }
-      // Filter type 5: Pixelate
+      
+      // Filter type 5: Premium Mosaic with smooth tiles
       else if (uFilterType == 5) {
-        float pixels = 100.0 - uEnergy * 80.0;
-        vec2 pUv = pixelate(uv, max(pixels, 10.0));
-        color = texture2D(uTexture, pUv).rgb;
-        opacity = 0.45;
+        float tileSize = mix(80.0, 12.0, uEnergy);
+        vec2 tileUv = floor(uv * tileSize) / tileSize;
+        vec2 tileCenter = tileUv + 0.5 / tileSize;
+        
+        // Smooth tile edges
+        vec2 tilePos = fract(uv * tileSize);
+        float tileFade = smoothstep(0.0, 0.1, tilePos.x) * smoothstep(1.0, 0.9, tilePos.x);
+        tileFade *= smoothstep(0.0, 0.1, tilePos.y) * smoothstep(1.0, 0.9, tilePos.y);
+        
+        vec3 tileColor = texture2D(uTexture, tileCenter).rgb;
+        vec3 originalColor = texture2D(uTexture, uv).rgb;
+        color = mix(originalColor, tileColor, tileFade * 0.8);
+        
+        // Add tile glow
+        color += tileColor * (1.0 - tileFade) * 0.2 * uHigh;
+        color *= vignette(uv, 0.8, 0.3);
+        opacity = 0.5;
       }
-      // Filter type 6: RGB Split
+      
+      // Filter type 6: Premium RGB Split with radial distortion
       else if (uFilterType == 6) {
-        float offset = 0.01 * uIntensity * (1.0 + uEnergy);
-        float r = texture2D(uTexture, uv + vec2(offset, 0.0)).r;
+        float amount = 0.015 * uIntensity * (1.0 + uEnergy * 2.0);
+        
+        // Radial chromatic aberration
+        vec2 dir = uv - 0.5;
+        float dist = length(dir);
+        vec2 offset = normalize(dir) * amount * (1.0 + dist);
+        
+        // Sample with barrel distortion
+        vec2 rUv = barrelDistort(uv + offset, 0.1 * uBass);
+        vec2 bUv = barrelDistort(uv - offset, 0.1 * uBass);
+        
+        float r = texture2D(uTexture, rUv).r;
         float g = texture2D(uTexture, uv).g;
-        float b = texture2D(uTexture, uv - vec2(offset, 0.0)).b;
+        float b = texture2D(uTexture, bUv).b;
         color = vec3(r, g, b);
-        opacity = 0.4;
-      }
-      // Filter type 7: Wave Distort
-      else if (uFilterType == 7) {
-        vec2 wUv = wave(uv);
-        color = texture2D(uTexture, wUv).rgb;
-        float pulse = sin(uTime * 3.0) * 0.5 + 0.5;
-        color *= 0.8 + pulse * 0.4;
+        
+        // Add scan lines
+        float scanLine = sin(uv.y * 400.0 + uTime * 5.0) * 0.03;
+        color += scanLine * uHigh;
+        
+        color *= vignette(uv, 0.75, 0.35);
         opacity = 0.45;
       }
-      // Filter type 8: Zoom Pulse
-      else if (uFilterType == 8) {
-        float zoom = 1.0 + sin(uTime * 2.0) * 0.1 * uIntensity * (1.0 + uEnergy);
-        vec2 centered = (uv - 0.5) / zoom + 0.5;
-        color = texture2D(uTexture, centered).rgb;
-        opacity = 0.4;
+      
+      // Filter type 7: Premium Liquid Wave
+      else if (uFilterType == 7) {
+        // Complex wave distortion
+        vec2 waveUv = uv;
+        float waveAmount = 0.03 * uIntensity;
+        
+        waveUv.x += sin(uv.y * 12.0 + uTime * 3.0) * waveAmount * (1.0 + uBass);
+        waveUv.y += cos(uv.x * 12.0 + uTime * 2.5) * waveAmount * (1.0 + uBass);
+        waveUv.x += sin(uv.y * 6.0 - uTime * 2.0) * waveAmount * 0.5 * uMid;
+        waveUv.y += cos(uv.x * 6.0 - uTime * 1.5) * waveAmount * 0.5 * uMid;
+        
+        // Add organic noise distortion
+        float noiseVal = fbm(uv * 4.0 + uTime * 0.5);
+        waveUv += (noiseVal - 0.5) * 0.02 * uEnergy;
+        
+        color = chromaticAberration(uTexture, waveUv, 0.01 * uHigh);
+        
+        // Caustic-like highlights
+        float caustic = pow(noiseVal, 3.0) * uEnergy;
+        color += caustic * 0.3;
+        
+        color *= vignette(uv, 0.8, 0.3);
+        opacity = 0.5;
       }
+      
+      // Filter type 8: Premium Zoom Pulse with motion blur
+      else if (uFilterType == 8) {
+        float zoomAmount = sin(uTime * 2.0) * 0.12 * uIntensity * (1.0 + uEnergy);
+        
+        // Multi-sample radial blur
+        vec3 blurColor = vec3(0.0);
+        int samples = 8;
+        for (int i = 0; i < 8; i++) {
+          float t = float(i) / float(samples);
+          float zoom = 1.0 + zoomAmount * t;
+          vec2 zoomUv = (uv - 0.5) / zoom + 0.5;
+          blurColor += texture2D(uTexture, zoomUv).rgb;
+        }
+        color = blurColor / float(samples);
+        
+        // Add radial glow
+        float radialIntensity = 1.0 - length(uv - 0.5) * 1.8;
+        radialIntensity = max(0.0, radialIntensity);
+        color += color * radialIntensity * 0.3 * uBass;
+        
+        // Subtle chromatic edges
+        color = mix(color, chromaticAberration(uTexture, uv, 0.005 * uHigh), 0.3);
+        
+        color *= vignette(uv, 0.7, 0.4);
+        opacity = 0.45;
+      }
+      
       else {
         color = texture2D(uTexture, uv).rgb;
       }
+      
+      // Global enhancements for all filters
+      // Subtle film grain for premium feel
+      color += filmGrain(uv, uTime, 0.015);
+      
+      // Clamp to valid range
+      color = clamp(color, 0.0, 1.0);
       
       gl_FragColor = vec4(color, opacity);
     }
@@ -3275,8 +3488,11 @@ function BackgroundImage({
       materialRef.current.uIntensity = intensity;
       
       if (getAudioData) {
-        const { energy } = getAudioData();
-        materialRef.current.uEnergy = energy;
+        const audioData = getAudioData();
+        materialRef.current.uEnergy = audioData.energy;
+        materialRef.current.uBass = audioData.bass;
+        materialRef.current.uMid = audioData.mid;
+        materialRef.current.uHigh = audioData.high;
       }
     }
   });
