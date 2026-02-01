@@ -1,0 +1,264 @@
+Perfect — **Option B (native wrapper owns auth + playback UI, Unity is the visual engine screen)** is the cleanest, most scalable architecture for what you’re building.
+
+Below is a **step-by-step build process** you can follow in order, with exactly what to implement in **Unity**, **iOS (SwiftUI)**, and **Android (Jetpack Compose/Kotlin)**.
+
+---
+
+## Step 1 — Build Unity Visual Engine as a self-contained module
+
+**Goal:** Unity can render your 4 presets and react to `bass/mid/high` values *without* being tied to any music service.
+
+1. Create Unity project (URP recommended).
+2. Create a scene: `VisualizerScene`.
+3. Implement **4 preset shaders** (fullscreen quad or plane):
+
+   * Blue/Green Tunnel
+   * B/W Vortex
+   * Rainbow Spiral
+   * Red/Purple Mandala
+4. Add post effects in Unity:
+
+   * Bloom
+   * Chromatic aberration
+   * Trails/Afterimage (feedback style)
+   * Vignette / Noise
+5. Add a **Preset Manager** in Unity:
+
+   * dropdown/select preset
+   * sliders: intensity, speed, trails, blend amount
+6. Implement an **AudioReactiveController** that accepts `bass/mid/high` and smooths them:
+
+   * fast attack, slower release on bass
+   * fast response on highs
+   * normalize 0..1
+
+✅ Deliverable: Unity visualizer feels like the video using test inputs (even fake bands).
+
+---
+
+## Step 2 — Define the Native → Unity “Bridge Contract”
+
+**Goal:** native sends Unity a standard message format no matter the source.
+
+Use 3 message types:
+
+### 1) Track metadata
+
+```json
+{ "type":"track", "source":"spotify", "title":"...", "artist":"...", "artworkUrl":"...", "durationMs": 210000 }
+```
+
+### 2) Playback state
+
+```json
+{ "type":"playback", "isPlaying": true, "positionMs": 12345 }
+```
+
+### 3) Audio bands (sent frequently)
+
+```json
+{ "type":"bands", "bass":0.62, "mid":0.41, "high":0.28 }
+```
+
+✅ Deliverable: your app has a single “language” across iOS/Android.
+
+---
+
+## Step 3 — Implement Unity Bridge Receiver
+
+**Goal:** Unity can receive JSON strings and update visuals.
+
+1. Create a GameObject named `NativeBridge`.
+2. Add `NativeBridgeReceiver.cs` with methods:
+
+   * `OnNativeMessage(string json)`
+3. Parse JSON and route:
+
+   * `type=track` → update on-screen metadata + artwork loader
+   * `type=playback` → update play indicator
+   * `type=bands` → update `AudioReactiveController`
+
+✅ Deliverable: Unity responds to native messages (you can test with mock messages in Editor).
+
+---
+
+## Step 4 — Build the iOS wrapper (SwiftUI) and embed Unity
+
+**Goal:** iOS app can show login/library UI and then open Unity as a screen.
+
+1. Create a SwiftUI iOS app.
+2. Add Unity as a Library (Unity iOS export + integrate into Xcode).
+3. Make a SwiftUI screen flow:
+
+   * Connect Sources
+   * Library/Search
+   * Now Playing (optional)
+   * Visualizer (Unity view)
+4. Implement sending messages to Unity using:
+
+   * `UnitySendMessage("NativeBridge", "OnNativeMessage", jsonString)`
+
+✅ Deliverable: iOS app can open Unity and send a test `"bands"` message.
+
+---
+
+## Step 5 — Build the Android wrapper (Kotlin + Jetpack Compose) and embed Unity
+
+**Goal:** Android app mirrors iOS and opens Unity as a screen.
+
+1. Create Android app (Compose).
+2. Import Unity as Library module.
+3. UI flow same as iOS:
+
+   * Connect Sources
+   * Library/Search
+   * Visualizer (Unity Activity/View)
+4. Send messages:
+
+   * `UnityPlayer.UnitySendMessage("NativeBridge","OnNativeMessage", jsonString)`
+
+✅ Deliverable: Android can open Unity and send test messages.
+
+---
+
+## Step 6 — Implement Spotify first (best cross-platform)
+
+**Goal:** real account connect + playback in wrapper, while Unity just visualizes.
+
+### iOS + Android in wrapper:
+
+1. Implement Spotify OAuth **PKCE**.
+2. Fetch:
+
+   * user profile (verify login)
+   * playlists
+   * search tracks
+3. Playback approach:
+
+   * Use Spotify SDK (or remote control approach depending on SDK capabilities)
+4. Send Unity:
+
+   * `track` message when a track is selected
+   * `playback` message on play/pause/seek
+   * `bands` message periodically (see Step 8)
+
+✅ Deliverable: user plays Spotify track from native UI; Unity reacts.
+
+---
+
+## Step 7 — Implement SoundCloud second
+
+**Goal:** same adapter pattern.
+
+1. OAuth (if needed)
+2. Search tracks + get stream URL
+3. Play in native player
+4. Send Unity track/playback/bands
+
+✅ Deliverable: SoundCloud works on iOS and Android with your visuals.
+
+---
+
+## Step 8 — Add Audio Analysis in the wrapper (FFT → bands)
+
+**Goal:** stable bass/mid/high values like festival visuals.
+
+1. Tap audio output / PCM buffer in native player pipeline.
+2. FFT with Hann window
+3. Compute band energies:
+
+   * Bass ~ 20–150 Hz
+   * Mid ~ 150–2000 Hz
+   * High ~ 2000–12000 Hz
+4. Normalize + smooth
+5. Send to Unity at **20–60 updates/sec**
+
+   * even 20/sec is fine if Unity smooths
+
+✅ Deliverable: tight audio-reactive visuals.
+
+> Note: Some streaming SDKs/DRM streams may not expose raw PCM easily. If a source blocks PCM access, you can temporarily drive visuals from **beat/proxy** until you implement a compliant approach per platform.
+
+---
+
+## Step 9 — Apple Music on iOS (MusicKit)
+
+**Goal:** iOS gets the best Apple Music experience.
+
+1. Use MusicKit to authorize
+2. Browse library + play tracks
+3. Send Unity metadata and playback updates
+4. For bands:
+
+   * If PCM is accessible, compute FFT like above
+   * If not, use a proxy mode (still looks great with smart mapping)
+
+✅ Deliverable: Apple Music works beautifully on iOS.
+
+---
+
+## Step 10 — Android Apple Music strategy
+
+Apple Music isn’t as straightforward on Android as iOS MusicKit. Best product approach:
+
+* Android: Apple Music “connect for metadata + open in Apple Music app” (initially)
+* Keep Spotify/SoundCloud as fully integrated on Android
+
+✅ Deliverable: feature parity where it’s feasible, without blocking launch.
+
+---
+
+## Step 11 — Thumbnail / artwork blending inside Unity
+
+**Goal:** visuals melt into thumbnail like you asked.
+
+1. Render artwork as background quad
+2. Render preset shader quad above it using blending (additive/screen-like)
+3. Add post effects after (bloom/trails/chroma)
+4. Expose sliders:
+
+   * thumbnail dim
+   * blend amount
+   * trails amount
+
+✅ Deliverable: the exact “fused” filter look.
+
+---
+
+## Step 12 — Export video (later, after playback is stable)
+
+**Best order**
+
+1. Start with platform share + screen recording guidance
+2. Then implement in-app recorder:
+
+   * Unity render → frames
+   * native mux audio → MP4
+
+✅ Deliverable: shareable video exports.
+
+---
+
+# Your “done in the right order” checklist
+
+If you follow this order, you won’t get stuck:
+
+1. Unity presets + postfx ✅
+2. Unity bridge receiver ✅
+3. iOS wrapper opens Unity ✅
+4. Android wrapper opens Unity ✅
+5. Spotify connect + playback ✅
+6. SoundCloud connect + playback ✅
+7. Native FFT bands → Unity ✅
+8. Apple Music iOS ✅
+9. Export ✅
+
+---
+
+If you want, I can now generate the **starter code skeleton** for:
+
+* Unity `NativeBridgeReceiver.cs` + `AudioReactiveController.cs`
+* iOS SwiftUI wrapper sending JSON via `UnitySendMessage`
+* Android Kotlin wrapper sending JSON via `UnityPlayer.UnitySendMessage`
+
+…and a clean folder structure so you can paste it directly into Replit/your repo.
