@@ -209,24 +209,117 @@ function PsyTunnel({ getAudioData, settings }: { getAudioData: () => AudioData, 
   );
 }
 
-// === PRESET 3: Particle Field (PREMIUM) ===
+// === PRESET 3: Particle Field (ULTRA PREMIUM) ===
+// Custom shader for glowing particles with soft edges and depth
+const ParticleGlowMaterial = shaderMaterial(
+  {
+    uTime: 0,
+    uEnergy: 0,
+    uBass: 0,
+    uHigh: 0,
+    uKick: 0,
+    uIntensity: 1,
+  },
+  // Vertex shader
+  `
+    attribute float aSize;
+    attribute float aPhase;
+    attribute vec3 color;
+    varying vec3 vColor;
+    varying float vAlpha;
+    varying float vPhase;
+    uniform float uTime;
+    uniform float uEnergy;
+    uniform float uBass;
+    uniform float uKick;
+    uniform float uIntensity;
+    
+    void main() {
+      vColor = color;
+      vPhase = aPhase;
+      
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      
+      // Dynamic size based on audio and distance (clamped to avoid extreme values)
+      float distanceFade = 1.0 / max(-mvPosition.z * 0.05 + 1.0, 0.1);
+      distanceFade = clamp(distanceFade, 0.2, 3.0);
+      float audioSize = 1.0 + uBass * 0.5 * uIntensity + uKick * 0.8;
+      float pulse = 1.0 + sin(uTime * 2.0 + aPhase * 6.28) * 0.15 * uEnergy;
+      
+      float pointSize = aSize * audioSize * pulse * distanceFade * 80.0;
+      gl_PointSize = clamp(pointSize, 1.0, 64.0);
+      gl_Position = projectionMatrix * mvPosition;
+      
+      // Alpha based on energy and sparkle
+      vAlpha = 0.6 + uEnergy * 0.4;
+    }
+  `,
+  // Fragment shader
+  `
+    varying vec3 vColor;
+    varying float vAlpha;
+    varying float vPhase;
+    uniform float uTime;
+    uniform float uHigh;
+    uniform float uKick;
+    
+    void main() {
+      // Soft circular particle with glow falloff
+      vec2 center = gl_PointCoord - 0.5;
+      float dist = length(center);
+      
+      // Multi-layer glow: bright core + soft outer glow
+      float core = smoothstep(0.5, 0.0, dist);
+      float glow = smoothstep(0.5, 0.1, dist) * 0.6;
+      float outerGlow = smoothstep(0.5, 0.3, dist) * 0.2;
+      
+      float alpha = (core + glow + outerGlow) * vAlpha;
+      
+      // Sparkle effect on high frequencies
+      float sparkle = step(0.98, fract(sin(vPhase * 1000.0 + uTime * 10.0) * 43758.5453));
+      vec3 finalColor = vColor + sparkle * uHigh * vec3(0.5, 0.5, 1.0);
+      
+      // Kick adds brightness punch
+      finalColor += uKick * 0.3;
+      
+      if (alpha < 0.01) discard;
+      
+      gl_FragColor = vec4(finalColor, alpha);
+    }
+  `
+);
+
+extend({ ParticleGlowMaterial });
+
 function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
-  const pointsRef = useRef<THREE.Points>(null);
-  const count = 5000; // Premium: More particles for denser field
+  const groupRef = useRef<THREE.Group>(null);
+  const corePointsRef = useRef<THREE.Points>(null);
+  const glowPointsRef = useRef<THREE.Points>(null);
+  const trailPointsRef = useRef<THREE.Points>(null);
+  
   const smoothedAudioRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, energy: 0 });
   const tempColor = useMemo(() => new THREE.Color(), []);
   const tempColor2 = useMemo(() => new THREE.Color(), []);
   
-  const [positions, colors, basePositions] = useMemo(() => {
-    const pos = new Float32Array(count * 3);
-    const col = new Float32Array(count * 3);
-    const basePos = new Float32Array(count * 3);
+  // Premium: Multi-layer particle system
+  const coreCount = 4000;    // Bright core particles
+  const glowCount = 2500;    // Larger glow particles  
+  const trailCount = 1500;   // Trailing dust particles
+
+  // Core layer - bright, dense particles
+  const [corePositions, coreColors, coreSizes, corePhases, coreBasePositions] = useMemo(() => {
+    const pos = new Float32Array(coreCount * 3);
+    const col = new Float32Array(coreCount * 3);
+    const sizes = new Float32Array(coreCount);
+    const phases = new Float32Array(coreCount);
+    const basePos = new Float32Array(coreCount * 3);
     
-    for (let i = 0; i < count; i++) {
-      // Premium: Spherical distribution for more organic look
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos((Math.random() * 2) - 1);
-      const radius = 15 + Math.random() * 25;
+    for (let i = 0; i < coreCount; i++) {
+      // Fibonacci sphere distribution for even coverage
+      const goldenRatio = (1 + Math.sqrt(5)) / 2;
+      const theta = 2 * Math.PI * i / goldenRatio;
+      const phi = Math.acos(1 - 2 * (i + 0.5) / coreCount);
+      const radius = 8 + Math.pow(Math.random(), 0.7) * 20;
       
       const x = radius * Math.sin(phi) * Math.cos(theta);
       const y = radius * Math.sin(phi) * Math.sin(theta);
@@ -238,118 +331,314 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
       basePos[i * 3] = x;
       basePos[i * 3 + 1] = y;
       basePos[i * 3 + 2] = z;
+      
       col[i * 3] = 1;
       col[i * 3 + 1] = 1;
       col[i * 3 + 2] = 1;
+      
+      sizes[i] = 0.08 + Math.random() * 0.12;
+      phases[i] = Math.random();
     }
-    return [pos, col, basePos];
+    return [pos, col, sizes, phases, basePos];
   }, []);
 
+  // Glow layer - larger, softer particles
+  const [glowPositions, glowColors, glowSizes, glowPhases, glowBasePositions] = useMemo(() => {
+    const pos = new Float32Array(glowCount * 3);
+    const col = new Float32Array(glowCount * 3);
+    const sizes = new Float32Array(glowCount);
+    const phases = new Float32Array(glowCount);
+    const basePos = new Float32Array(glowCount * 3);
+    
+    for (let i = 0; i < glowCount; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos((Math.random() * 2) - 1);
+      const radius = 12 + Math.random() * 28;
+      
+      const x = radius * Math.sin(phi) * Math.cos(theta);
+      const y = radius * Math.sin(phi) * Math.sin(theta);
+      const z = radius * Math.cos(phi);
+      
+      pos[i * 3] = x;
+      pos[i * 3 + 1] = y;
+      pos[i * 3 + 2] = z;
+      basePos[i * 3] = x;
+      basePos[i * 3 + 1] = y;
+      basePos[i * 3 + 2] = z;
+      
+      col[i * 3] = 1;
+      col[i * 3 + 1] = 1;
+      col[i * 3 + 2] = 1;
+      
+      sizes[i] = 0.15 + Math.random() * 0.25;
+      phases[i] = Math.random();
+    }
+    return [pos, col, sizes, phases, basePos];
+  }, []);
+
+  // Trail layer - fine dust particles
+  const [trailPositions, trailColors, trailSizes, trailPhases, trailBasePositions] = useMemo(() => {
+    const pos = new Float32Array(trailCount * 3);
+    const col = new Float32Array(trailCount * 3);
+    const sizes = new Float32Array(trailCount);
+    const phases = new Float32Array(trailCount);
+    const basePos = new Float32Array(trailCount * 3);
+    
+    for (let i = 0; i < trailCount; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos((Math.random() * 2) - 1);
+      const radius = 5 + Math.random() * 35;
+      
+      const x = radius * Math.sin(phi) * Math.cos(theta);
+      const y = radius * Math.sin(phi) * Math.sin(theta);
+      const z = radius * Math.cos(phi);
+      
+      pos[i * 3] = x;
+      pos[i * 3 + 1] = y;
+      pos[i * 3 + 2] = z;
+      basePos[i * 3] = x;
+      basePos[i * 3 + 1] = y;
+      basePos[i * 3 + 2] = z;
+      
+      col[i * 3] = 1;
+      col[i * 3 + 1] = 1;
+      col[i * 3 + 2] = 1;
+      
+      sizes[i] = 0.03 + Math.random() * 0.06;
+      phases[i] = Math.random();
+    }
+    return [pos, col, sizes, phases, basePos];
+  }, []);
+
+  // Helper function for simplex-like noise
+  const noise3D = (x: number, y: number, z: number) => {
+    return Math.sin(x * 1.2) * Math.cos(y * 0.9) * Math.sin(z * 1.1) +
+           Math.sin(x * 2.3 + y * 1.7) * 0.5 +
+           Math.cos(y * 3.1 + z * 2.2) * 0.3;
+  };
+
   useFrame((state) => {
-    if (!pointsRef.current) return;
+    if (!groupRef.current) return;
     const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime();
     
-    // Premium: Smooth audio interpolation
+    // Smooth audio interpolation with per-band rates
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
     const smooth = smoothedAudioRef.current;
-    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.06);
-    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.1);
-    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.12);
-    smooth.high = lerp(smooth.high, audioRaw.high, 0.18);
+    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.05);
+    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.08);
+    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.1);
+    smooth.high = lerp(smooth.high, audioRaw.high, 0.15);
     smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.2);
-    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.08);
+    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.06);
 
-    const positionsAttr = pointsRef.current.geometry.attributes.position;
-    const colorsAttr = pointsRef.current.geometry.attributes.color;
+    // Update shader uniforms
+    const updateMaterial = (points: THREE.Points | null) => {
+      if (!points) return;
+      const mat = points.material as any;
+      if (mat.uniforms) {
+        mat.uniforms.uTime.value = time;
+        mat.uniforms.uEnergy.value = smooth.energy;
+        mat.uniforms.uBass.value = smooth.bass;
+        mat.uniforms.uHigh.value = smooth.high;
+        mat.uniforms.uKick.value = smooth.kick;
+        mat.uniforms.uIntensity.value = settings.intensity;
+      }
+    };
     
-    // Premium: Dynamic global size based on audio
-    const material = pointsRef.current.material as THREE.PointsMaterial;
-    if (material) {
-      material.size = 0.12 + smooth.energy * 0.15 * settings.intensity + smooth.bass * 0.08;
-    }
+    updateMaterial(corePointsRef.current);
+    updateMaterial(glowPointsRef.current);
+    updateMaterial(trailPointsRef.current);
 
-    // Premium: Complex audio-driven motion
-    const breathScale = 1 + smooth.sub * 0.2;
-    const pulseScale = 1 + smooth.bass * 0.3 * settings.intensity;
-    const turbulenceAmp = (smooth.mid * 0.4 + smooth.high * 0.3) * settings.intensity;
+    // Complex motion parameters
+    const breathScale = 1 + smooth.sub * 0.25;
+    const pulseScale = 1 + smooth.bass * 0.4 * settings.intensity;
+    const vortexStrength = smooth.mid * 0.4 * settings.intensity;
+    const turbulence = (smooth.mid * 0.5 + smooth.high * 0.4) * settings.intensity;
+    const explosionForce = smooth.kick * 0.6 * settings.intensity;
 
-    for (let i = 0; i < count; i++) {
-      const bx = basePositions[i * 3];
-      const by = basePositions[i * 3 + 1];
-      const bz = basePositions[i * 3 + 2];
+    // Update core particles
+    if (corePointsRef.current) {
+      const posAttr = corePointsRef.current.geometry.attributes.position;
+      const colAttr = corePointsRef.current.geometry.attributes.color;
       
-      // Premium: Layered noise motion
-      const noiseX = Math.sin(time * 0.5 + bz * 0.1) * turbulenceAmp * 2;
-      const noiseY = Math.cos(time * 0.4 + bx * 0.1) * turbulenceAmp * 2;
-      const noiseZ = Math.sin(time * 0.3 + by * 0.1) * turbulenceAmp;
-      
-      // Spiral motion on kick
-      const spiralAngle = smooth.kick * 0.3 * (i / count);
-      const sx = bx * Math.cos(spiralAngle) - by * Math.sin(spiralAngle);
-      const sy = bx * Math.sin(spiralAngle) + by * Math.cos(spiralAngle);
-      
-      positionsAttr.setXYZ(i, 
-        sx * breathScale * pulseScale + noiseX,
-        sy * breathScale * pulseScale + noiseY,
-        bz * breathScale + noiseZ
-      );
-
-      // Premium: Dynamic color with smooth transitions (reusing Color objects)
-      const colorPhase = (i / count + time * 0.1 * settings.speed) % 1;
-      const colorIdx = Math.floor(colorPhase * settings.colorPalette.length);
-      const nextColorIdx = (colorIdx + 1) % settings.colorPalette.length;
-      const colorBlend = (colorPhase * settings.colorPalette.length) % 1;
-      
-      tempColor.set(settings.colorPalette[colorIdx]);
-      tempColor2.set(settings.colorPalette[nextColorIdx]);
-      tempColor.lerp(tempColor2, colorBlend);
-      
-      // High frequencies add sparkle
-      const sparkle = smooth.high * 0.4 + smooth.kick * 0.5;
-      if (Math.random() < sparkle * 0.05) {
-        tempColor.offsetHSL(0, -0.5, 0.4);
+      for (let i = 0; i < coreCount; i++) {
+        const bx = coreBasePositions[i * 3];
+        const by = coreBasePositions[i * 3 + 1];
+        const bz = coreBasePositions[i * 3 + 2];
+        const phase = corePhases[i];
+        
+        // Vortex flow motion
+        const radius = Math.sqrt(bx * bx + by * by);
+        const angle = Math.atan2(by, bx) + time * 0.2 * settings.speed + vortexStrength * 0.5;
+        const vortexX = radius * Math.cos(angle);
+        const vortexY = radius * Math.sin(angle);
+        
+        // Layered noise turbulence
+        const noiseScale = 0.08;
+        const n1 = noise3D(bx * noiseScale + time * 0.3, by * noiseScale, bz * noiseScale) * turbulence * 3;
+        const n2 = noise3D(by * noiseScale, bz * noiseScale + time * 0.25, bx * noiseScale) * turbulence * 3;
+        const n3 = noise3D(bz * noiseScale, bx * noiseScale, by * noiseScale + time * 0.2) * turbulence * 2;
+        
+        // Gravity well effect towards center on bass
+        const distToCenter = Math.sqrt(bx * bx + by * by + bz * bz);
+        const gravityPull = smooth.bass * 0.15 / (distToCenter * 0.05 + 1);
+        
+        // Explosion on kick
+        const explosionDir = distToCenter > 0 ? explosionForce * (1 + phase) : 0;
+        
+        // Wave motion
+        const waveOffset = Math.sin(time * 1.5 + phase * Math.PI * 2) * smooth.mid * 2;
+        
+        const finalX = (vortexX * breathScale + n1 + explosionDir * (bx / distToCenter || 0)) * pulseScale - bx * gravityPull;
+        const finalY = (vortexY * breathScale + n2 + explosionDir * (by / distToCenter || 0)) * pulseScale - by * gravityPull;
+        const finalZ = (bz * breathScale + n3 + waveOffset + explosionDir * (bz / distToCenter || 0)) - bz * gravityPull;
+        
+        posAttr.setXYZ(i, finalX, finalY, finalZ);
+        
+        // Dynamic color with smooth gradient flow
+        const colorPhase = (phase + time * 0.08 * settings.speed) % 1;
+        const colorIdx = Math.floor(colorPhase * settings.colorPalette.length);
+        const nextColorIdx = (colorIdx + 1) % settings.colorPalette.length;
+        const colorBlend = (colorPhase * settings.colorPalette.length) % 1;
+        
+        tempColor.set(settings.colorPalette[colorIdx]);
+        tempColor2.set(settings.colorPalette[nextColorIdx]);
+        tempColor.lerp(tempColor2, colorBlend);
+        
+        // Energy boost to brightness
+        const energyBoost = smooth.energy * 0.3;
+        tempColor.offsetHSL(0, 0, energyBoost);
+        
+        colAttr.setXYZ(i, tempColor.r, tempColor.g, tempColor.b);
       }
       
-      colorsAttr.setXYZ(i, tempColor.r, tempColor.g, tempColor.b);
+      posAttr.needsUpdate = true;
+      colAttr.needsUpdate = true;
     }
-    
-    positionsAttr.needsUpdate = true;
-    colorsAttr.needsUpdate = true;
-    
-    // Premium: Smooth multi-axis rotation
-    pointsRef.current.rotation.y += 0.002 * settings.speed * (1 + smooth.mid * 0.5);
-    pointsRef.current.rotation.x = smooth.sub * 0.15 * Math.sin(time * 0.2);
-    pointsRef.current.rotation.z = smooth.high * 0.05 * Math.cos(time * 0.3);
+
+    // Update glow particles (slower, larger motion)
+    if (glowPointsRef.current) {
+      const posAttr = glowPointsRef.current.geometry.attributes.position;
+      const colAttr = glowPointsRef.current.geometry.attributes.color;
+      
+      for (let i = 0; i < glowCount; i++) {
+        const bx = glowBasePositions[i * 3];
+        const by = glowBasePositions[i * 3 + 1];
+        const bz = glowBasePositions[i * 3 + 2];
+        const phase = glowPhases[i];
+        
+        // Slower, smoother motion for glow layer
+        const slowTime = time * 0.6;
+        const radius = Math.sqrt(bx * bx + by * by);
+        const angle = Math.atan2(by, bx) + slowTime * 0.15 * settings.speed;
+        
+        const breathe = 1 + smooth.sub * 0.3 + Math.sin(slowTime + phase * 6.28) * 0.1;
+        
+        const flowX = radius * Math.cos(angle) * breathe + Math.sin(slowTime * 0.5 + bz * 0.1) * turbulence * 2;
+        const flowY = radius * Math.sin(angle) * breathe + Math.cos(slowTime * 0.4 + bx * 0.1) * turbulence * 2;
+        const flowZ = bz * breathe * (1 + smooth.bass * 0.2);
+        
+        posAttr.setXYZ(i, flowX, flowY, flowZ);
+        
+        // Slightly desaturated colors for glow
+        const colorPhase = (phase + time * 0.05 * settings.speed) % 1;
+        const colorIdx = Math.floor(colorPhase * settings.colorPalette.length);
+        tempColor.set(settings.colorPalette[colorIdx]);
+        tempColor.offsetHSL(0, -0.2, 0.1);
+        
+        colAttr.setXYZ(i, tempColor.r, tempColor.g, tempColor.b);
+      }
+      
+      posAttr.needsUpdate = true;
+      colAttr.needsUpdate = true;
+    }
+
+    // Update trail particles (fast, erratic motion)
+    if (trailPointsRef.current) {
+      const posAttr = trailPointsRef.current.geometry.attributes.position;
+      const colAttr = trailPointsRef.current.geometry.attributes.color;
+      
+      for (let i = 0; i < trailCount; i++) {
+        const bx = trailBasePositions[i * 3];
+        const by = trailBasePositions[i * 3 + 1];
+        const bz = trailBasePositions[i * 3 + 2];
+        const phase = trailPhases[i];
+        
+        // Fast, jittery motion
+        const fastTime = time * 1.5;
+        const jitter = smooth.high * 3 * settings.intensity;
+        
+        const tx = bx + Math.sin(fastTime * 2 + phase * 10) * jitter + Math.cos(fastTime + bz) * turbulence;
+        const ty = by + Math.cos(fastTime * 1.8 + phase * 8) * jitter + Math.sin(fastTime * 0.9 + bx) * turbulence;
+        const tz = bz + Math.sin(fastTime * 1.5 + phase * 12) * jitter * 0.5;
+        
+        // Drift towards center on bass hits
+        const drift = smooth.bass * 0.1;
+        
+        posAttr.setXYZ(i, tx * (1 - drift), ty * (1 - drift), tz);
+        
+        // High frequencies create white sparkles
+        const sparkle = smooth.high > 0.4 && Math.random() < 0.1;
+        if (sparkle) {
+          tempColor.setRGB(1, 1, 1);
+        } else {
+          const colorIdx = Math.floor(phase * settings.colorPalette.length);
+          tempColor.set(settings.colorPalette[colorIdx]);
+          tempColor.offsetHSL(0, 0, -0.1);
+        }
+        
+        colAttr.setXYZ(i, tempColor.r, tempColor.g, tempColor.b);
+      }
+      
+      posAttr.needsUpdate = true;
+      colAttr.needsUpdate = true;
+    }
+
+    // Smooth group rotation
+    groupRef.current.rotation.y += 0.001 * settings.speed * (1 + smooth.mid * 0.3);
+    groupRef.current.rotation.x = smooth.sub * 0.1 * Math.sin(time * 0.15);
+    groupRef.current.rotation.z = smooth.high * 0.03 * Math.cos(time * 0.2);
   });
 
   return (
-    <points ref={pointsRef}>
-      <bufferGeometry>
-        <bufferAttribute
-          attach="attributes-position"
-          count={count}
-          array={positions}
-          itemSize={3}
-          usage={THREE.DynamicDrawUsage}
-        />
-        <bufferAttribute
-          attach="attributes-color"
-          count={count}
-          array={colors}
-          itemSize={3}
-          usage={THREE.DynamicDrawUsage}
-        />
-      </bufferGeometry>
-      <pointsMaterial
-        size={0.15}
-        vertexColors
-        transparent
-        opacity={0.85}
-        blending={THREE.AdditiveBlending}
-        sizeAttenuation
-      />
-    </points>
+    <group ref={groupRef}>
+      {/* Glow layer - larger, softer particles (rendered first, behind) */}
+      <points ref={glowPointsRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" count={glowCount} array={glowPositions} itemSize={3} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-color" count={glowCount} array={glowColors} itemSize={3} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-aSize" count={glowCount} array={glowSizes} itemSize={1} />
+          <bufferAttribute attach="attributes-aPhase" count={glowCount} array={glowPhases} itemSize={1} />
+        </bufferGeometry>
+        {/* @ts-ignore */}
+        <particleGlowMaterial transparent depthWrite={false} depthTest={false} blending={THREE.AdditiveBlending} />
+      </points>
+      
+      {/* Trail layer - fine dust particles */}
+      <points ref={trailPointsRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" count={trailCount} array={trailPositions} itemSize={3} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-color" count={trailCount} array={trailColors} itemSize={3} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-aSize" count={trailCount} array={trailSizes} itemSize={1} />
+          <bufferAttribute attach="attributes-aPhase" count={trailCount} array={trailPhases} itemSize={1} />
+        </bufferGeometry>
+        {/* @ts-ignore */}
+        <particleGlowMaterial transparent depthWrite={false} depthTest={false} blending={THREE.AdditiveBlending} />
+      </points>
+      
+      {/* Core layer - bright, dense particles (rendered last, on top) */}
+      <points ref={corePointsRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" count={coreCount} array={corePositions} itemSize={3} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-color" count={coreCount} array={coreColors} itemSize={3} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-aSize" count={coreCount} array={coreSizes} itemSize={1} />
+          <bufferAttribute attach="attributes-aPhase" count={coreCount} array={corePhases} itemSize={1} />
+        </bufferGeometry>
+        {/* @ts-ignore */}
+        <particleGlowMaterial transparent depthWrite={false} depthTest={false} blending={THREE.AdditiveBlending} />
+      </points>
+    </group>
   );
 }
 
