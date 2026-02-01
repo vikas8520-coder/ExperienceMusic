@@ -943,73 +943,261 @@ function CymaticSandPlate({ getAudioData, settings }: { getAudioData: () => Audi
 // === PRESET 9: Water Membrane Orb ===
 // Spherical membrane with standing wave deformations like liquid resonance
 function WaterMembraneOrb({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const originalPositions = useRef<Float32Array | null>(null);
+  const groupRef = useRef<THREE.Group>(null);
+  const outerMeshRef = useRef<THREE.Mesh>(null);
+  const innerMeshRef = useRef<THREE.Mesh>(null);
+  const coreMeshRef = useRef<THREE.Mesh>(null);
+  const outerOriginalPositions = useRef<Float32Array | null>(null);
+  const innerOriginalPositions = useRef<Float32Array | null>(null);
+  const smoothedAudio = useRef({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0 });
+
+  // Custom water shader for the outer membrane
+  const waterShader = useMemo(() => ({
+    uniforms: {
+      uTime: { value: 0 },
+      uColor1: { value: new THREE.Color("#00ccff") },
+      uColor2: { value: new THREE.Color("#0066ff") },
+      uColor3: { value: new THREE.Color("#ffffff") },
+      uBass: { value: 0 },
+      uMid: { value: 0 },
+      uHigh: { value: 0 },
+      uEnergy: { value: 0 },
+    },
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vPosition;
+      varying vec2 vUv;
+      
+      void main() {
+        vNormal = normalize(normalMatrix * normal);
+        vPosition = position;
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform vec3 uColor1;
+      uniform vec3 uColor2;
+      uniform vec3 uColor3;
+      uniform float uBass;
+      uniform float uMid;
+      uniform float uHigh;
+      uniform float uEnergy;
+      
+      varying vec3 vNormal;
+      varying vec3 vPosition;
+      varying vec2 vUv;
+      
+      // Fresnel effect for edge glow
+      float fresnel(vec3 normal, vec3 viewDir, float power) {
+        return pow(1.0 - abs(dot(normal, viewDir)), power);
+      }
+      
+      // Caustic pattern
+      float caustic(vec2 uv, float time) {
+        vec2 p = uv * 8.0;
+        float c = 0.0;
+        for(int i = 0; i < 3; i++) {
+          float fi = float(i);
+          p += vec2(sin(p.y + time * (0.5 + fi * 0.2)), cos(p.x + time * (0.3 + fi * 0.15)));
+          c += 1.0 / length(fract(p) - 0.5);
+        }
+        return c / 3.0;
+      }
+      
+      void main() {
+        vec3 viewDir = normalize(cameraPosition - vPosition);
+        
+        // Fresnel rim lighting
+        float rim = fresnel(vNormal, viewDir, 2.5);
+        
+        // Caustic shimmer driven by highs
+        float causticPattern = caustic(vUv, uTime * 2.0) * uHigh * 0.4;
+        
+        // Base color gradient based on position
+        float gradient = (vPosition.y + 3.0) / 6.0;
+        vec3 baseColor = mix(uColor1, uColor2, gradient);
+        
+        // Add energy-reactive iridescence
+        float iridescence = sin(vPosition.x * 5.0 + uTime) * sin(vPosition.z * 5.0 - uTime) * 0.5 + 0.5;
+        baseColor = mix(baseColor, uColor3, iridescence * uEnergy * 0.3);
+        
+        // Combine effects
+        vec3 finalColor = baseColor;
+        finalColor += uColor3 * rim * (0.4 + uBass * 0.6); // Rim glow
+        finalColor += uColor3 * causticPattern; // Caustic highlights
+        finalColor += baseColor * uMid * 0.3; // Mid boost
+        
+        // Transparency based on fresnel
+        float alpha = 0.5 + rim * 0.4 + uEnergy * 0.1;
+        
+        gl_FragColor = vec4(finalColor, alpha);
+      }
+    `,
+  }), []);
 
   useFrame((state) => {
-    if (!meshRef.current) return;
-    const { sub, bass, mid, high, modeIndex, energy } = getAudioData();
+    if (!groupRef.current) return;
+    const audio = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
     
-    const geometry = meshRef.current.geometry as THREE.BufferGeometry;
-    const positionAttr = geometry.attributes.position;
+    // Smooth audio values for premium feel
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    smoothedAudio.current.sub = lerp(smoothedAudio.current.sub, audio.sub, 0.08);
+    smoothedAudio.current.bass = lerp(smoothedAudio.current.bass, audio.bass, 0.12);
+    smoothedAudio.current.mid = lerp(smoothedAudio.current.mid, audio.mid, 0.15);
+    smoothedAudio.current.high = lerp(smoothedAudio.current.high, audio.high, 0.18);
+    smoothedAudio.current.energy = lerp(smoothedAudio.current.energy, audio.energy, 0.1);
     
-    if (!originalPositions.current) {
-      originalPositions.current = new Float32Array(positionAttr.array);
-    }
-    
-    // Mode controls the number of lobes
+    const { sub, bass, mid, high, energy } = smoothedAudio.current;
+    const modeIndex = audio.modeIndex;
     const lobes = modeIndex + 2;
-    const breathScale = 1 + sub * 0.15;
     
-    for (let i = 0; i < positionAttr.count; i++) {
-      const ox = originalPositions.current[i * 3];
-      const oy = originalPositions.current[i * 3 + 1];
-      const oz = originalPositions.current[i * 3 + 2];
+    // Update outer membrane
+    if (outerMeshRef.current) {
+      const geometry = outerMeshRef.current.geometry as THREE.BufferGeometry;
+      const positionAttr = geometry.attributes.position;
       
-      // Spherical coordinates
-      const r = Math.sqrt(ox * ox + oy * oy + oz * oz);
-      const theta = Math.atan2(oy, ox);
-      const phi = Math.acos(oz / (r || 1));
+      if (!outerOriginalPositions.current) {
+        outerOriginalPositions.current = new Float32Array(positionAttr.array);
+      }
       
-      // Standing wave on sphere surface (spherical harmonics simplified)
-      const wave1 = Math.sin(lobes * theta + time) * Math.sin(phi * 3);
-      const wave2 = Math.cos((lobes + 1) * theta - time * 0.7) * Math.sin(phi * 2);
-      const displacement = (wave1 * mid + wave2 * bass) * settings.intensity * 0.3;
+      const breathScale = 1 + sub * 0.12;
       
-      // Caustic shimmer from highs
-      const shimmer = high * 0.05 * Math.sin(time * 8 + i * 0.1);
+      for (let i = 0; i < positionAttr.count; i++) {
+        const ox = outerOriginalPositions.current[i * 3];
+        const oy = outerOriginalPositions.current[i * 3 + 1];
+        const oz = outerOriginalPositions.current[i * 3 + 2];
+        
+        const r = Math.sqrt(ox * ox + oy * oy + oz * oz);
+        const theta = Math.atan2(oy, ox);
+        const phi = Math.acos(oz / (r || 1));
+        
+        // Multi-layer standing waves
+        const wave1 = Math.sin(lobes * theta + time) * Math.sin(phi * 3);
+        const wave2 = Math.cos((lobes + 1) * theta - time * 0.7) * Math.sin(phi * 2);
+        const wave3 = Math.sin(lobes * 2 * theta + time * 1.3) * Math.cos(phi * 4) * 0.5;
+        const displacement = (wave1 * mid + wave2 * bass + wave3 * high * 0.5) * settings.intensity * 0.25;
+        
+        // High-frequency ripples
+        const ripple = high * 0.03 * Math.sin(time * 12 + theta * 8 + phi * 6);
+        
+        const newR = (r + displacement + ripple) * breathScale;
+        const nx = ox / r || 0;
+        const ny = oy / r || 0;
+        const nz = oz / r || 0;
+        
+        positionAttr.setXYZ(i, nx * newR, ny * newR, nz * newR);
+      }
       
-      const newR = (r + displacement + shimmer) * breathScale;
-      const nx = ox / r || 0;
-      const ny = oy / r || 0;
-      const nz = oz / r || 0;
+      positionAttr.needsUpdate = true;
+      geometry.computeVertexNormals();
       
-      positionAttr.setXYZ(i, nx * newR, ny * newR, nz * newR);
+      // Update shader uniforms
+      const material = outerMeshRef.current.material as THREE.ShaderMaterial;
+      if (material.uniforms) {
+        material.uniforms.uTime.value = time;
+        material.uniforms.uBass.value = bass;
+        material.uniforms.uMid.value = mid;
+        material.uniforms.uHigh.value = high;
+        material.uniforms.uEnergy.value = energy;
+        
+        const colors = settings.colorPalette;
+        if (colors[0]) material.uniforms.uColor1.value.set(colors[0]);
+        if (colors[1]) material.uniforms.uColor2.value.set(colors[1]);
+        if (colors[2]) material.uniforms.uColor3.value.set(colors[2]);
+      }
     }
     
-    positionAttr.needsUpdate = true;
+    // Update inner layer with offset waves
+    if (innerMeshRef.current) {
+      const geometry = innerMeshRef.current.geometry as THREE.BufferGeometry;
+      const positionAttr = geometry.attributes.position;
+      
+      if (!innerOriginalPositions.current) {
+        innerOriginalPositions.current = new Float32Array(positionAttr.array);
+      }
+      
+      for (let i = 0; i < positionAttr.count; i++) {
+        const ox = innerOriginalPositions.current[i * 3];
+        const oy = innerOriginalPositions.current[i * 3 + 1];
+        const oz = innerOriginalPositions.current[i * 3 + 2];
+        
+        const r = Math.sqrt(ox * ox + oy * oy + oz * oz);
+        const theta = Math.atan2(oy, ox);
+        const phi = Math.acos(oz / (r || 1));
+        
+        // Counter-rotating waves for depth
+        const wave = Math.sin(lobes * theta - time * 0.8) * Math.sin(phi * 2.5);
+        const displacement = wave * bass * settings.intensity * 0.15;
+        
+        const newR = r + displacement;
+        const nx = ox / r || 0;
+        const ny = oy / r || 0;
+        const nz = oz / r || 0;
+        
+        positionAttr.setXYZ(i, nx * newR, ny * newR, nz * newR);
+      }
+      
+      positionAttr.needsUpdate = true;
+    }
     
-    // Slow rotation
-    meshRef.current.rotation.y = time * 0.2;
-    meshRef.current.rotation.x = Math.sin(time * 0.3) * 0.1;
+    // Animate core glow
+    if (coreMeshRef.current) {
+      const scale = 0.8 + energy * 0.4 + Math.sin(time * 2) * 0.1;
+      coreMeshRef.current.scale.setScalar(scale);
+      
+      const material = coreMeshRef.current.material as THREE.MeshBasicMaterial;
+      material.opacity = 0.3 + bass * 0.4;
+    }
+    
+    // Smooth group rotation
+    groupRef.current.rotation.y = time * 0.15;
+    groupRef.current.rotation.x = Math.sin(time * 0.2) * 0.08;
+    groupRef.current.rotation.z = Math.cos(time * 0.25) * 0.05;
   });
 
   const colors = settings.colorPalette;
   
   return (
-    <mesh ref={meshRef}>
-      <icosahedronGeometry args={[3, 5]} />
-      <meshStandardMaterial
-        color={colors[0] || "#00ccff"}
-        emissive={colors[1] || "#0066aa"}
-        emissiveIntensity={0.4}
-        transparent
-        opacity={0.7}
-        metalness={0.3}
-        roughness={0.2}
-      />
-    </mesh>
+    <group ref={groupRef}>
+      {/* Inner glowing core */}
+      <mesh ref={coreMeshRef}>
+        <icosahedronGeometry args={[1.2, 3]} />
+        <meshBasicMaterial
+          color={colors[2] || "#ffffff"}
+          transparent
+          opacity={0.4}
+        />
+      </mesh>
+      
+      {/* Inner membrane layer */}
+      <mesh ref={innerMeshRef}>
+        <icosahedronGeometry args={[2.2, 5]} />
+        <meshStandardMaterial
+          color={colors[1] || "#0066ff"}
+          emissive={colors[1] || "#0044aa"}
+          emissiveIntensity={0.3}
+          transparent
+          opacity={0.35}
+          metalness={0.5}
+          roughness={0.1}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      
+      {/* Outer water membrane with custom shader */}
+      <mesh ref={outerMeshRef}>
+        <icosahedronGeometry args={[3, 6]} />
+        <shaderMaterial
+          {...waterShader}
+          transparent
+          side={THREE.DoubleSide}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
   );
 }
 
