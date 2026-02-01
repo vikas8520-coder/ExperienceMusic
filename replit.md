@@ -70,6 +70,7 @@ Preferred communication style: Simple, everyday language.
 - **Error Handling**: ErrorBoundary component for graceful error recovery with restart option
 - **Keyboard Shortcuts**: Space (play/pause), Arrow keys (volume/seek), F (fullscreen), M (mute with volume preservation)
 - **Mute Toggle**: Preserves previous volume level for seamless unmute
+- **Auto-Hide Controls**: Settings panel automatically hides after 5 seconds of inactivity; reappears on "Show Controls" click or any interaction (mouse, touch, keyboard)
 
 ### Premium Visual Presets
 All 7 main presets upgraded to premium quality with:

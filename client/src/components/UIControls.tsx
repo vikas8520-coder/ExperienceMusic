@@ -121,6 +121,34 @@ export function UIControls({
   const [showMobileControls, setShowMobileControls] = useState(true);
   const [isDesktopPanelVisible, setIsDesktopPanelVisible] = useState(true);
   
+  // Auto-hide timer ref
+  const autoHideTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const AUTO_HIDE_DELAY = 5000; // 5 seconds
+  
+  // Reset auto-hide timer on user interaction
+  const resetAutoHideTimer = useCallback(() => {
+    if (autoHideTimerRef.current) {
+      clearTimeout(autoHideTimerRef.current);
+    }
+    autoHideTimerRef.current = setTimeout(() => {
+      setShowMobileControls(false);
+      setIsMobileExpanded(false);
+      setIsDesktopPanelVisible(false);
+    }, AUTO_HIDE_DELAY);
+  }, []);
+  
+  // Start auto-hide timer when panels are shown
+  useEffect(() => {
+    if (showMobileControls || isDesktopPanelVisible) {
+      resetAutoHideTimer();
+    }
+    return () => {
+      if (autoHideTimerRef.current) {
+        clearTimeout(autoHideTimerRef.current);
+      }
+    };
+  }, [showMobileControls, isDesktopPanelVisible, resetAutoHideTimer]);
+  
   // File input refs for reliable click handling
   const audioInputRef = useRef<HTMLInputElement>(null);
   const audioInputMobileRef = useRef<HTMLInputElement>(null);
@@ -244,7 +272,10 @@ export function UIControls({
         variant="secondary"
         size="icon"
         className="rounded-full shadow-lg"
-        onClick={() => setShowMobileControls(!showMobileControls)}
+        onClick={() => {
+          setShowMobileControls(!showMobileControls);
+          resetAutoHideTimer();
+        }}
         data-testid="button-settings-mobile"
       >
         <Settings className="h-5 w-5" />
@@ -282,6 +313,12 @@ export function UIControls({
           ? (isMobileExpanded ? 'translate-y-0' : 'translate-y-[calc(100%-180px)]')
           : 'translate-y-full'
       }`}
+      onMouseMove={resetAutoHideTimer}
+      onTouchStart={resetAutoHideTimer}
+      onClick={resetAutoHideTimer}
+      onKeyDownCapture={resetAutoHideTimer}
+      onFocusCapture={resetAutoHideTimer}
+      onPointerDownCapture={resetAutoHideTimer}
     >
       <div className="glass-panel settings-panel rounded-t-3xl max-h-[70vh] overflow-y-auto scrollbar-thin" style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}>
             {/* Drag Handle */}
@@ -671,7 +708,10 @@ export function UIControls({
       >
         <Button
           variant="outline"
-          onClick={() => setIsDesktopPanelVisible(true)}
+          onClick={() => {
+            setIsDesktopPanelVisible(true);
+            resetAutoHideTimer();
+          }}
           className="glass-panel flex items-center gap-2"
           data-testid="button-show-panel"
         >
@@ -687,6 +727,13 @@ export function UIControls({
           isDesktopPanelVisible ? 'translate-y-0' : 'translate-y-full'
         }`}
         style={{ pointerEvents: 'auto' }}
+        onMouseMove={resetAutoHideTimer}
+        onMouseEnter={resetAutoHideTimer}
+        onClick={resetAutoHideTimer}
+        onKeyDownCapture={resetAutoHideTimer}
+        onFocusCapture={resetAutoHideTimer}
+        onTouchStart={resetAutoHideTimer}
+        onPointerDownCapture={resetAutoHideTimer}
       >
             {/* Panel Header with hide button */}
             <div className="flex items-center justify-between gap-4 px-6 py-2 border-b border-white/10 shrink-0">
