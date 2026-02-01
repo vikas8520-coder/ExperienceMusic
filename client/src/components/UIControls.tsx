@@ -161,8 +161,16 @@ export function UIControls({
   const autoHideTimerRef = useRef<NodeJS.Timeout | null>(null);
   const AUTO_HIDE_DELAY = 5000; // 5 seconds
   
-  // Reset auto-hide timer on user interaction
+  // Throttle ref to prevent excessive timer resets
+  const lastResetTime = useRef<number>(0);
+  const THROTTLE_MS = 100;
+  
+  // Reset auto-hide timer on user interaction (throttled)
   const resetAutoHideTimer = useCallback(() => {
+    const now = Date.now();
+    if (now - lastResetTime.current < THROTTLE_MS) return;
+    lastResetTime.current = now;
+    
     if (autoHideTimerRef.current) {
       clearTimeout(autoHideTimerRef.current);
     }
@@ -351,10 +359,6 @@ export function UIControls({
       }`}
       onMouseMove={resetAutoHideTimer}
       onTouchStart={resetAutoHideTimer}
-      onClick={resetAutoHideTimer}
-      onKeyDownCapture={resetAutoHideTimer}
-      onFocusCapture={resetAutoHideTimer}
-      onPointerDownCapture={resetAutoHideTimer}
     >
       <div className="glass-panel settings-panel rounded-t-3xl max-h-[70vh] overflow-y-auto scrollbar-thin" style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}>
             {/* Drag Handle */}
@@ -782,11 +786,6 @@ export function UIControls({
         style={{ pointerEvents: 'auto' }}
         onMouseMove={resetAutoHideTimer}
         onMouseEnter={resetAutoHideTimer}
-        onClick={resetAutoHideTimer}
-        onKeyDownCapture={resetAutoHideTimer}
-        onFocusCapture={resetAutoHideTimer}
-        onTouchStart={resetAutoHideTimer}
-        onPointerDownCapture={resetAutoHideTimer}
       >
             {/* Panel Header with hide button */}
             <div className="flex items-center justify-between gap-4 px-6 py-2 border-b border-white/10 shrink-0">
