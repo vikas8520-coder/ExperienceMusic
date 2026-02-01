@@ -116,3 +116,40 @@ All 7 main presets upgraded to premium quality with:
 - **Audio utilities**: maath for mathematical helpers
 - **Batch processing**: p-limit and p-retry for rate-limited API calls
 - **Media conversion**: ffmpeg (system dependency) for audio format conversion
+
+## Post-Processing Effects
+
+### Glow Enhancement Effect
+A custom post-processing effect that enhances brightness and adds subtle glow:
+- **Location**: `client/src/components/AfterimageEffect.tsx`
+- **Parameters**: `decay` and `blend` control glow intensity and spread
+- **Audio Reactivity**: Effect intensity is modulated by bass/high for responsive enhancement
+- **UI Controls**: Toggle and amount slider in Effects panel (mobile and desktop)
+- **Note**: True motion blur/afterimage (temporal accumulation) is planned for future enhancement
+
+## Native Mobile Preparation
+
+The project includes code for building native iOS/Android apps with Unity as the visual engine.
+
+### Native Code Structure
+```
+native/
+├── unity/Scripts/           # Unity C# scripts for receiving messages
+├── ios/AudioVisualizer/     # SwiftUI wrapper with UnityBridge
+└── android/app/             # Kotlin/Compose wrapper with UnityBridge
+```
+
+### JSON Bridge Contract
+Defined in `shared/native-bridge.ts`, provides standardized message types:
+- **TrackMessage**: Track metadata (source, title, artist, artwork, duration)
+- **PlaybackMessage**: Playback state (isPlaying, positionMs, volume)
+- **BandsMessage**: Audio frequency bands (sub, bass, mid, high, kick, energy)
+- **PresetMessage**: Visual preset settings (name, intensity, speed, trails)
+- **ControlMessage**: Playback control actions
+
+### Architecture (Option B)
+- Native wrapper (iOS/Android) owns authentication, playback, and UI
+- Unity is the visual engine screen receiving JSON messages via `UnitySendMessage`
+- Native code performs FFT audio analysis and sends band data at 20-60 FPS
+
+See `native/README.md` for detailed setup instructions.

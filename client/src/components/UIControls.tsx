@@ -40,6 +40,8 @@ interface UIControlsProps {
     presetEnabled: boolean;
     imageFilters: ImageFilterId[];
     psyOverlays: PsyOverlayId[];
+    trailsOn?: boolean;
+    trailsAmount?: number;
   };
   setSettings: (s: any) => void;
   colorSettings: ColorSettings;
@@ -591,6 +593,43 @@ export function UIControls({
                     <p className="text-[10px] text-muted-foreground">Layer on any preset</p>
                   </div>
                   
+                  {/* Glow Enhancement Effect - Mobile */}
+                  <div className="space-y-3">
+                    <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Glow Effect</Label>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Enable Glow</span>
+                      <Switch
+                        checked={settings.trailsOn ?? false}
+                        onCheckedChange={(checked) => {
+                          saveScrollPositions();
+                          setSettings({ ...settings, trailsOn: checked });
+                        }}
+                        data-testid="toggle-trails-mobile"
+                      />
+                    </div>
+                    {settings.trailsOn && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Amount</span>
+                          <span className="text-xs text-muted-foreground">{Math.round((settings.trailsAmount ?? 0.75) * 100)}%</span>
+                        </div>
+                        <Slider
+                          min={0.3}
+                          max={0.95}
+                          step={0.05}
+                          value={[settings.trailsAmount ?? 0.75]}
+                          onValueChange={([val]) => {
+                            saveScrollPositions();
+                            setSettings({ ...settings, trailsAmount: val });
+                          }}
+                          className="w-full"
+                          data-testid="slider-trails-amount-mobile"
+                        />
+                      </div>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">Brightness enhancement effect</p>
+                  </div>
+                  
                   {/* Action Buttons */}
                   <div className="grid grid-cols-2 gap-3">
                     <Button 
@@ -1047,6 +1086,44 @@ export function UIControls({
                     })}
                   </div>
                   <p className="text-[10px] text-muted-foreground">Layer effects on top of presets</p>
+                </div>
+
+                {/* Glow Effect - Desktop */}
+                <div className="col-span-2 space-y-2">
+                  <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Glow</Label>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-muted-foreground">Enable</span>
+                    <Switch
+                      checked={settings.trailsOn ?? false}
+                      onCheckedChange={(checked) => {
+                        saveScrollPositions();
+                        setSettings({ ...settings, trailsOn: checked });
+                      }}
+                      className="scale-75"
+                      data-testid="toggle-trails"
+                    />
+                  </div>
+                  {settings.trailsOn && (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground">Amount</span>
+                        <span className="text-[10px] text-muted-foreground">{Math.round((settings.trailsAmount ?? 0.75) * 100)}%</span>
+                      </div>
+                      <Slider
+                        min={0.3}
+                        max={0.95}
+                        step={0.05}
+                        value={[settings.trailsAmount ?? 0.75]}
+                        onValueChange={([val]) => {
+                          saveScrollPositions();
+                          setSettings({ ...settings, trailsAmount: val });
+                        }}
+                        className="w-full"
+                        data-testid="slider-trails-amount"
+                      />
+                    </div>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">Brightness boost</p>
                 </div>
 
                 {/* Save Options */}

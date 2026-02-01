@@ -95,6 +95,8 @@ export default function Home() {
     presetEnabled: true,
     imageFilters: ["none"] as ImageFilterId[],
     psyOverlays: [] as PsyOverlayId[],
+    trailsOn: false,
+    trailsAmount: 0.75,
   });
   
   // Update color palette when color settings or time changes

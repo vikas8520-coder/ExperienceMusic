@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Kaleidoscope } from "./KaleidoscopeEffect";
+import { Afterimage } from "./AfterimageEffect";
 
 type Props = {
   sub?: number;      // 20-60Hz: slow heavy motion, global pulse
@@ -48,6 +49,7 @@ export function Effects({
   kaleidoStrength = 0.6,
 }: Props) {
   const kaleidoRef = useRef<any>(null);
+  const afterimageRef = useRef<any>(null);
   const angleRef = useRef(0);
   const smoothSubRef = useRef(0);
   const smoothBassRef = useRef(0);
@@ -108,10 +110,21 @@ export function Effects({
   const kaleidoSides = 6 + Math.floor((sm + sh) * 6);
   const kaleidoIntensity = clamp01(kaleidoStrength * (0.4 + sb * 0.3 + sh * 0.3));
 
+  // Afterimage/Trails: Decay controlled by trails prop and energy
+  // Higher energy = slightly faster decay to keep responsiveness
+  const afterimageDecay = clamp01(trails * (0.98 - sb * 0.08 - sh * 0.04));
+  const afterimageBlend = clamp01(trails * 0.85);
+
   if (!enabled) return null;
 
   return (
     <EffectComposer multisampling={4}>
+      <Afterimage
+        ref={afterimageRef}
+        enabled={afterimageOn}
+        decay={afterimageDecay}
+        blend={afterimageBlend}
+      />
       <Bloom
         intensity={bloomOn ? bloomIntensity : 0}
         luminanceThreshold={bloomLuminanceThreshold}
