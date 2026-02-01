@@ -1,0 +1,204 @@
+Great — **SoundCloud-first** is the smartest RN-first path because you can usually do **true in-app playback** and it’s much easier to make your visuals **actually audio-reactive** (bass/mid/high) than with Spotify/Apple early.
+
+Here’s the step-by-step process tailored to **RN (Expo prebuild) + SoundCloud-first**.
+
+---
+
+# ✅ RN (Expo prebuild) + SoundCloud-first: Step-by-step
+
+## Phase 1 — Project setup (Day 1)
+
+1. Create app
+
+* `npx create-expo-app psych-visuals`
+
+2. Switch to prebuild (needed for native audio analysis later)
+
+* `npx expo prebuild`
+
+3. Install basics
+
+* Navigation: `@react-navigation/native`, `@react-navigation/native-stack`
+* Storage: `expo-secure-store`
+* HTTP: `axios`
+* Auth session: `expo-auth-session`
+
+✅ Output: app runs on iOS/Android with stable structure.
+
+---
+
+## Phase 2 — UX skeleton (Days 2–3)
+
+Create these screens/components:
+
+1. **ConnectSourcesScreen**
+
+* “Connect SoundCloud” button
+
+2. **LibraryScreen**
+
+* Search input + results list
+* Saved/Likes (optional)
+
+3. **NowPlayingTopDrawer**
+
+* top sliding player (play/pause, seek, volume)
+* shows artwork/title/artist
+
+4. **VisualizerScreen**
+
+* visuals full-screen
+* preset picker (thumbnail strips, not dropdown)
+* settings panel separate from player
+
+✅ Output: product feels real even before playback.
+
+---
+
+## Phase 3 — SoundCloud integration (OAuth + API) (Days 4–6)
+
+### What you build
+
+1. Create SoundCloud Developer app
+
+* get Client ID
+* set Redirect URI(s)
+
+2. Implement OAuth in RN using `expo-auth-session`
+
+* login → code → token exchange
+* store access token in `expo-secure-store`
+
+3. Build `soundcloudAdapter.ts`
+   Functions:
+
+* `searchTracks(query)`
+* `getMe()` (verify token)
+* `getLikes()` (optional)
+* `getTrackStreamUrl(trackUrn)` (important)
+* return a unified `Track` model
+
+✅ Output: user can connect SoundCloud and browse tracks.
+
+---
+
+## Phase 4 — Playback inside RN (Days 6–8)
+
+Start playback using `expo-av`:
+
+1. Create `playerStore` (Zustand recommended)
+
+* `load(track)`
+* `play() / pause()`
+* `seek(ms)`
+* `setVolume(v)`
+* `positionMs`, `durationMs`, `isPlaying`
+
+2. Use SoundCloud stream URL
+
+* load it into `Audio.Sound.createAsync({ uri })`
+
+✅ Output: SoundCloud tracks play inside your app with a real player UI.
+
+---
+
+## Phase 5 — V1 visuals (quick win) (Days 8–10)
+
+Don’t block on FFT yet. Start with “proxy reactivity”:
+
+1. Visualizer runs off:
+
+* track position (time)
+* simple amplitude proxy (or fake energy ramps)
+* later swap in real bass/mid/high
+
+2. Build your preset UI (thumbnail strips)
+
+* Base Presets
+* Cymatics
+* Psy Shaders
+
+✅ Output: demo is sharable and already looks like a “visual app.”
+
+---
+
+## Phase 6 — Real Audio Analysis (FFT → bass/mid/high) (Days 10–16)
+
+This is where SoundCloud-first pays off.
+
+### Why you need native here
+
+RN JS alone can’t tap PCM reliably for FFT. So:
+
+1. Add a native audio analysis module:
+
+* iOS: `AVAudioEngine` tap (FFT in Accelerate/vDSP)
+* Android: tap PCM via player pipeline (ExoPlayer/AudioRecord) and FFT
+
+2. Expose a JS interface:
+
+* `startAnalysis()`
+* `stopAnalysis()`
+* event stream: `{ bass, mid, high }` at ~20–60 fps
+
+3. Smooth and normalize:
+
+* attack/release smoothing
+* rolling normalization (tracks vary wildly)
+
+4. Update your Unity-style presets in RN visuals with real bands
+
+✅ Output: kicks/hats/energy actually drive visuals like festival visuals.
+
+---
+
+## Phase 7 — Export / Share (Days 16–20)
+
+V1:
+
+* screenshot share
+* short screen recordings (with guidance)
+
+V2:
+
+* native recording pipeline (or Unity embed later)
+
+✅ Output: growth loop (users share visuals).
+
+---
+
+# The clean upgrade path (after SoundCloud is solid)
+
+## Add Spotify next
+
+* OAuth PKCE + library browsing
+* Playback can be:
+
+  * “Open in Spotify” first
+  * or full SDK later
+
+## Add Apple Music on iOS
+
+* MusicKit (native)
+* Same visual engine; only adapter changes
+
+## Upgrade visuals later with Unity embed
+
+RN UI stays identical; you swap visualizer screen to Unity view.
+
+---
+
+# What I need from you to generate exact code (no guessing)
+
+Pick one for SoundCloud:
+
+1. **“Paste track links / search + play public tracks”** (fastest)
+2. **“Full SoundCloud connect (likes, playlists, private)”** (OAuth + more scopes)
+
+If you answer “1” or “2”, I’ll give you:
+
+* the exact `expo-auth-session` OAuth code
+* `soundcloudAdapter.ts`
+* `playerStore.ts`
+* a working `NowPlayingTopDrawer` component
+* and a basic Visualizer screen wired to playback time.
