@@ -1490,20 +1490,190 @@ function WaterMembraneOrb({ getAudioData, settings }: { getAudioData: () => Audi
   );
 }
 
-// === PRESET 10: Chladni Geometry ===
-// Clean sacred-geometry style node lines on a plate
+// === PRESET 10: Chladni Geometry (ULTRA PREMIUM) ===
+// Sacred geometry Chladni patterns with multi-layer rendering, glow, and node particles
 function ChladniGeometry({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const materialRef = useRef<THREE.ShaderMaterial>(null);
+  const groupRef = useRef<THREE.Group>(null);
+  const mainMeshRef = useRef<THREE.Mesh>(null);
+  const glowMeshRef = useRef<THREE.Mesh>(null);
+  const particlesRef = useRef<THREE.Points>(null);
+  const mainMaterialRef = useRef<THREE.ShaderMaterial>(null);
+  const glowMaterialRef = useRef<THREE.ShaderMaterial>(null);
+  const smoothedAudioRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, energy: 0 });
+  const tempColor = useMemo(() => new THREE.Color(), []);
 
+  // Premium Chladni shader with multi-layer patterns
   const chladniShader = useMemo(() => ({
     uniforms: {
       uTime: { value: 0 },
       uM: { value: 3 },
       uN: { value: 2 },
+      uSub: { value: 0 },
       uBass: { value: 0 },
       uMid: { value: 0 },
       uHigh: { value: 0 },
+      uKick: { value: 0 },
+      uEnergy: { value: 0 },
+      uColor1: { value: new THREE.Color("#ffffff") },
+      uColor2: { value: new THREE.Color("#6600ff") },
+      uColor3: { value: new THREE.Color("#00ffff") },
+      uIntensity: { value: 1.0 },
+      uSpeed: { value: 1.0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      varying vec3 vPosition;
+      uniform float uTime;
+      uniform float uBass;
+      uniform float uMid;
+      uniform float uM;
+      uniform float uN;
+      uniform float uIntensity;
+      
+      void main() {
+        vUv = uv;
+        vPosition = position;
+        
+        // 3D displacement based on Chladni pattern
+        vec2 uvCenter = uv * 2.0 - 1.0;
+        float pattern1 = sin(uM * uvCenter.x * 3.14159) * sin(uN * uvCenter.y * 3.14159);
+        float pattern2 = sin(uN * uvCenter.x * 3.14159) * sin(uM * uvCenter.y * 3.14159);
+        float chladni = pattern1 - pattern2;
+        
+        // Breathing displacement
+        float displacement = abs(chladni) * uBass * uIntensity * 0.8;
+        displacement += sin(uTime * 2.0 + length(uvCenter) * 5.0) * uMid * 0.2;
+        
+        vec3 newPosition = position;
+        newPosition.z += displacement;
+        
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uM;
+      uniform float uN;
+      uniform float uSub;
+      uniform float uBass;
+      uniform float uMid;
+      uniform float uHigh;
+      uniform float uKick;
+      uniform float uEnergy;
+      uniform vec3 uColor1;
+      uniform vec3 uColor2;
+      uniform vec3 uColor3;
+      uniform float uIntensity;
+      uniform float uSpeed;
+      varying vec2 vUv;
+      varying vec3 vPosition;
+      
+      // Smooth noise function
+      float hash(vec2 p) {
+        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+      }
+      
+      float noise(vec2 p) {
+        vec2 i = floor(p);
+        vec2 f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        float a = hash(i);
+        float b = hash(i + vec2(1.0, 0.0));
+        float c = hash(i + vec2(0.0, 1.0));
+        float d = hash(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+      }
+      
+      void main() {
+        vec2 uv = vUv * 2.0 - 1.0;
+        float dist = length(uv);
+        
+        // Multi-layer Chladni patterns
+        float m1 = uM;
+        float n1 = uN;
+        float m2 = uM + 1.0;
+        float n2 = uN + 1.0;
+        
+        // Primary pattern
+        float pattern1 = sin(m1 * uv.x * 3.14159) * sin(n1 * uv.y * 3.14159);
+        float pattern2 = sin(n1 * uv.x * 3.14159) * sin(m1 * uv.y * 3.14159);
+        float chladni1 = pattern1 - pattern2;
+        
+        // Secondary pattern (rotated, different mode)
+        vec2 uvRot = vec2(
+          uv.x * cos(uTime * 0.1) - uv.y * sin(uTime * 0.1),
+          uv.x * sin(uTime * 0.1) + uv.y * cos(uTime * 0.1)
+        );
+        float pattern3 = sin(m2 * uvRot.x * 3.14159) * sin(n2 * uvRot.y * 3.14159);
+        float pattern4 = sin(n2 * uvRot.x * 3.14159) * sin(m2 * uvRot.y * 3.14159);
+        float chladni2 = pattern3 - pattern4;
+        
+        // Circular/radial pattern overlay
+        float radialM = uM + uBass * 2.0;
+        float radialPattern = sin(dist * radialM * 3.14159 + uTime * uSpeed) * cos(atan(uv.y, uv.x) * uN * 2.0);
+        
+        // Combine patterns with audio modulation
+        float combined = chladni1 * 0.6 + chladni2 * 0.25 * uMid + radialPattern * 0.15 * uSub;
+        
+        // Node line thickness with audio reactivity
+        float baseThickness = 0.08 + uBass * 0.08 + uSub * 0.05;
+        float node = 1.0 - smoothstep(0.0, baseThickness * uIntensity, abs(combined));
+        
+        // Secondary thinner lines for detail
+        float thinNode = 1.0 - smoothstep(0.0, baseThickness * 0.3, abs(chladni1));
+        node = max(node, thinNode * 0.4 * uMid);
+        
+        // Glow bloom around nodes
+        float glow = 1.0 - smoothstep(0.0, baseThickness * 3.0, abs(combined));
+        glow *= 0.3 + uEnergy * 0.4;
+        
+        // Sparkle on high frequencies
+        float sparkle = 0.0;
+        if (uHigh > 0.3) {
+          float sparkleNoise = noise(uv * 50.0 + uTime * 5.0);
+          sparkle = step(0.92, sparkleNoise) * uHigh * 1.5;
+        }
+        
+        // Kick pulse wave
+        float kickWave = sin(dist * 20.0 - uTime * 8.0) * uKick * 0.3;
+        kickWave = max(0.0, kickWave);
+        
+        // Multi-color gradient based on pattern value and position
+        float colorMix1 = smoothstep(-0.5, 0.5, combined);
+        float colorMix2 = smoothstep(0.0, 1.0, dist);
+        vec3 baseColor = mix(uColor1, uColor2, colorMix1);
+        baseColor = mix(baseColor, uColor3, colorMix2 * 0.4 + uHigh * 0.3);
+        
+        // Add glow color (brighter version)
+        vec3 glowColor = baseColor * (1.0 + glow * 2.0) + vec3(0.1, 0.15, 0.2) * glow;
+        
+        // Sparkle adds white
+        glowColor += vec3(1.0, 1.0, 0.9) * sparkle;
+        
+        // Kick wave adds brightness
+        glowColor += baseColor * kickWave;
+        
+        // Final color with node intensity
+        vec3 finalColor = glowColor * (node + glow * 0.5);
+        
+        // Circular fade with soft edge
+        float fade = 1.0 - smoothstep(0.75, 1.0, dist);
+        float alpha = (node * 0.9 + glow * 0.4 + sparkle + kickWave * 0.5) * fade;
+        alpha = clamp(alpha, 0.0, 1.0);
+        
+        gl_FragColor = vec4(finalColor, alpha);
+      }
+    `
+  }), []);
+
+  // Outer glow layer shader (softer, larger)
+  const glowShader = useMemo(() => ({
+    uniforms: {
+      uTime: { value: 0 },
+      uM: { value: 3 },
+      uN: { value: 2 },
+      uBass: { value: 0 },
+      uEnergy: { value: 0 },
       uColor1: { value: new THREE.Color("#ffffff") },
       uColor2: { value: new THREE.Color("#6600ff") },
       uIntensity: { value: 1.0 },
@@ -1520,8 +1690,7 @@ function ChladniGeometry({ getAudioData, settings }: { getAudioData: () => Audio
       uniform float uM;
       uniform float uN;
       uniform float uBass;
-      uniform float uMid;
-      uniform float uHigh;
+      uniform float uEnergy;
       uniform vec3 uColor1;
       uniform vec3 uColor2;
       uniform float uIntensity;
@@ -1529,67 +1698,230 @@ function ChladniGeometry({ getAudioData, settings }: { getAudioData: () => Audio
       
       void main() {
         vec2 uv = vUv * 2.0 - 1.0;
+        float dist = length(uv);
         
-        // Chladni pattern: sin(m*x)*sin(n*y) - sin(n*x)*sin(m*y) = 0 at nodes
-        float m = uM;
-        float n = uN;
-        float pattern1 = sin(m * uv.x * 3.14159) * sin(n * uv.y * 3.14159);
-        float pattern2 = sin(n * uv.x * 3.14159) * sin(m * uv.y * 3.14159);
+        // Soft Chladni pattern for outer glow
+        float pattern1 = sin(uM * uv.x * 3.14159) * sin(uN * uv.y * 3.14159);
+        float pattern2 = sin(uN * uv.x * 3.14159) * sin(uM * uv.y * 3.14159);
         float chladni = pattern1 - pattern2;
         
-        // Node lines (where chladni ≈ 0)
-        float thickness = 0.1 + uBass * 0.1;
-        float node = 1.0 - smoothstep(0.0, thickness * uIntensity, abs(chladni));
+        // Very wide, soft glow
+        float thickness = 0.4 + uBass * 0.2;
+        float glow = 1.0 - smoothstep(0.0, thickness * uIntensity, abs(chladni));
+        glow *= 0.2 + uEnergy * 0.15;
         
-        // Edge shimmer from highs
-        float shimmer = uHigh * 0.3 * sin(uTime * 5.0 + length(uv) * 10.0);
-        node = clamp(node + shimmer, 0.0, 1.0);
+        // Color
+        vec3 color = mix(uColor2, uColor1, glow);
         
-        // Color blend
-        vec3 color = mix(uColor2, uColor1, node);
+        // Fade at edges
+        float fade = 1.0 - smoothstep(0.6, 1.0, dist);
         
-        // Fade edges
-        float dist = length(uv);
-        float fade = 1.0 - smoothstep(0.8, 1.0, dist);
-        
-        gl_FragColor = vec4(color, node * fade * 0.9);
+        gl_FragColor = vec4(color * glow, glow * fade * 0.4);
       }
     `
   }), []);
 
+  // Node particles that follow the pattern (optimized count for performance)
+  const particleCount = 800;
+  const [particlePositions, particlePhases] = useMemo(() => {
+    const positions = new Float32Array(particleCount * 3);
+    const phases = new Float32Array(particleCount);
+    
+    for (let i = 0; i < particleCount; i++) {
+      // Distribute on a disc
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.sqrt(Math.random()) * 6;
+      positions[i * 3] = Math.cos(angle) * radius;
+      positions[i * 3 + 1] = Math.sin(angle) * radius;
+      positions[i * 3 + 2] = 0;
+      phases[i] = Math.random();
+    }
+    return [positions, phases];
+  }, []);
+
   useFrame((state) => {
-    if (!materialRef.current) return;
-    const { bass, mid, high, modeIndex } = getAudioData();
+    if (!groupRef.current) return;
+    const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
     
-    // Mode patterns for (m, n)
-    const patterns = [[2, 3], [3, 4], [4, 5], [3, 5], [4, 6], [5, 6], [5, 7], [6, 7]];
-    const [m, n] = patterns[Math.max(0, Math.min(7, modeIndex - 1))];
+    // Smooth audio interpolation
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    const smooth = smoothedAudioRef.current;
+    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.06);
+    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.1);
+    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.12);
+    smooth.high = lerp(smooth.high, audioRaw.high, 0.18);
+    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
+    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.08);
     
-    materialRef.current.uniforms.uTime.value = time;
-    materialRef.current.uniforms.uM.value = m;
-    materialRef.current.uniforms.uN.value = n;
-    materialRef.current.uniforms.uBass.value = bass;
-    materialRef.current.uniforms.uMid.value = mid;
-    materialRef.current.uniforms.uHigh.value = high;
-    materialRef.current.uniforms.uIntensity.value = settings.intensity;
+    // Mode patterns for (m, n) - more complex patterns
+    const patterns = [[2, 3], [3, 4], [4, 5], [3, 5], [4, 6], [5, 6], [5, 7], [6, 7], [7, 8], [4, 7]];
+    const modeIndex = audioRaw.modeIndex || 1;
+    const [m, n] = patterns[Math.max(0, Math.min(patterns.length - 1, modeIndex - 1))];
     
-    const colors = settings.colorPalette;
-    materialRef.current.uniforms.uColor1.value.set(colors[0] || "#ffffff");
-    materialRef.current.uniforms.uColor2.value.set(colors[1] || "#6600ff");
+    // Update main shader
+    if (mainMaterialRef.current) {
+      const u = mainMaterialRef.current.uniforms;
+      u.uTime.value = time;
+      u.uM.value = m;
+      u.uN.value = n;
+      u.uSub.value = smooth.sub;
+      u.uBass.value = smooth.bass;
+      u.uMid.value = smooth.mid;
+      u.uHigh.value = smooth.high;
+      u.uKick.value = smooth.kick;
+      u.uEnergy.value = smooth.energy;
+      u.uIntensity.value = settings.intensity;
+      u.uSpeed.value = settings.speed;
+      
+      const colors = settings.colorPalette;
+      u.uColor1.value.set(colors[0] || "#ffffff");
+      u.uColor2.value.set(colors[1] || "#6600ff");
+      u.uColor3.value.set(colors[2] || "#00ffff");
+    }
+    
+    // Update glow shader
+    if (glowMaterialRef.current) {
+      const u = glowMaterialRef.current.uniforms;
+      u.uTime.value = time;
+      u.uM.value = m;
+      u.uN.value = n;
+      u.uBass.value = smooth.bass;
+      u.uEnergy.value = smooth.energy;
+      u.uIntensity.value = settings.intensity;
+      
+      const colors = settings.colorPalette;
+      u.uColor1.value.set(colors[0] || "#ffffff");
+      u.uColor2.value.set(colors[1] || "#6600ff");
+    }
+    
+    // Animate particles to follow node lines (optimized loop)
+    if (particlesRef.current) {
+      const posAttr = particlesRef.current.geometry.attributes.position;
+      const material = particlesRef.current.material as THREE.PointsMaterial;
+      
+      // Dynamic particle size and color (material-level, affects all particles uniformly)
+      material.size = 0.1 + smooth.energy * 0.08 + smooth.high * 0.05;
+      const colorIdx = Math.floor(time * 0.2) % settings.colorPalette.length;
+      tempColor.set(settings.colorPalette[colorIdx]);
+      tempColor.offsetHSL(0, 0, smooth.energy * 0.2);
+      material.color = tempColor;
+      
+      // Precompute constants outside loop
+      const attractionStrength = 0.025 * settings.intensity * (1 + smooth.bass * 0.5);
+      const turbulence = smooth.mid * 0.12 + smooth.high * 0.08;
+      const kickForce = smooth.kick * 0.35;
+      const mPi = m * Math.PI;
+      const nPi = n * Math.PI;
+      const maxDist = 6;
+      const heightScale = smooth.bass * settings.intensity * 0.4;
+      
+      for (let i = 0; i < particleCount; i++) {
+        let px = posAttr.getX(i);
+        let py = posAttr.getY(i);
+        const phase = particlePhases[i];
+        
+        // Normalize to -1 to 1 range
+        const nx = px / 6;
+        const ny = py / 6;
+        
+        // Optimized Chladni calculation (inline, fewer trig calls)
+        const sinMX = Math.sin(mPi * nx);
+        const sinNY = Math.sin(nPi * ny);
+        const sinNX = Math.sin(nPi * nx);
+        const sinMY = Math.sin(mPi * ny);
+        const cv = sinMX * sinNY - sinNX * sinMY;
+        
+        // Approximate gradient using analytical derivative
+        const cosMX = Math.cos(mPi * nx);
+        const cosNY = Math.cos(nPi * ny);
+        const cosNX = Math.cos(nPi * nx);
+        const cosMY = Math.cos(mPi * ny);
+        const dx = (mPi * cosMX * sinNY - nPi * cosNX * sinMY) / 6;
+        const dy = (nPi * sinMX * cosNY - mPi * sinNX * cosMY) / 6;
+        
+        // Move towards nodes
+        px -= dx * cv * attractionStrength;
+        py -= dy * cv * attractionStrength;
+        
+        // Add turbulence from audio
+        px += Math.sin(time * 2 + phase * 10) * turbulence;
+        py += Math.cos(time * 1.8 + phase * 8) * turbulence;
+        
+        // Kick causes outward burst
+        const distSq = px * px + py * py;
+        if (distSq > 0.01 && kickForce > 0.01) {
+          const invDist = 1 / Math.sqrt(distSq);
+          px += px * invDist * kickForce;
+          py += py * invDist * kickForce;
+        }
+        
+        // Keep within bounds
+        if (distSq > maxDist * maxDist) {
+          const angle = phase * Math.PI * 2 + time;
+          const radius = Math.sqrt(phase) * maxDist * 0.8;
+          px = Math.cos(angle) * radius;
+          py = Math.sin(angle) * radius;
+        }
+        
+        // Height based on pattern value (reuse cv)
+        const pz = Math.abs(cv) * heightScale;
+        
+        posAttr.setXYZ(i, px, py, pz);
+      }
+      posAttr.needsUpdate = true;
+    }
+    
+    // Subtle group rotation
+    groupRef.current.rotation.z = Math.sin(time * 0.1) * 0.05 * smooth.sub;
   });
 
   return (
-    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]}>
-      <planeGeometry args={[12, 12, 1, 1]} />
-      <shaderMaterial
-        ref={materialRef}
-        {...chladniShader}
-        transparent
-        side={THREE.DoubleSide}
-        blending={THREE.AdditiveBlending}
-      />
-    </mesh>
+    <group ref={groupRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -2, 0]}>
+      {/* Outer glow layer (behind) */}
+      <mesh ref={glowMeshRef} position={[0, 0, -0.1]}>
+        <planeGeometry args={[16, 16, 1, 1]} />
+        <shaderMaterial
+          ref={glowMaterialRef}
+          {...glowShader}
+          transparent
+          side={THREE.DoubleSide}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          depthTest={false}
+        />
+      </mesh>
+      
+      {/* Main Chladni pattern with 3D displacement */}
+      <mesh ref={mainMeshRef}>
+        <planeGeometry args={[12, 12, 64, 64]} />
+        <shaderMaterial
+          ref={mainMaterialRef}
+          {...chladniShader}
+          transparent
+          side={THREE.DoubleSide}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          depthTest={false}
+        />
+      </mesh>
+      
+      {/* Node particles */}
+      <points ref={particlesRef}>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" count={particleCount} array={particlePositions} itemSize={3} usage={THREE.DynamicDrawUsage} />
+        </bufferGeometry>
+        <pointsMaterial
+          size={0.1}
+          transparent
+          opacity={0.8}
+          blending={THREE.AdditiveBlending}
+          sizeAttenuation
+          depthWrite={false}
+          depthTest={false}
+        />
+      </points>
+    </group>
   );
 }
 

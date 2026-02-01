@@ -4,7 +4,7 @@
 
 This is a production-ready audio-reactive visualization web application that allows users to upload audio tracks and generates real-time, high-quality WebGL visualizations in the browser. The app analyzes audio frequency bands (bass, mid, high) and uses them to drive GPU-accelerated 3D visuals with Three.js. It includes 15 visual presets:
 - **7 Base Presets**: Energy Rings, Psy Tunnel, Particle Field, Waveform Sphere, Audio Bars, Geometric Kaleidoscope, Cosmic Web
-- **4 Cymatics Presets**: Cymatic Sand Plate (particles settling on wave nodes), Water Membrane Orb (spherical standing waves), Chladni Geometry (sacred-geometry node lines), Resonant Field Lines (magnetic-field curves)
+- **4 Cymatics Presets**: Cymatic Sand Plate (particles settling on wave nodes), Water Membrane Orb (spherical standing waves), Chladni Geometry (ultra premium with multi-layer patterns, 3D displacement, and node particles), Resonant Field Lines (magnetic-field curves)
 - **4 Psy Shader Presets**: Blue Tunnel, BW Vortex, Rainbow Spiral, Red Mandala
 
 Features include 10 color palettes, customizable controls for intensity/speed/color, AI-powered thumbnail analysis for automatic theme extraction, and dominant frequency detection for mode-quantized resonance effects. The UI is fully responsive with mobile-optimized touch controls.
