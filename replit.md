@@ -72,16 +72,25 @@ Preferred communication style: Simple, everyday language.
 - **Mute Toggle**: Preserves previous volume level for seamless unmute
 - **Auto-Hide Controls**: Settings panel automatically hides after 5 seconds of inactivity; reappears on "Show Controls" click or any interaction (mouse, touch, keyboard)
 
-### Premium Visual Presets
-All 7 main presets upgraded to premium quality with:
+### Premium Visual Presets (Unique Visual Identities)
+All presets have been upgraded to premium+ quality with distinct visual concepts - avoiding the generic "center core + orbiting particles" pattern:
+
+**Base Presets:**
+- **EnergyRings**: Electric arcs jumping between concentric rings + energy trail particles spiraling around torus geometry
+- **PsyTunnel**: Deep tunnel effect with layered geometric rings
+- **ParticleField (Ultra Premium)**: Custom shader with 3 particle layers (core: 4000, glow: 2500, trail: 1500), glowing energy core orb with fresnel rim glow, energy ring halo, Fibonacci sphere distribution, vortex flow motion
+- **WaveformSphere**: Aurora ribbons wrapping around sphere + chromatic inner surface layer with world-space fresnel
+- **AudioBars (Holographic)**: Volumetric bars with holographic wireframe outlines + horizontal scan lines sweeping through bars + grid floor
+- **GeometricKaleidoscope (Fractal Morphing)**: Symmetry mirror planes + motion trails following shapes + morphing scale transitions
+- **CosmicWeb (Energy Flow)**: Energy pulses traveling along connections + nebula cloud particles scattered throughout
+
+**Cymatics Presets:**
+- **CymaticSandPlate (Standing Wave)**: Vibrating membrane surface + concentric interference pattern rings
+- **WaterMembraneOrb**: Spherical standing wave patterns
+- **ChladniGeometry**: Multi-layer Chladni patterns with 3D displacement
+- **ResonantFieldLines (Electromagnetic)**: Magnetic dipole poles + ionized particles following field lines (no center orb)
+
 - **Smooth Audio Interpolation**: Per-band lerp smoothing (sub: 0.06-0.08, bass: 0.1-0.15, mid: 0.12-0.18, high: 0.18-0.22, kick: 0.2-0.25)
-- **Higher Detail Geometries**:
-  - EnergyRings: 24 rings, 128 torus segments, multi-axis rotation
-  - ParticleField (Ultra Premium): Custom shader with 3 particle layers (core: 4000, glow: 2500, trail: 1500), glowing energy core orb at center with fresnel rim glow, energy ring halo, Fibonacci sphere distribution, vortex flow motion, gravity wells, explosion on kick, and sparkle effects
-  - WaveformSphere: 6 subdivisions, layered displacement
-  - AudioBars: 128 bars, smooth height transitions
-  - GeometricKaleidoscope: 42 shapes, 6 geometry types
-  - CosmicWeb: 120 nodes with optimized connection calculation
 - **Multi-Layered Audio Reactivity**: Separate responses for sub/bass/mid/high/kick/energy per preset
 - **Dynamic Material Properties**: Emissive intensity, opacity, and color shift based on audio
 - **Performance Optimizations**: Reused Color objects, dynamic material sizes, clamped shader values for stability
