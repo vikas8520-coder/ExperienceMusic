@@ -119,6 +119,12 @@ export function UIControls({
   const [showMobileControls, setShowMobileControls] = useState(true);
   const [isDesktopPanelVisible, setIsDesktopPanelVisible] = useState(true);
   
+  // File input refs for reliable click handling
+  const audioInputRef = useRef<HTMLInputElement>(null);
+  const audioInputMobileRef = useRef<HTMLInputElement>(null);
+  const thumbnailInputRef = useRef<HTMLInputElement>(null);
+  const thumbnailInputMobileRef = useRef<HTMLInputElement>(null);
+  
   const desktopScrollRef = useRef<HTMLDivElement>(null);
   const mobileScrollRef = useRef<HTMLDivElement>(null);
   const desktopScrollPosition = useRef<number>(0);
@@ -213,22 +219,23 @@ export function UIControls({
   const MobileFloatingControls = () => (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 md:hidden" style={{ pointerEvents: 'auto' }}>
       {/* Upload Button */}
-      <div className="relative">
-        <input
-          type="file"
-          accept="audio/*"
-          onChange={onFileUpload}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          data-testid="input-audio-upload-mobile"
-        />
-        <Button 
-          variant="secondary"
-          size="icon"
-          className="rounded-full shadow-lg"
-        >
-          <Upload className="h-5 w-5" />
-        </Button>
-      </div>
+      <input
+        ref={audioInputMobileRef}
+        type="file"
+        accept="audio/*"
+        onChange={onFileUpload}
+        className="hidden"
+        data-testid="input-audio-upload-mobile"
+      />
+      <Button 
+        variant="secondary"
+        size="icon"
+        className="rounded-full shadow-lg"
+        onClick={() => audioInputMobileRef.current?.click()}
+        data-testid="button-audio-upload-mobile"
+      >
+        <Upload className="h-5 w-5" />
+      </Button>
       
       {/* Settings Toggle */}
       <Button 
@@ -486,11 +493,18 @@ export function UIControls({
                       )}
                       
                       <input
+                        ref={thumbnailInputMobileRef}
                         type="file"
                         accept="image/*"
                         onChange={handleThumbnailUpload}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        className="hidden"
                         data-testid="input-thumbnail-upload-mobile"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => thumbnailInputMobileRef.current?.click()}
+                        className="absolute inset-0 w-full h-full cursor-pointer bg-transparent border-0"
+                        aria-label="Upload thumbnail"
                       />
                     </div>
                     
@@ -851,21 +865,26 @@ export function UIControls({
                 {/* Quick Actions */}
                 <div className="col-span-2 space-y-2">
                   <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Actions</Label>
+                  <input
+                    ref={audioInputRef}
+                    type="file"
+                    accept="audio/*"
+                    onChange={onFileUpload}
+                    className="hidden"
+                    data-testid="input-audio-upload"
+                  />
                   <div className="flex flex-wrap gap-1">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className="relative">
-                          <input
-                            type="file"
-                            accept="audio/*"
-                            onChange={onFileUpload}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            data-testid="input-audio-upload"
-                          />
-                          <Button variant="outline" size="icon" className="h-8 w-8 border-primary/50">
-                            <Upload className="h-4 w-4 text-primary" />
-                          </Button>
-                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="icon" 
+                          className="h-8 w-8 border-primary/50"
+                          onClick={() => audioInputRef.current?.click()}
+                          data-testid="button-audio-upload"
+                        >
+                          <Upload className="h-4 w-4 text-primary" />
+                        </Button>
                       </TooltipTrigger>
                       <TooltipContent><p>Upload audio</p></TooltipContent>
                     </Tooltip>
@@ -927,7 +946,19 @@ export function UIControls({
                     <Label className="text-xs uppercase tracking-widest text-accent font-bold">Artwork</Label>
                     {isAnalyzing && <Loader2 className="w-3 h-3 text-primary animate-spin" />}
                   </div>
-                  <div className="relative w-16 h-16 rounded-lg border border-white/10 bg-black/50 overflow-hidden cursor-pointer">
+                  <input
+                    ref={thumbnailInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleThumbnailUpload}
+                    className="hidden"
+                    data-testid="input-thumbnail-upload"
+                  />
+                  <div 
+                    className="relative w-16 h-16 rounded-lg border border-white/10 bg-black/50 overflow-hidden cursor-pointer"
+                    onClick={() => thumbnailInputRef.current?.click()}
+                    data-testid="button-thumbnail-upload"
+                  >
                     {displayThumbnail ? (
                       <img src={displayThumbnail} alt="Thumbnail" className="w-full h-full object-cover" data-testid="img-thumbnail" />
                     ) : (
@@ -935,13 +966,6 @@ export function UIControls({
                         <ImagePlus className="w-5 h-5 opacity-30" />
                       </div>
                     )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleThumbnailUpload}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      data-testid="input-thumbnail-upload"
-                    />
                   </div>
                   {analysis && (
                     <Button 
