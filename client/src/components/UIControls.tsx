@@ -572,17 +572,17 @@ export function UIControls({
                         <img 
                           src={displayThumbnail} 
                           alt="Thumbnail" 
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover pointer-events-none"
                         />
                       ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
+                        <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2 pointer-events-none">
                           <ImagePlus className="w-8 h-8 opacity-30" />
                           <span className="text-xs opacity-50">Tap to add artwork</span>
                         </div>
                       )}
                       
                       {isAnalyzing && (
-                        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2">
+                        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 pointer-events-none z-10">
                           <Loader2 className="w-8 h-8 text-primary animate-spin" />
                           <span className="text-xs text-primary">Analyzing...</span>
                         </div>
@@ -592,14 +592,14 @@ export function UIControls({
                         ref={thumbnailInputMobileRef}
                         type="file"
                         accept="image/*"
-                        onChange={handleThumbnailUpload}
+                        onChange={(e) => { handleThumbnailUpload(e); e.target.value = ''; }}
                         className="hidden"
                         data-testid="input-thumbnail-upload-mobile"
                       />
                       <button
                         type="button"
                         onClick={() => thumbnailInputMobileRef.current?.click()}
-                        className="absolute inset-0 w-full h-full cursor-pointer bg-transparent border-0"
+                        className="absolute inset-0 w-full h-full cursor-pointer bg-transparent border-0 z-20"
                         aria-label="Upload thumbnail"
                         data-testid="button-thumbnail-upload-mobile"
                       />
@@ -1110,7 +1110,7 @@ export function UIControls({
                     ref={thumbnailInputRef}
                     type="file"
                     accept="image/*"
-                    onChange={handleThumbnailUpload}
+                    onChange={(e) => { handleThumbnailUpload(e); e.target.value = ''; }}
                     className="hidden"
                     data-testid="input-thumbnail-upload"
                   />
@@ -1121,9 +1121,9 @@ export function UIControls({
                     data-testid="button-thumbnail-upload"
                   >
                     {displayThumbnail ? (
-                      <img src={displayThumbnail} alt="Thumbnail" className="w-full h-full object-cover" data-testid="img-thumbnail" />
+                      <img src={displayThumbnail} alt="Thumbnail" className="w-full h-full object-cover pointer-events-none" data-testid="img-thumbnail" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center">
+                      <div className="w-full h-full flex items-center justify-center pointer-events-none">
                         <ImagePlus className="w-5 h-5 opacity-30" />
                       </div>
                     )}
