@@ -11,11 +11,12 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Upload, Save, Disc, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn } from "lucide-react";
+import { Upload, Save, Disc as DiscIcon, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   colorPalettes, 
-  presets, 
+  presets,
+  presetCategories,
   imageFilters, 
   psyOverlays, 
   colorModes,
@@ -27,6 +28,41 @@ import {
   type ColorModeId,
   type MoodPresetId
 } from "@/lib/visualizer-presets";
+import { 
+  Circle, 
+  Disc, 
+  Globe, 
+  BarChart3, 
+  Hexagon, 
+  Network,
+  Waves,
+  Droplet,
+  Triangle,
+  Magnet,
+  CircleDot,
+  RotateCcw,
+  Rainbow,
+  Sun
+} from "lucide-react";
+
+// Map preset icons to Lucide components
+const presetIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  rings: Circle,
+  tunnel: Disc,
+  particles: Sparkles,
+  sphere: Globe,
+  bars: BarChart3,
+  kaleidoscope: Hexagon,
+  web: Network,
+  sand: Waves,
+  water: Droplet,
+  geometry: Triangle,
+  field: Magnet,
+  blue: CircleDot,
+  vortex: RotateCcw,
+  rainbow: Rainbow,
+  mandala: Sun,
+};
 
 interface UIControlsProps {
   isPlaying: boolean;
@@ -344,29 +380,46 @@ export function UIControls({
                 </div>
               )}
               
-              {/* Preset Selector with Toggle */}
-              <div className="flex items-center gap-2">
-                <Switch
-                  checked={settings.presetEnabled}
-                  onCheckedChange={(checked) => { saveScrollPositions(); setSettings({ ...settings, presetEnabled: checked }); }}
-                  data-testid="switch-preset-toggle-mobile"
-                />
-                <Select
-                  value={settings.presetName}
-                  onValueChange={(val) => { saveScrollPositions(); setSettings({ ...settings, presetName: val as PresetName }); }}
-                  disabled={!settings.presetEnabled}
-                >
-                  <SelectTrigger className={`flex-1 bg-black/50 border-white/10 font-mono h-12 text-base ${!settings.presetEnabled ? 'opacity-50' : ''}`} data-testid="select-preset-mobile">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-background border-white/10">
-                    {presets.map((preset) => (
-                      <SelectItem key={preset} value={preset} className="font-mono focus:bg-primary/20 py-3">
-                        {preset}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {/* Preset Selector - Categorized Buttons */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Preset</Label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Enable</span>
+                    <Switch
+                      checked={settings.presetEnabled}
+                      onCheckedChange={(checked) => { saveScrollPositions(); setSettings({ ...settings, presetEnabled: checked }); }}
+                      data-testid="switch-preset-toggle-mobile"
+                    />
+                  </div>
+                </div>
+                
+                {presetCategories.map((category) => (
+                  <div key={category.name} className={`space-y-2 ${!settings.presetEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{category.name}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {category.presets.map((preset) => {
+                        const IconComponent = presetIconMap[preset.icon];
+                        const isActive = settings.presetName === preset.name;
+                        return (
+                          <button
+                            key={preset.name}
+                            onClick={() => { saveScrollPositions(); setSettings({ ...settings, presetName: preset.name }); }}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all ${
+                              isActive
+                                ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
+                                : "bg-white/10 text-white/70 hover:bg-white/20"
+                            }`}
+                            data-testid={`button-preset-mobile-${preset.shortName.toLowerCase()}`}
+                          >
+                            {IconComponent && <IconComponent className="w-3.5 h-3.5" />}
+                            <span>{preset.shortName}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
               
               {/* Color Mode Selector */}
@@ -785,36 +838,57 @@ export function UIControls({
               {/* Row 1: Main Controls */}
               <div className="grid grid-cols-12 gap-4 mb-4">
                 
-                {/* Preset Selection - Most Important */}
-                <div className="col-span-3 space-y-2">
+                {/* Preset Selection - Categorized Buttons */}
+                <div className="col-span-5 space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs uppercase tracking-widest text-primary font-bold">Preset</Label>
-                    <Switch
-                      checked={settings.presetEnabled}
-                      onCheckedChange={(checked) => { saveScrollPositions(); setSettings({ ...settings, presetEnabled: checked }); }}
-                      data-testid="switch-preset-toggle"
-                    />
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground">Enable</span>
+                      <Switch
+                        checked={settings.presetEnabled}
+                        onCheckedChange={(checked) => { saveScrollPositions(); setSettings({ ...settings, presetEnabled: checked }); }}
+                        data-testid="switch-preset-toggle"
+                      />
+                    </div>
                   </div>
-                  <Select
-                    value={settings.presetName}
-                    onValueChange={(val) => { saveScrollPositions(); setSettings({ ...settings, presetName: val as PresetName }); }}
-                    disabled={!settings.presetEnabled}
-                  >
-                    <SelectTrigger className={`bg-black/50 border-white/10 font-mono h-10 ${!settings.presetEnabled ? 'opacity-50' : ''}`} data-testid="select-preset">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-background border-white/10 z-[9999]" sideOffset={5}>
-                      {presets.map((preset) => (
-                        <SelectItem key={preset} value={preset} className="font-mono focus:bg-primary/20">
-                          {preset}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className={`space-y-1.5 ${!settings.presetEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {presetCategories.map((category) => (
+                      <div key={category.name} className="flex items-center gap-2">
+                        <span className="text-[9px] text-muted-foreground uppercase w-14 flex-shrink-0">{category.name}</span>
+                        <div className="flex flex-wrap gap-1">
+                          {category.presets.map((preset) => {
+                            const IconComponent = presetIconMap[preset.icon];
+                            const isActive = settings.presetName === preset.name;
+                            return (
+                              <Tooltip key={preset.name}>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={() => { saveScrollPositions(); setSettings({ ...settings, presetName: preset.name }); }}
+                                    className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-all ${
+                                      isActive
+                                        ? "bg-primary text-primary-foreground ring-1 ring-primary/50"
+                                        : "bg-white/10 text-white/60 hover:bg-white/20"
+                                    }`}
+                                    data-testid={`button-preset-${preset.shortName.toLowerCase()}`}
+                                  >
+                                    {IconComponent && <IconComponent className="w-3 h-3" />}
+                                    <span>{preset.shortName}</span>
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                  {preset.name}
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Color Mode */}
-                <div className="col-span-4 space-y-2">
+                <div className="col-span-3 space-y-2">
                   <Label className="text-xs uppercase tracking-widest text-accent font-bold">Color Mode</Label>
                   
                   {/* Mode Selector */}

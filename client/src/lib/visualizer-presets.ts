@@ -201,6 +201,40 @@ export const presets = [
 
 export type PresetName = typeof presets[number];
 
+// Categorized presets for UI display
+export const presetCategories = [
+  {
+    name: "Base",
+    presets: [
+      { name: "Energy Rings" as PresetName, icon: "rings", shortName: "Rings" },
+      { name: "Psy Tunnel" as PresetName, icon: "tunnel", shortName: "Tunnel" },
+      { name: "Particle Field" as PresetName, icon: "particles", shortName: "Particles" },
+      { name: "Waveform Sphere" as PresetName, icon: "sphere", shortName: "Sphere" },
+      { name: "Audio Bars" as PresetName, icon: "bars", shortName: "Bars" },
+      { name: "Geometric Kaleidoscope" as PresetName, icon: "kaleidoscope", shortName: "Kaleid" },
+      { name: "Cosmic Web" as PresetName, icon: "web", shortName: "Web" },
+    ],
+  },
+  {
+    name: "Cymatics",
+    presets: [
+      { name: "Cymatic Sand Plate" as PresetName, icon: "sand", shortName: "Sand" },
+      { name: "Water Membrane Orb" as PresetName, icon: "water", shortName: "Water" },
+      { name: "Chladni Geometry" as PresetName, icon: "geometry", shortName: "Chladni" },
+      { name: "Resonant Field Lines" as PresetName, icon: "field", shortName: "Field" },
+    ],
+  },
+  {
+    name: "Psy Shaders",
+    presets: [
+      { name: "Blue Tunnel" as PresetName, icon: "blue", shortName: "Blue" },
+      { name: "BW Vortex" as PresetName, icon: "vortex", shortName: "B/W" },
+      { name: "Rainbow Spiral" as PresetName, icon: "rainbow", shortName: "Rainbow" },
+      { name: "Red Mandala" as PresetName, icon: "mandala", shortName: "Mandala" },
+    ],
+  },
+] as const;
+
 export const psyOverlays = [
   { name: "Blue Tunnel", id: "blueTunnel" },
   { name: "BW Vortex", id: "bwVortex" },
