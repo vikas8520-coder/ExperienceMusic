@@ -1,16 +1,21 @@
 import { create } from 'zustand';
-import type { VisualPreset, AudioBands, VisualizerSettings } from '@/types';
+import type { VisualPreset, AudioBands, VisualizerSettings, GyroscopeData } from '../types';
 
 const DEFAULT_PALETTE = ['#ff006e', '#8338ec', '#3a86ff', '#06ffa5', '#ffbe0b'];
 
 interface VisualizerStore {
   settings: VisualizerSettings;
   audioBands: AudioBands;
+  gyroscope: GyroscopeData;
+  gyroscopeEnabled: boolean;
   setPreset: (preset: VisualPreset) => void;
   setIntensity: (intensity: number) => void;
   setSpeed: (speed: number) => void;
   setColorPalette: (palette: string[]) => void;
   updateAudioBands: (bands: Partial<AudioBands>) => void;
+  updateGyroscope: (data: GyroscopeData) => void;
+  toggleGyroscope: () => void;
+  setGyroscopeEnabled: (enabled: boolean) => void;
 }
 
 export const useVisualizerStore = create<VisualizerStore>((set) => ({
@@ -28,6 +33,12 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
     kick: 0,
     energy: 0,
   },
+  gyroscope: {
+    x: 0,
+    y: 0,
+    z: 0,
+  },
+  gyroscopeEnabled: false,
 
   setPreset: (preset: VisualPreset) => 
     set((state) => ({ settings: { ...state.settings, preset } })),
@@ -43,4 +54,13 @@ export const useVisualizerStore = create<VisualizerStore>((set) => ({
 
   updateAudioBands: (bands: Partial<AudioBands>) =>
     set((state) => ({ audioBands: { ...state.audioBands, ...bands } })),
+
+  updateGyroscope: (data: GyroscopeData) =>
+    set({ gyroscope: data }),
+
+  toggleGyroscope: () =>
+    set((state) => ({ gyroscopeEnabled: !state.gyroscopeEnabled })),
+
+  setGyroscopeEnabled: (enabled: boolean) =>
+    set({ gyroscopeEnabled: enabled }),
 }));

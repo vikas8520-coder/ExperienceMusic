@@ -18,7 +18,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.psychvisuals.app",
       "infoPlist": {
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": ["audio", "fetch"]
       }
     },
     "android": {
@@ -26,14 +26,24 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.psychvisuals.app"
+      "package": "com.psychvisuals.app",
+      "permissions": [
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.WAKE_LOCK"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "scheme": "psychvisuals",
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone for audio analysis."
+        }
+      ]
     ]
   }
 }

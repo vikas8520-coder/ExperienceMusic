@@ -60,7 +60,11 @@ mobile/
 │   ├── adapters/
 │   │   └── soundcloudAdapter.ts # SoundCloud API client
 │   ├── components/
-│   │   └── NowPlayingTopDrawer.tsx
+│   │   ├── NowPlayingTopDrawer.tsx
+│   │   └── GLVisualizer.tsx     # WebGL shader-based visuals
+│   ├── hooks/
+│   │   ├── useAudioAnalysis.ts  # Simulated FFT analysis
+│   │   └── useScreenCapture.ts  # Screenshot/sequence capture
 │   ├── navigation/
 │   │   └── AppNavigator.tsx     # Navigation setup
 │   ├── screens/
@@ -69,8 +73,9 @@ mobile/
 │   │   └── VisualizerScreen.tsx
 │   ├── stores/
 │   │   ├── authStore.ts         # Authentication state
-│   │   ├── playerStore.ts       # Audio playback state
-│   │   └── visualizerStore.ts   # Visualizer settings
+│   │   ├── downloadStore.ts     # Offline downloads
+│   │   ├── playerStore.ts       # Audio playback + queue
+│   │   └── visualizerStore.ts   # Visualizer settings + gyroscope
 │   └── types/
 │       └── index.ts             # TypeScript types
 ```
@@ -99,22 +104,49 @@ mobile/
 - ✅ expo-av audio playback
 - ✅ Zustand player store
 - ✅ Play/pause/seek/volume controls
-- ✅ Background audio support (iOS)
+- ✅ Background audio support (iOS & Android)
+- ✅ Queue management (add, remove, reorder tracks)
+- ✅ Repeat modes (off, one, all)
+- ✅ Shuffle mode
 
 ### Phase 5: V1 Visuals
-- ✅ Animated ring visualization
+- ✅ Animated ring visualization (2D fallback)
 - ✅ Playback time-based reactivity
 - ✅ Preset selector with thumbnail strips
 - ✅ Color palette support
+- ✅ Gyroscope control for visual motion (expo-sensors)
+- ✅ WebGL shader-based presets (expo-gl):
+  - Energy Rings, Psy Tunnel, Particle Field
+  - Waveform Sphere, Audio Bars
+  - Geometric Kaleidoscope, Cosmic Web
+- ✅ Toggle between WebGL and 2D renderers
 
-### Phase 6: Real Audio Analysis (TODO)
-- Native FFT module (iOS: AVAudioEngine, Android: AudioRecord)
-- Real bass/mid/high extraction
-- Smooth attack/release
+### Phase 6: Audio Analysis
+- ✅ Simulated FFT using time-based mathematical patterns
+- ✅ Per-band audio data (sub, bass, mid, high, kick, energy)
+- ✅ Smooth interpolation for fluid visual response
+- Future: Native FFT module for true audio analysis
+
+### Phase 7: Offline & Downloads
+- ✅ Download tracks for offline playback (expo-file-system)
+- ✅ Secure metadata storage (expo-secure-store)
+- ✅ Automatic local file detection during playback
+- ✅ Download progress tracking
+- ✅ Delete downloaded tracks
+
+### Phase 8: Screen Capture & Export
+- ✅ Screenshot capture (react-native-view-shot)
+- ✅ Frame sequence capture for animation export
+- ✅ Save to media library (expo-media-library)
+- ✅ Share captures (expo-sharing)
+- ✅ Capture progress indicator
+
+**Note**: Frame sequences are captured as individual PNG files. True video encoding with audio requires native modules (ffmpeg or platform-specific encoders) which are planned for a future release.
 
 ## Future Enhancements
 
 - Spotify integration
 - Apple Music integration (iOS)
-- Unity WebGL embed for premium visuals
-- Video export/sharing
+- Native FFT for real audio analysis
+- Video export with audio (encode frames + audio to MP4)
+- Cloud sync for downloaded tracks

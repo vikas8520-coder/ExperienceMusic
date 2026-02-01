@@ -33,6 +33,12 @@ export interface PlaybackState {
   volume: number;
 }
 
+export interface GyroscopeData {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export type VisualPreset = 
   | 'energy-rings'
   | 'psy-tunnel'

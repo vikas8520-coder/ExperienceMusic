@@ -171,27 +171,38 @@ mobile/
 │   ├── adapters/
 │   │   └── soundcloudAdapter.ts # SoundCloud API with OAuth
 │   ├── components/
-│   │   └── NowPlayingTopDrawer.tsx
+│   │   ├── NowPlayingTopDrawer.tsx
+│   │   └── GLVisualizer.tsx     # WebGL shader-based visuals
+│   ├── hooks/
+│   │   ├── useAudioAnalysis.ts  # Simulated FFT analysis
+│   │   └── useScreenCapture.ts  # Screenshot/sequence capture
 │   ├── navigation/
 │   │   └── AppNavigator.tsx     # Stack + Tab navigation
 │   ├── screens/
 │   │   ├── ConnectSourcesScreen.tsx  # SoundCloud OAuth
 │   │   ├── LibraryScreen.tsx         # Search/Likes/Playlists
-│   │   └── VisualizerScreen.tsx      # Visual presets
+│   │   └── VisualizerScreen.tsx      # Visual presets + GL toggle
 │   ├── stores/
 │   │   ├── authStore.ts         # Zustand auth state
-│   │   ├── playerStore.ts       # expo-av playback
-│   │   └── visualizerStore.ts   # Preset settings
+│   │   ├── downloadStore.ts     # Offline downloads
+│   │   ├── playerStore.ts       # expo-av playback + queue
+│   │   └── visualizerStore.ts   # Preset settings + gyroscope
 │   └── types/
 │       └── index.ts
 ```
 
 ### Mobile Features
-- **SoundCloud OAuth**: Full OAuth 2.0 flow with token refresh
+- **SoundCloud OAuth**: Full OAuth 2.0 flow with secure backend token exchange
 - **Library**: Search tracks, view likes, browse playlists
-- **Playback**: expo-av audio with background support
-- **Visualizer**: Animated ring visuals with preset picker
-- **Future**: Native FFT for real bass/mid/high analysis
+- **Playback**: expo-av audio with background support (iOS & Android)
+- **Queue Management**: Add/remove/reorder tracks, repeat (off/one/all), shuffle
+- **Offline Downloads**: Download tracks for offline playback with expo-file-system
+- **WebGL Visualizer**: 7 shader-based presets ported from web app (expo-gl)
+- **2D Fallback**: Simple animated ring visualization for unsupported presets
+- **Gyroscope Control**: Device tilt affects visual parameters (expo-sensors)
+- **Audio Analysis**: Simulated FFT using time-based mathematical patterns
+- **Screen Capture**: Screenshot and frame sequence capture for export (PNG frames saved to media library)
+- **Future**: Native FFT for real audio analysis, video export with audio encoding
 
 ### Running the Mobile App
 ```bash
