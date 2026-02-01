@@ -254,5 +254,99 @@ Respond in JSON format:
     });
   }
 
+  // SoundCloud OAuth token exchange endpoint (for mobile app security)
+  // Client secret is kept on server, mobile app only sends authorization code
+  app.post('/api/auth/soundcloud/token', async (req, res) => {
+    const { code, redirect_uri } = req.body;
+    
+    if (!code || !redirect_uri) {
+      return res.status(400).json({ error: 'Missing code or redirect_uri' });
+    }
+
+    const clientId = process.env.SOUNDCLOUD_CLIENT_ID;
+    const clientSecret = process.env.SOUNDCLOUD_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      return res.status(500).json({ error: 'SoundCloud credentials not configured' });
+    }
+
+    try {
+      const tokenResponse = await fetch('https://api.soundcloud.com/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirect_uri,
+          code: code,
+        }).toString(),
+      });
+
+      const data = await tokenResponse.json();
+      
+      if (data.error) {
+        return res.status(400).json({ error: data.error_description || data.error });
+      }
+
+      res.json({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_in: data.expires_in,
+      });
+    } catch (error) {
+      console.error('SoundCloud token exchange error:', error);
+      res.status(500).json({ error: 'Token exchange failed' });
+    }
+  });
+
+  // SoundCloud refresh token endpoint
+  app.post('/api/auth/soundcloud/refresh', async (req, res) => {
+    const { refresh_token } = req.body;
+    
+    if (!refresh_token) {
+      return res.status(400).json({ error: 'Missing refresh_token' });
+    }
+
+    const clientId = process.env.SOUNDCLOUD_CLIENT_ID;
+    const clientSecret = process.env.SOUNDCLOUD_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      return res.status(500).json({ error: 'SoundCloud credentials not configured' });
+    }
+
+    try {
+      const tokenResponse = await fetch('https://api.soundcloud.com/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: refresh_token,
+        }).toString(),
+      });
+
+      const data = await tokenResponse.json();
+      
+      if (data.error) {
+        return res.status(400).json({ error: data.error_description || data.error });
+      }
+
+      res.json({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_in: data.expires_in,
+      });
+    } catch (error) {
+      console.error('SoundCloud token refresh error:', error);
+      res.status(500).json({ error: 'Token refresh failed' });
+    }
+  });
+
   return httpServer;
 }

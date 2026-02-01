@@ -159,9 +159,52 @@ A custom post-processing effect that enhances brightness and adds subtle glow:
 - **UI Controls**: Toggle and amount slider in Effects panel (mobile and desktop)
 - **Note**: True motion blur/afterimage (temporal accumulation) is planned for future enhancement
 
-## Native Mobile Preparation
+## React Native Mobile App (Expo)
 
-The project includes code for building native iOS/Android apps with Unity as the visual engine.
+A complete React Native mobile app with SoundCloud integration is available in the `mobile/` directory.
+
+### Mobile App Structure
+```
+mobile/
+├── App.tsx                      # Entry point
+├── src/
+│   ├── adapters/
+│   │   └── soundcloudAdapter.ts # SoundCloud API with OAuth
+│   ├── components/
+│   │   └── NowPlayingTopDrawer.tsx
+│   ├── navigation/
+│   │   └── AppNavigator.tsx     # Stack + Tab navigation
+│   ├── screens/
+│   │   ├── ConnectSourcesScreen.tsx  # SoundCloud OAuth
+│   │   ├── LibraryScreen.tsx         # Search/Likes/Playlists
+│   │   └── VisualizerScreen.tsx      # Visual presets
+│   ├── stores/
+│   │   ├── authStore.ts         # Zustand auth state
+│   │   ├── playerStore.ts       # expo-av playback
+│   │   └── visualizerStore.ts   # Preset settings
+│   └── types/
+│       └── index.ts
+```
+
+### Mobile Features
+- **SoundCloud OAuth**: Full OAuth 2.0 flow with token refresh
+- **Library**: Search tracks, view likes, browse playlists
+- **Playback**: expo-av audio with background support
+- **Visualizer**: Animated ring visuals with preset picker
+- **Future**: Native FFT for real bass/mid/high analysis
+
+### Running the Mobile App
+```bash
+cd mobile
+npm install
+npm start
+```
+
+See `mobile/README.md` for detailed setup instructions.
+
+## Native Mobile Preparation (Unity)
+
+The project also includes code for building native iOS/Android apps with Unity as the visual engine.
 
 ### Native Code Structure
 ```
