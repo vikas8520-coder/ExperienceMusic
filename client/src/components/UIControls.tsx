@@ -601,6 +601,7 @@ export function UIControls({
                         onClick={() => thumbnailInputMobileRef.current?.click()}
                         className="absolute inset-0 w-full h-full cursor-pointer bg-transparent border-0"
                         aria-label="Upload thumbnail"
+                        data-testid="button-thumbnail-upload-mobile"
                       />
                     </div>
                     
@@ -1113,8 +1114,9 @@ export function UIControls({
                     className="hidden"
                     data-testid="input-thumbnail-upload"
                   />
-                  <div 
-                    className="relative w-16 h-16 rounded-lg border border-white/10 bg-black/50 overflow-hidden cursor-pointer"
+                  <button
+                    type="button"
+                    className="relative w-16 h-16 rounded-lg border border-white/10 bg-black/50 overflow-hidden cursor-pointer p-0"
                     onClick={() => thumbnailInputRef.current?.click()}
                     data-testid="button-thumbnail-upload"
                   >
@@ -1125,7 +1127,7 @@ export function UIControls({
                         <ImagePlus className="w-5 h-5 opacity-30" />
                       </div>
                     )}
-                  </div>
+                  </button>
                   {analysis && (
                     <Button 
                       variant="outline" 
