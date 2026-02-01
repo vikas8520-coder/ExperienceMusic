@@ -291,11 +291,76 @@ const ParticleGlowMaterial = shaderMaterial(
 
 extend({ ParticleGlowMaterial });
 
+// Energy core shader for glowing center orb
+const EnergyCoreShader = {
+  uniforms: {
+    uTime: { value: 0 },
+    uBass: { value: 0 },
+    uEnergy: { value: 0 },
+    uKick: { value: 0 },
+    uColor1: { value: new THREE.Color("#ffffff") },
+    uColor2: { value: new THREE.Color("#6600ff") },
+  },
+  vertexShader: `
+    varying vec3 vNormal;
+    varying vec3 vWorldPosition;
+    varying vec3 vLocalPosition;
+    void main() {
+      vNormal = normalize(normalMatrix * normal);
+      vLocalPosition = position;
+      // Compute world position for correct Fresnel calculation
+      vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      vWorldPosition = worldPos.xyz;
+      gl_Position = projectionMatrix * viewMatrix * worldPos;
+    }
+  `,
+  fragmentShader: `
+    uniform float uTime;
+    uniform float uBass;
+    uniform float uEnergy;
+    uniform float uKick;
+    uniform vec3 uColor1;
+    uniform vec3 uColor2;
+    varying vec3 vNormal;
+    varying vec3 vWorldPosition;
+    varying vec3 vLocalPosition;
+    
+    void main() {
+      // Fresnel rim glow (using world space for both camera and position)
+      vec3 viewDir = normalize(cameraPosition - vWorldPosition);
+      float fresnel = pow(1.0 - clamp(dot(viewDir, vNormal), 0.0, 1.0), 3.0);
+      fresnel = clamp(fresnel, 0.0, 1.0);
+      
+      // Pulsing core (use local position for consistent effect)
+      float pulse = 0.5 + 0.5 * sin(uTime * 3.0 + uBass * 5.0);
+      float core = smoothstep(0.8, 0.0, length(vLocalPosition) / 2.0);
+      
+      // Energy waves
+      float wave = sin(length(vLocalPosition) * 8.0 - uTime * 4.0) * 0.5 + 0.5;
+      wave *= uEnergy;
+      
+      // Color blend
+      vec3 color = mix(uColor2, uColor1, clamp(fresnel + pulse * 0.3, 0.0, 1.0));
+      color += uColor1 * wave * 0.3;
+      color += vec3(1.0) * uKick * 0.5;
+      
+      float alpha = fresnel * 0.8 + core * 0.6 + wave * 0.2;
+      alpha = clamp(alpha * (0.6 + uEnergy * 0.4), 0.0, 1.0);
+      
+      gl_FragColor = vec4(color, alpha);
+    }
+  `
+};
+
 function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
   const groupRef = useRef<THREE.Group>(null);
   const corePointsRef = useRef<THREE.Points>(null);
   const glowPointsRef = useRef<THREE.Points>(null);
   const trailPointsRef = useRef<THREE.Points>(null);
+  const energyCoreRef = useRef<THREE.Mesh>(null);
+  const energyCoreMaterialRef = useRef<THREE.ShaderMaterial>(null);
+  const ringRef = useRef<THREE.Mesh>(null);
+  const ringMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
   
   const smoothedAudioRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, energy: 0 });
   const tempColor = useMemo(() => new THREE.Color(), []);
@@ -599,10 +664,67 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
     groupRef.current.rotation.y += 0.001 * settings.speed * (1 + smooth.mid * 0.3);
     groupRef.current.rotation.x = smooth.sub * 0.1 * Math.sin(time * 0.15);
     groupRef.current.rotation.z = smooth.high * 0.03 * Math.cos(time * 0.2);
+
+    // Update energy core
+    if (energyCoreRef.current && energyCoreMaterialRef.current) {
+      const coreScale = 1 + smooth.bass * 0.5 + smooth.kick * 0.8;
+      energyCoreRef.current.scale.setScalar(coreScale);
+      energyCoreRef.current.rotation.y += 0.01 * settings.speed;
+      energyCoreRef.current.rotation.x = Math.sin(time * 0.5) * 0.2;
+      
+      const u = energyCoreMaterialRef.current.uniforms;
+      u.uTime.value = time;
+      u.uBass.value = smooth.bass;
+      u.uEnergy.value = smooth.energy;
+      u.uKick.value = smooth.kick;
+      u.uColor1.value.set(settings.colorPalette[0] || "#ffffff");
+      u.uColor2.value.set(settings.colorPalette[1] || "#6600ff");
+    }
+
+    // Update energy ring
+    if (ringRef.current && ringMaterialRef.current) {
+      const ringScale = 1 + smooth.sub * 0.3 + smooth.bass * 0.5;
+      ringRef.current.scale.setScalar(ringScale);
+      ringRef.current.rotation.z += 0.005 * settings.speed * (1 + smooth.mid);
+      ringRef.current.rotation.x = Math.PI / 2 + Math.sin(time * 0.3) * 0.1;
+      
+      tempColor.set(settings.colorPalette[2] || settings.colorPalette[0] || "#00ffff");
+      tempColor.offsetHSL(Math.sin(time * 0.5) * 0.1, 0, smooth.energy * 0.2);
+      ringMaterialRef.current.color = tempColor;
+      ringMaterialRef.current.opacity = 0.3 + smooth.energy * 0.4 + smooth.kick * 0.3;
+    }
   });
 
   return (
     <group ref={groupRef}>
+      {/* Energy core at center */}
+      <mesh ref={energyCoreRef}>
+        <sphereGeometry args={[2.5, 32, 32]} />
+        <shaderMaterial
+          ref={energyCoreMaterialRef}
+          {...EnergyCoreShader}
+          transparent
+          depthWrite={false}
+          depthTest={false}
+          blending={THREE.AdditiveBlending}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      
+      {/* Energy ring around core */}
+      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[4, 0.15, 16, 64]} />
+        <meshBasicMaterial
+          ref={ringMaterialRef}
+          color="#00ffff"
+          transparent
+          opacity={0.5}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          depthTest={false}
+        />
+      </mesh>
+      
       {/* Glow layer - larger, softer particles (rendered first, behind) */}
       <points ref={glowPointsRef}>
         <bufferGeometry>
