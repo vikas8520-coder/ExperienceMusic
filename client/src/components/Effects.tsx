@@ -19,7 +19,8 @@ type Props = {
   noiseOn?: boolean;
   vignetteOn?: boolean;
   kaleidoOn?: boolean;
-  intensity?: number;
+  intensity?: number;      // Controls preset movement/vibration only
+  glowIntensity?: number;  // Controls bloom/glow brightness separately
   motion?: number;
   trails?: number;
   vignetteStrength?: number;
@@ -43,6 +44,7 @@ export function Effects({
   vignetteOn = true,
   kaleidoOn = false,
   intensity = 1.0,
+  glowIntensity = 1.0,
   motion = 1.0,
   trails = 0.75,
   vignetteStrength = 0.35,
@@ -90,7 +92,8 @@ export function Effects({
 
   // Bloom: Driven by sub + bass for heavy, breathing glow
   // Sub provides the slow "body" feel, bass provides the punch
-  const bloomIntensity = (0.3 + ssub * 0.8 + sb * 1.8 + sk * 0.6) * intensity;
+  // Uses separate glowIntensity so intensity only affects preset movement
+  const bloomIntensity = (0.3 + ssub * 0.8 + sb * 1.8 + sk * 0.6) * glowIntensity;
   const bloomLuminanceThreshold = 0.2 + (1 - sh) * 0.25;
   
   // Chromatic aberration: Driven by highs for sparkle/glitch effect

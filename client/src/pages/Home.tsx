@@ -99,6 +99,8 @@ export default function Home() {
     psyOverlays: [] as PsyOverlayId[],
     trailsOn: false,
     trailsAmount: 0.75,
+    glowEnabled: true,
+    glowIntensity: 1.0,
   });
   
   // Update color palette when color settings or time changes

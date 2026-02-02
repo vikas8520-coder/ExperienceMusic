@@ -78,6 +78,8 @@ interface UIControlsProps {
     psyOverlays: PsyOverlayId[];
     trailsOn?: boolean;
     trailsAmount?: number;
+    glowEnabled?: boolean;
+    glowIntensity?: number;
   };
   setSettings: (s: any) => void;
   colorSettings: ColorSettings;
@@ -770,35 +772,55 @@ export function UIControls({
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">Enable Glow</span>
                       <Switch
-                        checked={settings.trailsOn ?? false}
+                        checked={settings.glowEnabled ?? true}
                         onCheckedChange={(checked) => {
                           saveScrollPositions();
-                          setSettings({ ...settings, trailsOn: checked });
+                          setSettings((prev: typeof settings) => ({ ...prev, glowEnabled: checked }));
                         }}
-                        data-testid="toggle-trails-mobile"
+                        data-testid="toggle-glow-mobile"
                       />
                     </div>
-                    {settings.trailsOn && (
+                    {settings.glowEnabled && (
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground">Amount</span>
-                          <span className="text-xs text-muted-foreground">{Math.round((settings.trailsAmount ?? 0.75) * 100)}%</span>
+                          <span className="text-xs text-muted-foreground">Brightness</span>
+                          <span className="text-xs text-muted-foreground">{(settings.glowIntensity ?? 1.0).toFixed(1)}</span>
                         </div>
-                        <Slider
-                          min={0.3}
-                          max={0.95}
-                          step={0.05}
-                          value={[settings.trailsAmount ?? 0.75]}
-                          onValueChange={([val]) => {
-                            saveScrollPositions();
-                            setSettings({ ...settings, trailsAmount: val });
-                          }}
-                          className="w-full"
-                          data-testid="slider-trails-amount-mobile"
-                        />
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-10 w-10 shrink-0"
+                            onClick={() => setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: Math.max(0.2, (prev.glowIntensity ?? 1.0) - 0.2) }))}
+                            data-testid="button-glow-decrease-mobile"
+                          >
+                            <Minus className="h-5 w-5" />
+                          </Button>
+                          <Slider
+                            min={0.2}
+                            max={2.0}
+                            step={0.1}
+                            value={[settings.glowIntensity ?? 1.0]}
+                            onValueChange={([val]) => {
+                              saveScrollPositions();
+                              setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: val }));
+                            }}
+                            className="flex-1"
+                            data-testid="slider-glow-intensity-mobile"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-10 w-10 shrink-0"
+                            onClick={() => setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: Math.min(2.0, (prev.glowIntensity ?? 1.0) + 0.2) }))}
+                            data-testid="button-glow-increase-mobile"
+                          >
+                            <Plus className="h-5 w-5" />
+                          </Button>
+                        </div>
                       </div>
                     )}
-                    <p className="text-[10px] text-muted-foreground">Brightness enhancement effect</p>
+                    <p className="text-[10px] text-muted-foreground">Controls bloom/glow brightness on presets</p>
                   </div>
                   
                   {/* Action Buttons */}
@@ -1353,36 +1375,56 @@ export function UIControls({
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-muted-foreground">Enable</span>
                     <Switch
-                      checked={settings.trailsOn ?? false}
+                      checked={settings.glowEnabled ?? true}
                       onCheckedChange={(checked) => {
                         saveScrollPositions();
-                        setSettings({ ...settings, trailsOn: checked });
+                        setSettings((prev: typeof settings) => ({ ...prev, glowEnabled: checked }));
                       }}
                       className="scale-75"
-                      data-testid="toggle-trails"
+                      data-testid="toggle-glow"
                     />
                   </div>
-                  {settings.trailsOn && (
+                  {settings.glowEnabled && (
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-muted-foreground">Amount</span>
-                        <span className="text-[10px] text-muted-foreground">{Math.round((settings.trailsAmount ?? 0.75) * 100)}%</span>
+                        <span className="text-[10px] text-muted-foreground">Brightness</span>
+                        <span className="text-[10px] text-muted-foreground">{(settings.glowIntensity ?? 1.0).toFixed(1)}</span>
                       </div>
-                      <Slider
-                        min={0.3}
-                        max={0.95}
-                        step={0.05}
-                        value={[settings.trailsAmount ?? 0.75]}
-                        onValueChange={([val]) => {
-                          saveScrollPositions();
-                          setSettings({ ...settings, trailsAmount: val });
-                        }}
-                        className="w-full"
-                        data-testid="slider-trails-amount"
-                      />
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-6 w-6 shrink-0"
+                          onClick={() => setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: Math.max(0.2, (prev.glowIntensity ?? 1.0) - 0.2) }))}
+                          data-testid="button-glow-decrease"
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
+                        <Slider
+                          min={0.2}
+                          max={2.0}
+                          step={0.1}
+                          value={[settings.glowIntensity ?? 1.0]}
+                          onValueChange={([val]) => {
+                            saveScrollPositions();
+                            setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: val }));
+                          }}
+                          className="flex-1"
+                          data-testid="slider-glow-intensity"
+                        />
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-6 w-6 shrink-0"
+                          onClick={() => setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: Math.min(2.0, (prev.glowIntensity ?? 1.0) + 0.2) }))}
+                          data-testid="button-glow-increase"
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                   )}
-                  <p className="text-[10px] text-muted-foreground">Brightness boost</p>
+                  <p className="text-[10px] text-muted-foreground">Bloom/glow brightness</p>
                 </div>
 
                 {/* Save Options */}
