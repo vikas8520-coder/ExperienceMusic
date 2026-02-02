@@ -1,8 +1,8 @@
-# Audio-Reactive Visualization Web App
+# Experience - Audio-Reactive Visualization Web App
 
 ## Overview
 
-This project is a production-ready audio-reactive visualization web application designed to generate real-time, high-quality WebGL visualizations in the browser. It analyzes audio frequency bands to drive GPU-accelerated 3D visuals using Three.js. The application features 15 visual presets, including 7 base presets, 4 cymatics presets, and 4 psychedelic shader presets that can also function as overlay layers. Key capabilities include 10 color palettes, customizable controls, AI-powered thumbnail analysis for theme extraction, dominant frequency detection, and a fully responsive UI with mobile-optimized touch controls. The project aims to provide an immersive and customizable audio-visual experience, expanding into mobile platforms with a React Native app and native Unity integrations.
+Experience is a production-ready audio-reactive visualization web application designed to generate real-time, high-quality WebGL visualizations in the browser. It analyzes audio frequency bands to drive GPU-accelerated 3D visuals using Three.js. The application features 15 visual presets, including 7 base presets, 4 cymatics presets, and 4 psychedelic shader presets that can also function as overlay layers. Key capabilities include 10 color palettes, customizable controls, AI-powered thumbnail analysis for theme extraction, dominant frequency detection, and a fully responsive UI with mobile-optimized touch controls. The project aims to provide an immersive and customizable audio-visual experience, expanding into mobile platforms with a React Native app and native Unity integrations.
 
 ## User Preferences
 
