@@ -112,8 +112,62 @@ export const useSoundCloudStore = create<SoundCloudStore>()(
       }),
       
       initiateLogin: () => {
-        // Redirect to backend OAuth endpoint which handles the full flow
-        window.location.href = '/auth/soundcloud';
+        // Open popup window for OAuth to avoid iframe blocking issues
+        const width = 600;
+        const height = 700;
+        const left = window.screenX + (window.outerWidth - width) / 2;
+        const top = window.screenY + (window.outerHeight - height) / 2;
+        
+        const popup = window.open(
+          '/auth/soundcloud',
+          'soundcloud_oauth',
+          `width=${width},height=${height},left=${left},top=${top},popup=yes`
+        );
+        
+        // Handle popup blocked
+        if (!popup) {
+          set({ error: 'Popup was blocked. Please allow popups for this site and try again.' });
+          return;
+        }
+        
+        let checkPopupClosed: ReturnType<typeof setInterval> | null = null;
+        
+        // Listen for message from popup with token
+        const handleMessage = (event: MessageEvent) => {
+          // Only accept messages from our own origin
+          if (event.origin !== window.location.origin) return;
+          
+          if (event.data?.type === 'soundcloud_auth_success') {
+            const { accessToken, refreshToken, expiresIn } = event.data;
+            const auth: SoundCloudAuth = {
+              accessToken,
+              refreshToken,
+              expiresAt: expiresIn ? Date.now() + expiresIn * 1000 : undefined,
+            };
+            set({ auth, error: null });
+            cleanup();
+          } else if (event.data?.type === 'soundcloud_auth_error') {
+            set({ error: `SoundCloud login failed: ${event.data.error}` });
+            cleanup();
+          }
+        };
+        
+        const cleanup = () => {
+          window.removeEventListener('message', handleMessage);
+          if (checkPopupClosed) {
+            clearInterval(checkPopupClosed);
+            checkPopupClosed = null;
+          }
+        };
+        
+        window.addEventListener('message', handleMessage);
+        
+        // Also poll for popup closure in case user closes it manually
+        checkPopupClosed = setInterval(() => {
+          if (popup && popup.closed) {
+            cleanup();
+          }
+        }, 500);
       },
       
       validateOAuthCallback: (code: string, state: string) => {

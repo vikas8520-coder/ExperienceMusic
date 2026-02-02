@@ -300,14 +300,43 @@ Respond in JSON format:
   app.get('/callback', async (req, res) => {
     const { code, state, error, error_description } = req.query;
     
+    // Helper to send error via postMessage or redirect (XSS-safe)
+    const sendError = (errorMsg: string) => {
+      const safeError = JSON.stringify(errorMsg);
+      const encodedError = encodeURIComponent(errorMsg);
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>SoundCloud Login Error</title></head>
+        <body>
+          <script>
+            (function() {
+              var error = ${safeError};
+              if (window.opener) {
+                window.opener.postMessage({
+                  type: 'soundcloud_auth_error',
+                  error: error
+                }, window.location.origin);
+                window.close();
+              } else {
+                window.location.href = '/#soundcloud_error=${encodedError}';
+              }
+            })();
+          </script>
+          <p>Login failed. This window should close automatically.</p>
+        </body>
+        </html>
+      `);
+    };
+
     if (error) {
       res.clearCookie('soundcloud_oauth_state');
-      return res.redirect(`/#soundcloud_error=${encodeURIComponent(error_description as string || error as string)}`);
+      return sendError(error_description as string || error as string);
     }
 
     if (!code) {
       res.clearCookie('soundcloud_oauth_state');
-      return res.redirect('/#soundcloud_error=missing_code');
+      return sendError('missing_code');
     }
 
     // Validate CSRF state from cookie
@@ -316,14 +345,14 @@ Respond in JSON format:
     
     if (!storedState || !state || storedState !== state) {
       console.error('OAuth state mismatch - possible CSRF attack');
-      return res.redirect('/#soundcloud_error=invalid_state');
+      return sendError('invalid_state');
     }
 
     const clientId = process.env.SOUNDCLOUD_CLIENT_ID;
     const clientSecret = process.env.SOUNDCLOUD_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
-      return res.redirect('/#soundcloud_error=not_configured');
+      return sendError('not_configured');
     }
 
     // Build the same redirect URI that was used in the auth request
@@ -350,18 +379,52 @@ Respond in JSON format:
       
       if (!tokenResponse.ok || tokenData.error) {
         console.error('SoundCloud token exchange failed:', tokenData);
-        return res.redirect(`/#soundcloud_error=${encodeURIComponent(tokenData.error_description || tokenData.error || 'token_exchange_failed')}`);
+        return sendError(tokenData.error_description || tokenData.error || 'token_exchange_failed');
       }
 
-      // Redirect back to app with token in URL fragment (not sent to server logs)
+      // Send token back to parent window via postMessage (for popup OAuth flow)
       const accessToken = tokenData.access_token;
       const refreshToken = tokenData.refresh_token || '';
       const expiresIn = tokenData.expires_in || 0;
       
-      res.redirect(`/#soundcloud_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&expires_in=${expiresIn}`);
+      // XSS-safe: Use JSON.stringify for all values
+      const safeToken = JSON.stringify(accessToken);
+      const safeRefresh = JSON.stringify(refreshToken);
+      const encodedToken = encodeURIComponent(accessToken);
+      const encodedRefresh = encodeURIComponent(refreshToken);
+      
+      // Send HTML page that posts message to opener and closes popup
+      res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>SoundCloud Login</title></head>
+        <body>
+          <script>
+            (function() {
+              var accessToken = ${safeToken};
+              var refreshToken = ${safeRefresh};
+              var expiresIn = ${expiresIn};
+              if (window.opener) {
+                window.opener.postMessage({
+                  type: 'soundcloud_auth_success',
+                  accessToken: accessToken,
+                  refreshToken: refreshToken,
+                  expiresIn: expiresIn
+                }, window.location.origin);
+                window.close();
+              } else {
+                // Fallback for non-popup flow
+                window.location.href = '/#soundcloud_token=${encodedToken}&refresh_token=${encodedRefresh}&expires_in=${expiresIn}';
+              }
+            })();
+          </script>
+          <p>Login successful! This window should close automatically.</p>
+        </body>
+        </html>
+      `);
     } catch (err) {
       console.error('SoundCloud callback error:', err);
-      res.redirect('/#soundcloud_error=server_error');
+      sendError('server_error');
     }
   });
 
