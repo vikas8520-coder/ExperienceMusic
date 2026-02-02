@@ -926,6 +926,8 @@ export function UIControls({
                       onClick={() => setControlsPinned(!controlsPinned)}
                       className={controlsPinned ? "text-primary" : ""}
                       data-testid="button-pin-controls"
+                      aria-pressed={controlsPinned}
+                      data-pinned={controlsPinned}
                     >
                       {controlsPinned ? <PinOff className="w-5 h-5" /> : <Pin className="w-5 h-5" />}
                     </Button>
