@@ -3290,7 +3290,14 @@ const PsyFilterMaterial = shaderMaterial(
       vec2 uv = vUv;
       vec3 color;
       float opacity = 0.4;
-      float audioMod = uEnergy * 0.5 + uBass * 0.3 + uMid * 0.2;
+      
+      // Safety clamps for audio values - prevent artifacts when audio is stopped
+      float safeBass = max(uBass, 0.02);
+      float safeMid = max(uMid, 0.02);
+      float safeHigh = max(uHigh, 0.02);
+      float safeEnergy = max(uEnergy, 0.02);
+      
+      float audioMod = safeEnergy * 0.5 + safeBass * 0.3 + safeMid * 0.2;
       
       // Filter type 0: None (Enhanced with subtle vignette)
       if (uFilterType == 0) {
@@ -3300,18 +3307,18 @@ const PsyFilterMaterial = shaderMaterial(
       
       // Filter type 1: Premium Kaleidoscope with glow
       else if (uFilterType == 1) {
-        float segments = 6.0 + floor(uEnergy * 6.0);
-        float rotation = uTime * 0.2 + uBass * 0.5;
+        float segments = 6.0 + floor(safeEnergy * 6.0);
+        float rotation = uTime * 0.2 + safeBass * 0.5;
         vec2 kUv = kaleidoscopePremium(uv, segments, rotation);
         
         // Multi-layer sampling for glow effect
         vec3 baseColor = texture2D(uTexture, fract(kUv + uTime * 0.03)).rgb;
         vec3 glowColor = texture2D(uTexture, fract(kUv * 1.02 + uTime * 0.03)).rgb;
-        color = mix(baseColor, glowColor, 0.3 + uHigh * 0.2);
+        color = mix(baseColor, glowColor, 0.3 + safeHigh * 0.2);
         
         // Add radial glow
         float radialGlow = 1.0 - length(uv - 0.5) * 1.5;
-        color += color * radialGlow * 0.3 * uEnergy;
+        color += color * radialGlow * 0.3 * safeEnergy;
         color *= vignette(uv, 0.7, 0.4);
         opacity = 0.55;
       }
@@ -3327,7 +3334,7 @@ const PsyFilterMaterial = shaderMaterial(
         // Color cycling based on position
         vec3 hsl = rgb2hsl(color);
         hsl.x = fract(hsl.x + uTime * 0.05 + length(uv - 0.5) * 0.2);
-        hsl.y = min(1.0, hsl.y * (1.0 + uMid * 0.3));
+        hsl.y = min(1.0, hsl.y * (1.0 + safeMid * 0.3));
         color = hsl2rgb(hsl);
         
         color *= vignette(uv, 0.75, 0.35);
@@ -3337,16 +3344,16 @@ const PsyFilterMaterial = shaderMaterial(
       // Filter type 3: Premium Color Shift with gradient mapping
       else if (uFilterType == 3) {
         vec2 distortUv = uv + vec2(
-          sin(uv.y * 8.0 + uTime * 2.0) * 0.01 * uBass,
-          cos(uv.x * 8.0 + uTime * 2.0) * 0.01 * uBass
+          sin(uv.y * 8.0 + uTime * 2.0) * 0.01 * safeBass,
+          cos(uv.x * 8.0 + uTime * 2.0) * 0.01 * safeBass
         );
         color = texture2D(uTexture, distortUv).rgb;
         
         // Premium HSL-based color cycling
         vec3 hsl = rgb2hsl(color);
-        hsl.x = fract(hsl.x + uTime * 0.15 + uEnergy * 0.3);
-        hsl.s = min(1.0, hsl.s * (1.2 + uHigh * 0.3));
-        hsl.z = hsl.z * (0.9 + uEnergy * 0.2);
+        hsl.x = fract(hsl.x + uTime * 0.15 + safeEnergy * 0.3);
+        hsl.s = min(1.0, hsl.s * (1.2 + safeHigh * 0.3));
+        hsl.z = hsl.z * (0.9 + safeEnergy * 0.2);
         color = hsl2rgb(hsl);
         
         // Add subtle grain
@@ -3361,14 +3368,14 @@ const PsyFilterMaterial = shaderMaterial(
         
         // Smooth wave-based inversion
         float wave = sin(uv.x * 6.0 + uTime * 3.0) * sin(uv.y * 6.0 + uTime * 2.0);
-        float invertAmount = smoothstep(-0.5, 0.5, wave) * (0.5 + uEnergy * 0.5);
+        float invertAmount = smoothstep(-0.5, 0.5, wave) * (0.5 + safeEnergy * 0.5);
         
         vec3 inverted = vec3(1.0) - color;
         color = mix(color, inverted, invertAmount);
         
         // Add subtle color tint based on audio
-        color.r += uBass * 0.1;
-        color.b += uHigh * 0.1;
+        color.r += safeBass * 0.1;
+        color.b += safeHigh * 0.1;
         
         color *= vignette(uv, 0.8, 0.3);
         opacity = 0.45;
@@ -3376,7 +3383,7 @@ const PsyFilterMaterial = shaderMaterial(
       
       // Filter type 5: Premium Mosaic with smooth tiles
       else if (uFilterType == 5) {
-        float tileSize = mix(80.0, 12.0, uEnergy);
+        float tileSize = mix(80.0, 12.0, safeEnergy);
         vec2 tileUv = floor(uv * tileSize) / tileSize;
         vec2 tileCenter = tileUv + 0.5 / tileSize;
         
@@ -3390,7 +3397,7 @@ const PsyFilterMaterial = shaderMaterial(
         color = mix(originalColor, tileColor, tileFade * 0.8);
         
         // Add tile glow
-        color += tileColor * (1.0 - tileFade) * 0.2 * uHigh;
+        color += tileColor * (1.0 - tileFade) * 0.2 * safeHigh;
         color *= vignette(uv, 0.8, 0.3);
         opacity = 0.5;
       }
@@ -3400,7 +3407,7 @@ const PsyFilterMaterial = shaderMaterial(
         // Reduced base amount, stronger near center, weaker at edges
         float edgeDist = length(uv - 0.5);
         float edgeFade = 1.0 - smoothstep(0.2, 0.5, edgeDist);
-        float amount = 0.012 * uIntensity * (1.0 + uEnergy * 1.5) * edgeFade;
+        float amount = 0.012 * uIntensity * (1.0 + safeEnergy * 1.5) * edgeFade;
         
         // Radial chromatic aberration - depth-aware split
         vec2 dir = uv - 0.5;
@@ -3408,9 +3415,9 @@ const PsyFilterMaterial = shaderMaterial(
         vec2 offset = (dist > 0.001 ? normalize(dir) : vec2(0.0)) * amount * (0.5 + dist * 0.5);
         
         // Sample with barrel distortion - clamp UVs to prevent edge sampling
-        vec2 rUv = clamp(barrelDistort(uv + offset, 0.08 * uBass), 0.001, 0.999);
+        vec2 rUv = clamp(barrelDistort(uv + offset, 0.08 * safeBass), 0.001, 0.999);
         vec2 gUv = clamp(uv, 0.001, 0.999);
-        vec2 bUv = clamp(barrelDistort(uv - offset, 0.08 * uBass), 0.001, 0.999);
+        vec2 bUv = clamp(barrelDistort(uv - offset, 0.08 * safeBass), 0.001, 0.999);
         
         float r = texture2D(uTexture, rUv).r;
         float g = texture2D(uTexture, gUv).g;
@@ -3425,7 +3432,7 @@ const PsyFilterMaterial = shaderMaterial(
         // Subtle scan lines for texture - gated for dark protection (Option 2)
         float rgbGate = noiseGate(color);
         float scanLine = sin(uv.y * 300.0 + uTime * 4.0) * 0.02;
-        color += scanLine * uHigh * 0.5 * rgbGate;
+        color += scanLine * safeHigh * 0.5 * rgbGate;
         
         color *= vignette(uv, 0.75, 0.35);
         opacity = 0.45;
@@ -3438,10 +3445,10 @@ const PsyFilterMaterial = shaderMaterial(
         float waveAmount = 0.012 * uIntensity; // Reduced from 0.03
         
         // Slower, broader waves - less aggressive oscillation
-        waveUv.x += sin(uv.y * 4.0 + uTime * 1.2) * waveAmount * (0.5 + uBass * 0.5);
-        waveUv.y += cos(uv.x * 4.0 + uTime * 1.0) * waveAmount * (0.5 + uBass * 0.5);
-        waveUv.x += sin(uv.y * 2.0 - uTime * 0.8) * waveAmount * 0.3 * uMid;
-        waveUv.y += cos(uv.x * 2.0 - uTime * 0.6) * waveAmount * 0.3 * uMid;
+        waveUv.x += sin(uv.y * 4.0 + uTime * 1.2) * waveAmount * (0.5 + safeBass * 0.5);
+        waveUv.y += cos(uv.x * 4.0 + uTime * 1.0) * waveAmount * (0.5 + safeBass * 0.5);
+        waveUv.x += sin(uv.y * 2.0 - uTime * 0.8) * waveAmount * 0.3 * safeMid;
+        waveUv.y += cos(uv.x * 2.0 - uTime * 0.6) * waveAmount * 0.3 * safeMid;
         
         // Clamp UVs to prevent edge artifacts
         waveUv = clamp(waveUv, 0.001, 0.999);
@@ -3453,20 +3460,20 @@ const PsyFilterMaterial = shaderMaterial(
         float combinedSmoke = (smokeNoise1 + smokeNoise2 * 0.6 + smokeNoise3 * 0.4) / 2.0;
         
         // Subtle wave depth from bass
-        waveUv += (combinedSmoke - 0.5) * 0.008 * uEnergy;
+        waveUv += (combinedSmoke - 0.5) * 0.008 * safeEnergy;
         
         // Base image with subtle chromatic aberration from highs
         vec3 baseColor = texture2D(uTexture, waveUv).rgb;
         float waveGate = noiseGate(baseColor); // Luminance gate for dark protection
-        color = chromaticAberrationGated(uTexture, waveUv, 0.004 * uHigh, waveGate);
+        color = chromaticAberrationGated(uTexture, waveUv, 0.004 * safeHigh, waveGate);
         
         // Volumetric smoke overlay - dominant mood element
         vec3 smokeColor = vec3(0.9, 0.92, 1.0); // Slight cool tint
-        float smokeIntensity = combinedSmoke * 0.35 * (0.6 + uMid * 0.4);
+        float smokeIntensity = combinedSmoke * 0.35 * (0.6 + safeMid * 0.4);
         color = mix(color, smokeColor, smokeIntensity * 0.4 * waveGate); // Reduce smoke on dark areas
         
         // Soft smoke shimmer from highs - gated for dark protection
-        float shimmer = pow(smokeNoise2, 2.0) * uHigh * 0.15 * waveGate;
+        float shimmer = pow(smokeNoise2, 2.0) * safeHigh * 0.15 * waveGate;
         color += shimmer;
         
         // Dreamy soft glow
@@ -3480,9 +3487,9 @@ const PsyFilterMaterial = shaderMaterial(
       // Filter type 8: Premium Zoom Pulse - Audio-reactive with multi-directional motion
       else if (uFilterType == 8) {
         // Audio-reactive zoom: Bass controls intensity, with asymmetric easing
-        float bassZoom = uBass * 0.08 * uIntensity;
-        float midSpeed = 1.0 + uMid * 0.5;
-        float highJitter = uHigh * 0.015;
+        float bassZoom = safeBass * 0.08 * uIntensity;
+        float midSpeed = 1.0 + safeMid * 0.5;
+        float highJitter = safeHigh * 0.015;
         
         // Non-linear zoom with phase offsets to break repetition
         float phase1 = sin(uTime * 1.3 * midSpeed) * 0.6;
@@ -3490,20 +3497,20 @@ const PsyFilterMaterial = shaderMaterial(
         float zoomAmount = (phase1 + phase2) * bassZoom + highJitter * sin(uTime * 8.0);
         
         // Lateral motion - organic parallax drift tied to mids
-        float driftX = sin(uTime * 0.4 + uMid) * 0.02 * uIntensity;
-        float driftY = cos(uTime * 0.35 + uMid * 0.8) * 0.015 * uIntensity;
+        float driftX = sin(uTime * 0.4 + safeMid) * 0.02 * uIntensity;
+        float driftY = cos(uTime * 0.35 + safeMid * 0.8) * 0.015 * uIntensity;
         
         // Occasional diagonal movement synced to beat energy
-        float diagonalPhase = sin(uTime * 0.8) * uEnergy * 0.01;
+        float diagonalPhase = sin(uTime * 0.8) * safeEnergy * 0.01;
         driftX += diagonalPhase;
         driftY += diagonalPhase * 0.7;
         
         // Dynamic focal point - not always center
-        vec2 focalPoint = vec2(0.5 + sin(uTime * 0.2) * 0.05 * uMid, 
-                               0.5 + cos(uTime * 0.25) * 0.04 * uMid);
+        vec2 focalPoint = vec2(0.5 + sin(uTime * 0.2) * 0.05 * safeMid, 
+                               0.5 + cos(uTime * 0.25) * 0.04 * safeMid);
         
         // Slight rotation during zoom for organic feel
-        float rotAngle = sin(uTime * 0.5) * 0.02 * uIntensity * uEnergy;
+        float rotAngle = sin(uTime * 0.5) * 0.02 * uIntensity * safeEnergy;
         
         // Multi-sample radial blur toward dynamic focal point
         vec3 blurColor = vec3(0.0);
@@ -3536,10 +3543,10 @@ const PsyFilterMaterial = shaderMaterial(
         float zoomGate = noiseGate(color); // Luminance gate
         float radialIntensity = 1.0 - length(uv - focalPoint) * 1.6;
         radialIntensity = max(0.0, radialIntensity);
-        color += color * radialIntensity * 0.25 * uBass * zoomGate;
+        color += color * radialIntensity * 0.25 * safeBass * zoomGate;
         
         // Chromatic edges on highs - gated for dark protection
-        color = mix(color, chromaticAberrationGated(uTexture, uv, 0.004 * uHigh, zoomGate), 0.25);
+        color = mix(color, chromaticAberrationGated(uTexture, uv, 0.004 * safeHigh, zoomGate), 0.25);
         
         color *= vignette(uv, 0.75, 0.35);
         opacity = 0.5;
@@ -3583,7 +3590,7 @@ const filterIdToType: Record<string, number> = {
   zoompulse: 8,
 };
 
-// Background plane for thumbnail with psy trance filters
+// Background plane for thumbnail with psy trance filters - with smooth filter transitions
 function BackgroundImage({ 
   imageUrl, 
   filterId = "none", 
@@ -3598,21 +3605,44 @@ function BackgroundImage({
   layerOffset?: number;
 }) {
   const materialRef = useRef<any>(null);
+  const prevFilterRef = useRef(filterId);
+  const transitionRef = useRef({ progress: 1, targetFilter: filterId, prevFilter: filterId });
   
   const texture = useMemo(() => {
     const loader = new THREE.TextureLoader();
     const tex = loader.load(imageUrl);
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-    // Option 5: Ensure proper sRGB colorSpace for linear workflow
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, [imageUrl]);
 
   useFrame((state, delta) => {
     if (materialRef.current) {
+      const t = transitionRef.current;
+      
+      // Detect filter change and start transition
+      if (filterId !== t.targetFilter) {
+        t.prevFilter = t.targetFilter;
+        t.targetFilter = filterId;
+        t.progress = 0;
+      }
+      
+      // Smooth transition progress (200-400ms depending on delta)
+      if (t.progress < 1) {
+        t.progress = Math.min(1, t.progress + delta * 4);
+      }
+      
+      // Smoothly interpolate between filter types using eased progress
+      const eased = t.progress < 0.5 
+        ? 2 * t.progress * t.progress 
+        : 1 - Math.pow(-2 * t.progress + 2, 2) / 2;
+      
+      const prevType = filterIdToType[t.prevFilter] || 0;
+      const targetType = filterIdToType[t.targetFilter] || 0;
+      
       materialRef.current.uTime = state.clock.getElapsedTime() + layerOffset;
-      materialRef.current.uFilterType = filterIdToType[filterId] || 0;
-      materialRef.current.uIntensity = intensity;
+      materialRef.current.uFilterType = targetType;
+      materialRef.current.uIntensity = intensity * eased + (intensity * 0.5 * (1 - eased));
       
       if (getAudioData) {
         const audioData = getAudioData();
@@ -3817,7 +3847,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
       
       {backgroundImage && activeFilters.map((filterId, index) => (
         <BackgroundImage 
-          key={`filter-${filterId}-${index}`}
+          key={`filter-layer-${index}`}
           imageUrl={backgroundImage} 
           filterId={filterId}
           intensity={settings.intensity}

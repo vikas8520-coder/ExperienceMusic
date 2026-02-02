@@ -25,12 +25,44 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
   const destNodeRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const lastAudioElementRef = useRef<HTMLAudioElement | null>(null);
   
-  // Smoothed values for each band
-  const smoothedRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, lastBass: 0, dominantFreq: 200, modeIndex: 1 });
+  // Smoothed values for each band with fallback decay
+  const smoothedRef = useRef({ 
+    sub: 0, bass: 0, mid: 0, high: 0, kick: 0, lastBass: 0, 
+    dominantFreq: 200, modeIndex: 1,
+    lastUpdateTime: Date.now()
+  });
 
   const getAudioData = useCallback((): AudioData => {
+    const s = smoothedRef.current;
+    const now = Date.now();
+    const dt = (now - s.lastUpdateTime) / 1000;
+    s.lastUpdateTime = now;
+    
+    // Decay rate: smoothly reduce values when audio stops (prevents abrupt black/blue screen)
+    const decayRate = 0.92;
+    
     if (!analyzerRef.current || !dataArrayRef.current) {
-      return { sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, dominantFreq: 200, modeIndex: 1, frequencyData: new Uint8Array(0) };
+      // Decay existing values smoothly instead of snapping to zero
+      s.sub = s.sub * decayRate;
+      s.bass = s.bass * decayRate;
+      s.mid = s.mid * decayRate;
+      s.high = s.high * decayRate;
+      s.kick = s.kick * decayRate;
+      
+      // Keep minimum fallback values to prevent shader artifacts
+      const minFallback = 0.02;
+      
+      return { 
+        sub: Math.max(s.sub, minFallback), 
+        bass: Math.max(s.bass, minFallback), 
+        mid: Math.max(s.mid, minFallback), 
+        high: Math.max(s.high, minFallback), 
+        energy: Math.max((s.sub + s.bass + s.mid + s.high) * 0.25, minFallback), 
+        kick: s.kick, 
+        dominantFreq: s.dominantFreq, 
+        modeIndex: s.modeIndex, 
+        frequencyData: new Uint8Array(0) 
+      };
     }
 
     analyzerRef.current.getByteFrequencyData(dataArrayRef.current);
@@ -80,7 +112,6 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
     // Bass: medium
     // Mid: medium-fast
     // High: fast (high alpha = less smoothing for sparkle responsiveness)
-    const s = smoothedRef.current;
     s.sub = ema(subRaw, s.sub, 0.15);
     s.bass = ema(bassRaw, s.bass, 0.35);
     s.mid = ema(midRaw, s.mid, 0.45);

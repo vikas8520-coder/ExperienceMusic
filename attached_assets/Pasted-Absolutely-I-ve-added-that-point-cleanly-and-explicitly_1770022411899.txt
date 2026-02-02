@@ -1,0 +1,147 @@
+Absolutely — I’ve **added that point cleanly and explicitly** to the list, written in a way that makes the problem and the expectation very clear for implementation.
+
+Below is the **updated consolidated issue list + action items**, including your new transition requirement.
+
+---
+
+# 🎥 Recording & Visual Stability – Issue List (Updated)
+
+## 1️⃣ Recorded video quality is low (needs 4K / highest quality)
+
+**Observed**
+
+* Recorded output looks compressed and soft
+* Motion artifacts appear during intense visuals
+* Output file is `.webm`
+
+**Likely causes**
+
+* Canvas render resolution < target output resolution
+* MediaRecorder default bitrate is too low
+* VP8 codec fallback instead of VP9
+* Frame rate capped at 30fps
+
+**Action items**
+
+* Render canvas at higher DPR during recording
+* Capture at 60fps if supported
+* Use `video/webm;codecs=vp9`
+* Increase `videoBitsPerSecond` (35–80 Mbps for 4K-quality)
+* Avoid downscaling before capture
+
+---
+
+## 2️⃣ Screen goes black when switching filters or presets
+
+**(Transition is not smooth – especially for filters)**
+
+**Observed**
+
+* Screen briefly goes black when switching presets
+* Screen goes black more frequently when switching **filters**
+* Transition between filters/presets feels abrupt
+* Visual continuity breaks (immersion loss)
+
+**Likely causes**
+
+* Effects or filters are being **remounted** instead of updated
+* EffectComposer or passes are being recreated
+* Textures or uniforms become undefined for 1–2 frames
+* Frame buffer clears during effect stack rebuild
+
+**New requirement (added)**
+
+> **All transitions between filters and presets must be smooth and continuous.**
+> No black frames, no flashes, no hard resets.
+
+**Action items**
+
+* Do **not remount** `EffectComposer` or filter components on change
+* Keep all filters mounted; toggle via `enabled` or intensity
+* Implement **crossfade transitions**:
+
+  * old filter fades out
+  * new filter fades in (200–400ms)
+* Animate parameters instead of instant switching
+* Keep last valid texture active during transitions
+* Ensure framebuffer is never cleared to black during swap
+
+---
+
+## 3️⃣ Screen turns blue / black when filters are active but music is stopped
+
+**Observed**
+
+* When music stops:
+
+  * screen shifts to blue
+  * RGB artifacts appear
+  * image disappears (black)
+* When music resumes, colors and image pop back instantly
+
+**Likely causes**
+
+* Audio-driven values drop to 0 / NaN
+* RGB split or chromatic offsets spike
+* Luminance gate accidentally applied to base color
+* No fallback state when audio is inactive
+
+**Action items**
+
+* Clamp all audio values (`bass`, `mid`, `high`)
+* Prevent NaN / undefined values
+* Decay last valid audio values instead of snapping to zero
+* Add a **“no-audio fallback mode”**:
+
+  * reduced RGB split
+  * safe chroma offsets
+  * minimal bloom
+* Ensure luminance gate only affects effect strength, not base image
+
+---
+
+## 4️⃣ Recorded format clarification
+
+**Observed**
+
+* Output file format: `.webm`
+
+**Likely recording method**
+
+* Browser `MediaRecorder`
+* Codec likely VP8 or VP9
+
+**Action items**
+
+* Prefer VP9 for higher quality
+* Confirm bitrate and resolution
+* Optional: transcode to MP4 after recording (FFmpeg)
+
+---
+
+## 🎯 Acceptance Criteria (what “fixed” means)
+
+* ✔ Recorded videos look crisp at high resolution (4K-style)
+* ✔ No black frames when switching filters or presets
+* ✔ Filter transitions are **smooth and animated**, not abrupt
+* ✔ Visuals remain stable when music stops
+* ✔ Image is always visible unless intentionally hidden
+* ✔ Effects feel intentional and premium, not glitchy
+
+---
+
+## 🧠 Key UX Insight
+
+The visuals themselves are strong. The remaining issues are **state continuity problems**, not creative ones.
+Fixing transitions + recording quality will dramatically improve perceived polish.
+
+---
+
+If you want, next I can:
+
+* Turn this into **Jira tickets / GitHub issues**
+* Write a **technical transition strategy** (crossfade graph for filters)
+* Provide **example code** for smooth filter transitions in R3F
+* Help define a **recording quality preset system** (1080p / 2K / 4K)
+
+Just tell me what you want to tackle next.

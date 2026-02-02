@@ -86,6 +86,8 @@ interface UIControlsProps {
   setColorSettings: (s: ColorSettings) => void;
   isRecording: boolean;
   onToggleRecording: () => void;
+  recordingQuality?: "1080p" | "2k" | "4k";
+  onRecordingQualityChange?: (quality: "1080p" | "2k" | "4k") => void;
   onSavePreset: () => void;
   onThumbnailAnalysis?: (analysis: ThumbnailAnalysis) => void;
   onThumbnailUpload?: (url: string) => void;
@@ -133,6 +135,8 @@ export function UIControls({
   setColorSettings,
   isRecording,
   onToggleRecording,
+  recordingQuality = "1080p",
+  onRecordingQualityChange,
   onSavePreset,
   onThumbnailAnalysis,
   onThumbnailUpload,
@@ -887,6 +891,25 @@ export function UIControls({
                       </div>
                     )}
                     <p className="text-[10px] text-muted-foreground">Controls bloom/glow brightness on presets</p>
+                  </div>
+                  
+                  {/* Recording Quality */}
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">Recording Quality</label>
+                    <div className="flex gap-1">
+                      {(["1080p", "2k", "4k"] as const).map((q) => (
+                        <Button
+                          key={q}
+                          variant={recordingQuality === q ? "default" : "outline"}
+                          size="sm"
+                          className="flex-1 text-xs"
+                          onClick={() => onRecordingQualityChange?.(q)}
+                          data-testid={`button-quality-${q}-mobile`}
+                        >
+                          {q.toUpperCase()}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                   
                   {/* Action Buttons */}

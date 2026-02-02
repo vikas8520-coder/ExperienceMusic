@@ -42,6 +42,7 @@ export default function Home() {
   const previousVolumeRef = useRef(1);
   const [currentTrackIndex, setCurrentTrackIndex] = useState(-1);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingQuality, setRecordingQuality] = useState<"1080p" | "2k" | "4k">("1080p");
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showSoundCloud, setShowSoundCloud] = useState(false);
@@ -571,12 +572,35 @@ export default function Home() {
       const canvas = document.querySelector('canvas');
       if (!canvas || !destNode) return;
 
+      const qualitySettings = {
+        "1080p": { bitrate: 15_000_000, label: "1080p" },
+        "2k": { bitrate: 35_000_000, label: "2K" },
+        "4k": { bitrate: 80_000_000, label: "4K" }
+      };
+      
+      const settings = qualitySettings[recordingQuality];
+
       const stream = canvas.captureStream(60);
       const audioTrack = destNode.stream.getAudioTracks()[0];
       if (audioTrack) stream.addTrack(audioTrack);
 
+      const mimeTypes = [
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm'
+      ];
+      
+      let selectedMimeType = 'video/webm';
+      for (const type of mimeTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          selectedMimeType = type;
+          break;
+        }
+      }
+
       const recorder = new MediaRecorder(stream, {
-        mimeType: 'video/webm; codecs=vp9'
+        mimeType: selectedMimeType,
+        videoBitsPerSecond: settings.bitrate
       });
 
       recordedChunksRef.current = [];
@@ -589,15 +613,16 @@ export default function Home() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `auralvis-recording-${Date.now()}.webm`;
+        a.download = `experience-${settings.label}-${Date.now()}.webm`;
         a.click();
         URL.revokeObjectURL(url);
-        toast({ title: "Download Started", description: "Your video has been saved." });
+        toast({ title: "Download Started", description: `Your ${settings.label} video has been saved.` });
       };
 
-      recorder.start();
+      recorder.start(100);
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
+      toast({ title: `Recording ${settings.label}`, description: "High quality recording started at 60fps" });
       
       if (!isPlaying) togglePlay();
     }
@@ -654,6 +679,8 @@ export default function Home() {
         setColorSettings={setColorSettings}
         isRecording={isRecording}
         onToggleRecording={toggleRecording}
+        recordingQuality={recordingQuality}
+        onRecordingQualityChange={setRecordingQuality}
         onSavePreset={handleSavePreset}
         onThumbnailAnalysis={handleThumbnailAnalysis}
         onThumbnailUpload={handleThumbnailUpload}
