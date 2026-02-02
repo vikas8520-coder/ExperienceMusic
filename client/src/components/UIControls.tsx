@@ -252,6 +252,61 @@ export function UIControls({
   }, [setSettings, saveScrollPositions]);
 
   const displayThumbnail = thumbnailUrl || localThumbnailUrl;
+  
+  // Track the last analyzed URL to prevent duplicate analysis
+  const lastAnalyzedUrlRef = useRef<string | null>(null);
+  
+  // Auto-analyze artwork when thumbnailUrl changes (from track upload or SoundCloud)
+  useEffect(() => {
+    const analyzeArtwork = async () => {
+      // Only analyze if we have a new thumbnailUrl that differs from the local one
+      // and we haven't already analyzed it
+      if (thumbnailUrl && 
+          thumbnailUrl !== localThumbnailUrl && 
+          thumbnailUrl !== lastAnalyzedUrlRef.current &&
+          !isAnalyzing) {
+        
+        lastAnalyzedUrlRef.current = thumbnailUrl;
+        setIsAnalyzing(true);
+        setAnalysis(null); // Clear previous analysis while analyzing new artwork
+        
+        try {
+          // Fetch the image and convert to base64
+          const response = await fetch(thumbnailUrl);
+          const blob = await response.blob();
+          
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+            const base64 = (event.target?.result as string).split(',')[1];
+            
+            try {
+              const analysisResponse = await fetch('/api/analyze-thumbnail', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imageBase64: base64 })
+              });
+              
+              if (analysisResponse.ok) {
+                const data: ThumbnailAnalysis = await analysisResponse.json();
+                setAnalysis(data);
+                onThumbnailAnalysis?.(data);
+              }
+            } catch (error) {
+              console.error('Thumbnail analysis failed:', error);
+            } finally {
+              setIsAnalyzing(false);
+            }
+          };
+          reader.readAsDataURL(blob);
+        } catch (error) {
+          console.error('Failed to fetch artwork for analysis:', error);
+          setIsAnalyzing(false);
+        }
+      }
+    };
+    
+    analyzeArtwork();
+  }, [thumbnailUrl, localThumbnailUrl, isAnalyzing, onThumbnailAnalysis]);
 
   const currentPaletteName = colorPalettes.find(
     (p) => JSON.stringify(p.colors) === JSON.stringify(settings.colorPalette)
@@ -683,7 +738,18 @@ export function UIControls({
                       />
                     </div>
                     
-                    {analysis && (
+                    {isAnalyzing ? (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="w-full text-xs border-accent/50 text-accent/60"
+                        disabled
+                        data-testid="button-analyzing-ai-palette-mobile"
+                      >
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        Analyzing...
+                      </Button>
+                    ) : analysis ? (
                       <Button 
                         variant="outline" 
                         size="sm"
@@ -694,7 +760,7 @@ export function UIControls({
                         <Sparkles className="mr-2 h-3 w-3" />
                         Apply AI Palette
                       </Button>
-                    )}
+                    ) : null}
                   </div>
                   
                   {/* Image Filter Selector - Multiple */}
@@ -1289,7 +1355,18 @@ export function UIControls({
                       </div>
                     )}
                   </button>
-                  {analysis && (
+                  {isAnalyzing ? (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="text-[10px] h-7 border-accent/50 text-accent/60 w-full"
+                      disabled
+                      data-testid="button-analyzing-ai-palette"
+                    >
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      Analyzing...
+                    </Button>
+                  ) : analysis ? (
                     <Button 
                       variant="outline" 
                       size="sm"
@@ -1300,7 +1377,7 @@ export function UIControls({
                       <Sparkles className="mr-1 h-3 w-3" />
                       AI Colors
                     </Button>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Filters */}
