@@ -1,0 +1,294 @@
+Below is a **step-by-step implementation process** for **Option 2 → Option 4 → Option 5**, written for your current setup (React + Vite + R3F + `@react-three/postprocessing`, plus your custom image filters / shaders). You can follow this in order and validate after each step.
+
+---
+
+# 🥇 OPTION 2 — Luminance-aware Noise Gate (Fix dark-image grain)
+
+**Goal:** Dark pixels should not get extra noise / shimmer. Only brighter areas should receive grain/noise/CA intensity.
+
+## Step 2.1 — Identify which effects are creating the “grain”
+
+In your filter stack, temporarily toggle each one **off** (one at a time) while playing a dark thumbnail:
+
+* `Noise`
+* `Scanline`
+* `ChromaticAberration`
+* `Bloom` (sometimes)
+* `Afterimage` (feedback can create grain)
+* Any custom shader that uses `random()`/noise
+
+✅ Result: You know which effects to gate.
+
+---
+
+## Step 2.2 — Compute luminance in the shader that generates the effect
+
+Wherever you have access to the current pixel color (typically in a custom shader or custom pass), compute:
+
+```glsl
+float luminance(vec3 c) {
+  return dot(c, vec3(0.299, 0.587, 0.114));
+}
+```
+
+If your effect is a **postprocessing pass**, this is inside the fragment shader after sampling `inputBuffer`.
+
+---
+
+## Step 2.3 — Gate intensity using `smoothstep`
+
+Use a soft threshold so it fades naturally:
+
+```glsl
+float l = luminance(color.rgb);
+
+// Dark pixels = 0, bright pixels = 1
+float gate = smoothstep(0.10, 0.35, l); 
+// tweak values: (0.06, 0.25) for darker gating
+```
+
+---
+
+## Step 2.4 — Apply the gate to “noise-like” intensities
+
+For example:
+
+* Noise amount
+* Chromatic aberration offset
+* Scanline intensity
+* Feedback mix
+* Any jitter offset
+
+```glsl
+noiseAmount *= gate;
+aberrationAmount *= gate;
+```
+
+✅ Expected outcome: dark regions become much cleaner instantly.
+
+---
+
+## Step 2.5 — Add a “Dark Image Safe Mode” multiplier (optional)
+
+Expose a UI slider or auto-detect based on average luminance:
+
+* `safeMode = 1.0` normal
+* `safeMode = 0.6` on dark images
+
+```glsl
+noiseAmount *= gate * safeMode;
+```
+
+---
+
+## Step 2.6 — Validate
+
+Test with:
+
+* 1 very dark thumbnail
+* 1 medium thumbnail
+* 1 bright thumbnail
+
+✅ Pass criteria:
+
+* Dark: no crawling grain
+* Bright: effect still looks alive
+
+---
+
+---
+
+# 🥈 OPTION 4 — Temporal Smoothing (Stop shimmer/jitter during audio zoom)
+
+**Goal:** Zoom / offsets shouldn’t jump every frame when audio spikes.
+
+## Step 4.1 — Identify which parameters are “jumping”
+
+Usually:
+
+* zoom value
+* UV offset
+* chroma offset
+* afterimage damping
+* kaleido rotation speed
+
+Pick the main culprits first (Zoom Pulse parameters).
+
+---
+
+## Step 4.2 — Add smoothing in JavaScript (fastest win)
+
+Use an exponential smoothing filter:
+
+```ts
+function smooth(prev: number, next: number, dt: number, speed = 10) {
+  // higher speed = more responsive, lower = smoother
+  const a = 1 - Math.exp(-speed * dt);
+  return prev + (next - prev) * a;
+}
+```
+
+---
+
+## Step 4.3 — Use separate smoothing rates per band
+
+Recommended:
+
+* bass: strong but smooth (avoid jitter)
+* high: faster response but still smoothed
+
+Example:
+
+```ts
+bassSmoothed = smooth(bassSmoothed, bassRaw, dt, 8);
+midSmoothed  = smooth(midSmoothed,  midRaw,  dt, 10);
+highSmoothed = smooth(highSmoothed, highRaw, dt, 14);
+```
+
+---
+
+## Step 4.4 — Smooth the zoom parameter (not just audio)
+
+Even if audio is smoothed, zoom might still “snap” if it’s scaled aggressively.
+So smooth zoom too:
+
+```ts
+const zoomTarget = 1 + bassSmoothed * 0.08 + midSmoothed * 0.03;
+zoom = smooth(zoom, zoomTarget, dt, 9);
+```
+
+---
+
+## Step 4.5 — Add “attack/release” smoothing (best feel)
+
+This makes zoom react quickly to beats but relax slowly:
+
+```ts
+function smoothAR(prev: number, next: number, dt: number, attack=18, release=6) {
+  const speed = next > prev ? attack : release;
+  const a = 1 - Math.exp(-speed * dt);
+  return prev + (next - prev) * a;
+}
+```
+
+Use it for zoom:
+
+```ts
+zoom = smoothAR(zoom, zoomTarget, dt, 18, 6);
+```
+
+✅ Expected outcome: beat hits feel strong, but jitter disappears.
+
+---
+
+## Step 4.6 — Validate
+
+Play a kick-heavy track + dark image and watch:
+
+* do edges shimmer?
+* does grain “crawl”?
+
+✅ Pass criteria:
+
+* zoom feels musical, not robotic
+* no rapid flicker in shadows
+
+---
+
+---
+
+# 🥉 OPTION 5 — Linear Workflow (Gamma-correct pipeline polish)
+
+**Goal:** Avoid doing math on gamma-compressed colors, which amplifies shadow errors.
+
+This is a “pipeline” step. Do it after 2 & 4 so you aren’t debugging everything at once.
+
+## Step 5.1 — Confirm renderer color settings
+
+In Three.js / R3F, ensure output is sRGB and tone mapping is consistent.
+
+Typical R3F setup:
+
+```tsx
+<Canvas
+  gl={{ antialias: true }}
+  onCreated={({ gl }) => {
+    gl.outputColorSpace = THREE.SRGBColorSpace;
+    gl.toneMapping = THREE.ACESFilmicToneMapping;
+    gl.toneMappingExposure = 1.0;
+  }}
+>
+```
+
+(If you don’t use tone mapping, keep it consistent across scenes.)
+
+---
+
+## Step 5.2 — Ensure textures are tagged correctly
+
+When you load a thumbnail texture:
+
+```ts
+texture.colorSpace = THREE.SRGBColorSpace;
+```
+
+If you don’t set this, dark images are a common casualty.
+
+---
+
+## Step 5.3 — Do filter math in linear space (important)
+
+In custom shaders:
+
+* convert sampled sRGB to linear before operations
+* convert back (if needed) when outputting
+
+If your pipeline already handles this via renderer + textures, you may not need manual conversions. The goal is: **don’t mix color spaces unintentionally**.
+
+---
+
+## Step 5.4 — Audit postprocessing library defaults
+
+Some postprocessing stacks assume linear buffers and output sRGB at the end.
+Confirm:
+
+* input buffer format
+* whether effects expect linear
+
+If things look washed out after fixes, it’s usually double-sRGB or double-gamma.
+
+---
+
+## Step 5.5 — Validate with a “dark test pack”
+
+Use 5 images:
+
+* 2 very dark
+* 2 mid
+* 1 very bright
+
+✅ Pass criteria:
+
+* shadows look stable (less banding)
+* less “muddy” dark gradients
+* effects behave consistently across images
+
+---
+
+# ✅ Recommended implementation order (exact)
+
+1. Implement **Option 2** in the shader(s) producing the noise/grain
+2. Implement **Option 4** smoothing in JS for bass/mid/high and zoom
+3. Implement **Option 5** renderer + texture colorSpace correctness
+
+---
+
+# What I need to give you exact code (no guesswork)
+
+Tell me which of these is true for your Zoom Pulse filter:
+
+A) It’s a **custom shaderMaterial** on a fullscreen plane
+B) It’s done via **@react-three/postprocessing** effects only
+C) It’s a custom **postprocessing pass**
+
+Reply with A/B/C and I’ll paste the exact code changes for Option 2 + 4 + 5 in your actual structure.

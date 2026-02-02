@@ -34,6 +34,20 @@ function isWebGLAvailable(): boolean {
   }
 }
 
+// Option 4: Attack/Release temporal smoothing for audio bands
+// Attack = fast response to increases (beat hits), Release = slow decay
+function smoothAR(prev: number, next: number, dt: number, attack: number = 18, release: number = 6): number {
+  const speed = next > prev ? attack : release;
+  const a = 1 - Math.exp(-speed * dt);
+  return prev + (next - prev) * a;
+}
+
+// Standard exponential smoothing
+function smoothExp(prev: number, next: number, dt: number, speed: number = 10): number {
+  const a = 1 - Math.exp(-speed * dt);
+  return prev + (next - prev) * a;
+}
+
 // Fallback visualizer when WebGL is unavailable
 function FallbackVisualizer({ settings, backgroundImage }: { settings: any; backgroundImage?: string | null }) {
   const [pulse, setPulse] = useState(0);
@@ -168,15 +182,18 @@ function EnergyRings({ getAudioData, settings }: { getAudioData: () => AudioData
     if (!groupRef.current) return;
     const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime();
+    const dt = Math.min(delta, 0.1); // Cap delta to prevent jumps
     
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    // Option 4: Attack/release smoothing for each audio band
+    // Bass: Strong but smooth (avoid jitter) - slower attack/release
+    // High: Faster response but still smoothed
     const smooth = smoothedAudioRef.current;
-    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.08);
-    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.12);
-    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.15);
-    smooth.high = lerp(smooth.high, audioRaw.high, 0.2);
-    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
-    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.1);
+    smooth.sub = smoothAR(smooth.sub, audioRaw.sub, dt, 12, 5);
+    smooth.bass = smoothAR(smooth.bass, audioRaw.bass, dt, 14, 6);
+    smooth.mid = smoothAR(smooth.mid, audioRaw.mid, dt, 16, 8);
+    smooth.high = smoothAR(smooth.high, audioRaw.high, dt, 20, 10);
+    smooth.kick = smoothAR(smooth.kick, audioRaw.kick, dt, 25, 8); // Fast attack for punchy kicks
+    smooth.energy = smoothExp(smooth.energy, audioRaw.energy, dt, 8);
 
     const baseSpeed = 0.12 * settings.speed;
     groupRef.current.rotation.z += delta * (baseSpeed + smooth.sub * 0.3 + smooth.kick * 0.6);
@@ -619,20 +636,20 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
            Math.cos(y * 3.1 + z * 2.2) * 0.3;
   };
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!groupRef.current) return;
     const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime();
     
-    // Smooth audio interpolation with per-band rates
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    // Option 4: Attack/release smoothing for musical response
+    const dt = Math.min(delta, 0.1);
     const smooth = smoothedAudioRef.current;
-    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.05);
-    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.08);
-    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.1);
-    smooth.high = lerp(smooth.high, audioRaw.high, 0.15);
-    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.2);
-    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.06);
+    smooth.sub = smoothAR(smooth.sub, audioRaw.sub, dt, 10, 4);
+    smooth.bass = smoothAR(smooth.bass, audioRaw.bass, dt, 14, 6);
+    smooth.mid = smoothAR(smooth.mid, audioRaw.mid, dt, 16, 8);
+    smooth.high = smoothAR(smooth.high, audioRaw.high, dt, 20, 10);
+    smooth.kick = smoothAR(smooth.kick, audioRaw.kick, dt, 25, 8);
+    smooth.energy = smoothExp(smooth.energy, audioRaw.energy, dt, 6);
 
     // Update shader uniforms
     const updateMaterial = (points: THREE.Points | null) => {
@@ -997,21 +1014,22 @@ function WaveformSphere({ getAudioData, settings }: { getAudioData: () => AudioD
     };
   }, [auroraLines]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!meshRef.current) return;
     const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
     const geometry = meshRef.current.geometry as THREE.BufferGeometry;
     const positionAttr = geometry.attributes.position;
 
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    // Option 4: Attack/release smoothing for musical response
+    const dt = Math.min(delta, 0.1);
     const smooth = smoothedAudioRef.current;
-    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.08);
-    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.12);
-    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.15);
-    smooth.high = lerp(smooth.high, audioRaw.high, 0.2);
-    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
-    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.1);
+    smooth.sub = smoothAR(smooth.sub, audioRaw.sub, dt, 12, 5);
+    smooth.bass = smoothAR(smooth.bass, audioRaw.bass, dt, 14, 6);
+    smooth.mid = smoothAR(smooth.mid, audioRaw.mid, dt, 16, 8);
+    smooth.high = smoothAR(smooth.high, audioRaw.high, dt, 20, 10);
+    smooth.kick = smoothAR(smooth.kick, audioRaw.kick, dt, 25, 8);
+    smooth.energy = smoothExp(smooth.energy, audioRaw.energy, dt, 8);
 
     if (!originalPositions.current) {
       originalPositions.current = new Float32Array(positionAttr.array);
@@ -1202,19 +1220,20 @@ function AudioBars({ getAudioData, settings }: { getAudioData: () => AudioData, 
     };
   }, [scanLines]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!meshRef.current) return;
     const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
     
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    // Option 4: Attack/release smoothing for musical response
+    const dt = Math.min(delta, 0.1);
     const smooth = smoothedAudioRef.current;
-    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.1);
-    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.15);
-    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.18);
-    smooth.high = lerp(smooth.high, audioRaw.high, 0.22);
-    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
-    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.12);
+    smooth.sub = smoothAR(smooth.sub, audioRaw.sub, dt, 14, 6);
+    smooth.bass = smoothAR(smooth.bass, audioRaw.bass, dt, 18, 8);
+    smooth.mid = smoothAR(smooth.mid, audioRaw.mid, dt, 20, 10);
+    smooth.high = smoothAR(smooth.high, audioRaw.high, dt, 24, 12);
+    smooth.kick = smoothAR(smooth.kick, audioRaw.kick, dt, 28, 10);
+    smooth.energy = smoothExp(smooth.energy, audioRaw.energy, dt, 10);
 
     const breathScale = 1 + smooth.sub * 0.18;
     const radiusPulse = 5.5 + smooth.bass * 1.8 * settings.intensity;
@@ -1224,7 +1243,7 @@ function AudioBars({ getAudioData, settings }: { getAudioData: () => AudioData, 
       const freqValue = (audioRaw.frequencyData?.[freqIndex] || 0) / 255;
       
       const targetHeight = 0.4 + freqValue * 14 * settings.intensity + smooth.kick * 3;
-      smoothedHeights.current[i] = lerp(smoothedHeights.current[i], targetHeight, 0.22);
+      smoothedHeights.current[i] = smoothExp(smoothedHeights.current[i], targetHeight, dt, 22);
       const height = smoothedHeights.current[i];
       
       const angle = (i / barCount) * Math.PI * 2;
@@ -1416,19 +1435,20 @@ function GeometricKaleidoscope({ getAudioData, settings }: { getAudioData: () =>
     };
   }, [trailLines]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!groupRef.current) return;
     const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
     
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    // Option 4: Attack/release smoothing for musical response
+    const dt = Math.min(delta, 0.1);
     const smooth = smoothedAudioRef.current;
-    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.08);
-    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.12);
-    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.15);
-    smooth.high = lerp(smooth.high, audioRaw.high, 0.2);
-    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
-    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.1);
+    smooth.sub = smoothAR(smooth.sub, audioRaw.sub, dt, 12, 5);
+    smooth.bass = smoothAR(smooth.bass, audioRaw.bass, dt, 14, 6);
+    smooth.mid = smoothAR(smooth.mid, audioRaw.mid, dt, 16, 8);
+    smooth.high = smoothAR(smooth.high, audioRaw.high, dt, 20, 10);
+    smooth.kick = smoothAR(smooth.kick, audioRaw.kick, dt, 25, 8);
+    smooth.energy = smoothExp(smooth.energy, audioRaw.energy, dt, 8);
     
     // Morph phase for geometry transitions
     morphPhaseRef.current += 0.01 * (1 + smooth.kick * 3);
@@ -1643,19 +1663,20 @@ function CosmicWeb({ getAudioData, settings }: { getAudioData: () => AudioData, 
     return pos;
   }, []);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!pointsRef.current || !linesRef.current) return;
     const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
     
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    // Option 4: Attack/release smoothing for musical response
+    const dt = Math.min(delta, 0.1);
     const smooth = smoothedAudioRef.current;
-    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.08);
-    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.12);
-    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.15);
-    smooth.high = lerp(smooth.high, audioRaw.high, 0.2);
-    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
-    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.1);
+    smooth.sub = smoothAR(smooth.sub, audioRaw.sub, dt, 12, 5);
+    smooth.bass = smoothAR(smooth.bass, audioRaw.bass, dt, 14, 6);
+    smooth.mid = smoothAR(smooth.mid, audioRaw.mid, dt, 16, 8);
+    smooth.high = smoothAR(smooth.high, audioRaw.high, dt, 20, 10);
+    smooth.kick = smoothAR(smooth.kick, audioRaw.kick, dt, 25, 8);
+    smooth.energy = smoothExp(smooth.energy, audioRaw.energy, dt, 8);
 
     const posAttr = pointsRef.current.geometry.attributes.position;
     const connectionThreshold = 5.0 + smooth.energy * settings.intensity * 3.5 + smooth.bass * 2.5;
@@ -1943,19 +1964,20 @@ function CymaticSandPlate({ getAudioData, settings }: { getAudioData: () => Audi
     };
   }, [ringLines]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!pointsRef.current || !velocitiesRef.current) return;
     const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime();
     
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    // Option 4: Attack/release smoothing for musical response
+    const dt = Math.min(delta, 0.1);
     const smooth = smoothedAudioRef.current;
-    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.1);
-    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.15);
-    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.18);
-    smooth.high = lerp(smooth.high, audioRaw.high, 0.22);
-    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
-    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.12);
+    smooth.sub = smoothAR(smooth.sub, audioRaw.sub, dt, 14, 6);
+    smooth.bass = smoothAR(smooth.bass, audioRaw.bass, dt, 18, 8);
+    smooth.mid = smoothAR(smooth.mid, audioRaw.mid, dt, 20, 10);
+    smooth.high = smoothAR(smooth.high, audioRaw.high, dt, 24, 12);
+    smooth.kick = smoothAR(smooth.kick, audioRaw.kick, dt, 28, 10);
+    smooth.energy = smoothExp(smooth.energy, audioRaw.energy, dt, 10);
     
     const posAttr = pointsRef.current.geometry.attributes.position;
     const colorAttr = pointsRef.current.geometry.attributes.color;
@@ -2232,18 +2254,18 @@ function WaterMembraneOrb({ getAudioData, settings }: { getAudioData: () => Audi
     `,
   }), []);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!groupRef.current) return;
     const audio = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
     
-    // Smooth audio values for premium feel
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-    smoothedAudio.current.sub = lerp(smoothedAudio.current.sub, audio.sub, 0.08);
-    smoothedAudio.current.bass = lerp(smoothedAudio.current.bass, audio.bass, 0.12);
-    smoothedAudio.current.mid = lerp(smoothedAudio.current.mid, audio.mid, 0.15);
-    smoothedAudio.current.high = lerp(smoothedAudio.current.high, audio.high, 0.18);
-    smoothedAudio.current.energy = lerp(smoothedAudio.current.energy, audio.energy, 0.1);
+    // Option 4: Attack/release smoothing for musical response
+    const dt = Math.min(delta, 0.1);
+    smoothedAudio.current.sub = smoothAR(smoothedAudio.current.sub, audio.sub, dt, 12, 5);
+    smoothedAudio.current.bass = smoothAR(smoothedAudio.current.bass, audio.bass, dt, 14, 6);
+    smoothedAudio.current.mid = smoothAR(smoothedAudio.current.mid, audio.mid, dt, 16, 8);
+    smoothedAudio.current.high = smoothAR(smoothedAudio.current.high, audio.high, dt, 20, 10);
+    smoothedAudio.current.energy = smoothExp(smoothedAudio.current.energy, audio.energy, dt, 8);
     
     const { sub, bass, mid, high, energy } = smoothedAudio.current;
     const modeIndex = audio.modeIndex;
@@ -2645,20 +2667,20 @@ function ChladniGeometry({ getAudioData, settings }: { getAudioData: () => Audio
     return [positions, phases];
   }, []);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!groupRef.current) return;
     const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
     
-    // Smooth audio interpolation
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    // Option 4: Attack/release smoothing for musical response
+    const dt = Math.min(delta, 0.1);
     const smooth = smoothedAudioRef.current;
-    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.06);
-    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.1);
-    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.12);
-    smooth.high = lerp(smooth.high, audioRaw.high, 0.18);
-    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
-    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.08);
+    smooth.sub = smoothAR(smooth.sub, audioRaw.sub, dt, 10, 4);
+    smooth.bass = smoothAR(smooth.bass, audioRaw.bass, dt, 14, 6);
+    smooth.mid = smoothAR(smooth.mid, audioRaw.mid, dt, 16, 7);
+    smooth.high = smoothAR(smooth.high, audioRaw.high, dt, 20, 10);
+    smooth.kick = smoothAR(smooth.kick, audioRaw.kick, dt, 28, 10);
+    smooth.energy = smoothExp(smooth.energy, audioRaw.energy, dt, 7);
     
     // Mode patterns for (m, n) - more complex patterns
     const patterns = [[2, 3], [3, 4], [4, 5], [3, 5], [4, 6], [5, 6], [5, 7], [6, 7], [7, 8], [4, 7]];
@@ -2897,19 +2919,20 @@ function ResonantFieldLines({ getAudioData, settings }: { getAudioData: () => Au
     };
   }, [lineObjects]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!groupRef.current) return;
     const audioRaw = getAudioData();
     const time = state.clock.getElapsedTime() * settings.speed;
     
-    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    // Option 4: Attack/release smoothing for musical response
+    const dt = Math.min(delta, 0.1);
     const smooth = smoothedAudioRef.current;
-    smooth.sub = lerp(smooth.sub, audioRaw.sub, 0.08);
-    smooth.bass = lerp(smooth.bass, audioRaw.bass, 0.12);
-    smooth.mid = lerp(smooth.mid, audioRaw.mid, 0.15);
-    smooth.high = lerp(smooth.high, audioRaw.high, 0.2);
-    smooth.kick = lerp(smooth.kick, audioRaw.kick, 0.25);
-    smooth.energy = lerp(smooth.energy, audioRaw.energy, 0.1);
+    smooth.sub = smoothAR(smooth.sub, audioRaw.sub, dt, 12, 5);
+    smooth.bass = smoothAR(smooth.bass, audioRaw.bass, dt, 14, 6);
+    smooth.mid = smoothAR(smooth.mid, audioRaw.mid, dt, 16, 8);
+    smooth.high = smoothAR(smooth.high, audioRaw.high, dt, 20, 10);
+    smooth.kick = smoothAR(smooth.kick, audioRaw.kick, dt, 25, 8);
+    smooth.energy = smoothExp(smooth.energy, audioRaw.energy, dt, 8);
     
     const symmetry = audioRaw.modeIndex + 2;
     const fieldStrength = (smooth.sub + smooth.bass) * 0.7 * settings.intensity;
@@ -3233,6 +3256,36 @@ const PsyFilterMaterial = shaderMaterial(
       return 1.0 - smoothstep(radius - softness, radius + softness, dist);
     }
     
+    // Luminance calculation for noise gating (Option 2)
+    float luminance(vec3 c) {
+      return dot(c, vec3(0.299, 0.587, 0.114));
+    }
+    
+    // Luminance-aware noise gate - reduces grain/shimmer on dark pixels
+    float noiseGate(vec3 color) {
+      float l = luminance(color);
+      // Dark pixels = 0, bright pixels = 1
+      // Lower threshold for dark images, higher for bright areas
+      return smoothstep(0.08, 0.30, l);
+    }
+    
+    // Luminance-gated film grain
+    float filmGrainGated(vec2 uv, float time, float amount, vec3 color) {
+      float gate = noiseGate(color);
+      return (hash(uv * 1000.0 + time * 100.0) - 0.5) * amount * gate;
+    }
+    
+    // Luminance-gated chromatic aberration
+    vec3 chromaticAberrationGated(sampler2D tex, vec2 uv, float amount, float gate) {
+      vec2 dir = normalize(uv - 0.5);
+      float dist = length(uv - 0.5);
+      float aberration = amount * dist * dist * gate; // Gate the aberration amount
+      float r = texture2D(tex, uv + dir * aberration).r;
+      float g = texture2D(tex, uv).g;
+      float b = texture2D(tex, uv - dir * aberration).b;
+      return vec3(r, g, b);
+    }
+    
     void main() {
       vec2 uv = vUv;
       vec3 color;
@@ -3369,9 +3422,10 @@ const PsyFilterMaterial = shaderMaterial(
                             smoothstep(0.0, 0.08, uv.y) * smoothstep(1.0, 0.92, uv.y);
         color *= edgeVignette;
         
-        // Subtle scan lines for texture
+        // Subtle scan lines for texture - gated for dark protection (Option 2)
+        float rgbGate = noiseGate(color);
         float scanLine = sin(uv.y * 300.0 + uTime * 4.0) * 0.02;
-        color += scanLine * uHigh * 0.5;
+        color += scanLine * uHigh * 0.5 * rgbGate;
         
         color *= vignette(uv, 0.75, 0.35);
         opacity = 0.45;
@@ -3402,15 +3456,17 @@ const PsyFilterMaterial = shaderMaterial(
         waveUv += (combinedSmoke - 0.5) * 0.008 * uEnergy;
         
         // Base image with subtle chromatic aberration from highs
-        color = chromaticAberration(uTexture, waveUv, 0.004 * uHigh);
+        vec3 baseColor = texture2D(uTexture, waveUv).rgb;
+        float waveGate = noiseGate(baseColor); // Luminance gate for dark protection
+        color = chromaticAberrationGated(uTexture, waveUv, 0.004 * uHigh, waveGate);
         
         // Volumetric smoke overlay - dominant mood element
         vec3 smokeColor = vec3(0.9, 0.92, 1.0); // Slight cool tint
         float smokeIntensity = combinedSmoke * 0.35 * (0.6 + uMid * 0.4);
-        color = mix(color, smokeColor, smokeIntensity * 0.4);
+        color = mix(color, smokeColor, smokeIntensity * 0.4 * waveGate); // Reduce smoke on dark areas
         
-        // Soft smoke shimmer from highs
-        float shimmer = pow(smokeNoise2, 2.0) * uHigh * 0.15;
+        // Soft smoke shimmer from highs - gated for dark protection
+        float shimmer = pow(smokeNoise2, 2.0) * uHigh * 0.15 * waveGate;
         color += shimmer;
         
         // Dreamy soft glow
@@ -3476,13 +3532,14 @@ const PsyFilterMaterial = shaderMaterial(
         }
         color = blurColor / float(samples);
         
-        // Radial glow tied to bass
+        // Radial glow tied to bass - gated for dark protection
+        float zoomGate = noiseGate(color); // Luminance gate
         float radialIntensity = 1.0 - length(uv - focalPoint) * 1.6;
         radialIntensity = max(0.0, radialIntensity);
-        color += color * radialIntensity * 0.25 * uBass;
+        color += color * radialIntensity * 0.25 * uBass * zoomGate;
         
-        // Chromatic edges on highs
-        color = mix(color, chromaticAberration(uTexture, uv, 0.004 * uHigh), 0.25);
+        // Chromatic edges on highs - gated for dark protection
+        color = mix(color, chromaticAberrationGated(uTexture, uv, 0.004 * uHigh, zoomGate), 0.25);
         
         color *= vignette(uv, 0.75, 0.35);
         opacity = 0.5;
@@ -3493,8 +3550,8 @@ const PsyFilterMaterial = shaderMaterial(
       }
       
       // Global enhancements for all filters
-      // Subtle film grain for premium feel
-      color += filmGrain(uv, uTime, 0.015);
+      // Luminance-gated film grain - no grain on dark pixels (Option 2)
+      color += filmGrainGated(uv, uTime, 0.015, color);
       
       // Clamp to valid range
       color = clamp(color, 0.0, 1.0);
@@ -3546,10 +3603,12 @@ function BackgroundImage({
     const loader = new THREE.TextureLoader();
     const tex = loader.load(imageUrl);
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    // Option 5: Ensure proper sRGB colorSpace for linear workflow
+    tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, [imageUrl]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (materialRef.current) {
       materialRef.current.uTime = state.clock.getElapsedTime() + layerOffset;
       materialRef.current.uFilterType = filterIdToType[filterId] || 0;
@@ -3749,6 +3808,9 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
           if (!gl.getContext()) {
             setHasError(true);
           }
+          // Option 5: Ensure proper sRGB output for linear workflow
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+          gl.toneMappingExposure = 1.0;
         }}
       >
         <color attach="background" args={['#050508']} />
