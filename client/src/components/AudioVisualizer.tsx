@@ -3342,82 +3342,150 @@ const PsyFilterMaterial = shaderMaterial(
         opacity = 0.5;
       }
       
-      // Filter type 6: Premium RGB Split with radial distortion
+      // Filter type 6: Premium RGB Split with radial distortion (no mirror artifacts)
       else if (uFilterType == 6) {
-        float amount = 0.015 * uIntensity * (1.0 + uEnergy * 2.0);
+        // Reduced base amount, stronger near center, weaker at edges
+        float edgeDist = length(uv - 0.5);
+        float edgeFade = 1.0 - smoothstep(0.2, 0.5, edgeDist);
+        float amount = 0.012 * uIntensity * (1.0 + uEnergy * 1.5) * edgeFade;
         
-        // Radial chromatic aberration
+        // Radial chromatic aberration - depth-aware split
         vec2 dir = uv - 0.5;
         float dist = length(dir);
-        vec2 offset = normalize(dir) * amount * (1.0 + dist);
+        vec2 offset = (dist > 0.001 ? normalize(dir) : vec2(0.0)) * amount * (0.5 + dist * 0.5);
         
-        // Sample with barrel distortion
-        vec2 rUv = barrelDistort(uv + offset, 0.1 * uBass);
-        vec2 bUv = barrelDistort(uv - offset, 0.1 * uBass);
+        // Sample with barrel distortion - clamp UVs to prevent edge sampling
+        vec2 rUv = clamp(barrelDistort(uv + offset, 0.08 * uBass), 0.001, 0.999);
+        vec2 gUv = clamp(uv, 0.001, 0.999);
+        vec2 bUv = clamp(barrelDistort(uv - offset, 0.08 * uBass), 0.001, 0.999);
         
         float r = texture2D(uTexture, rUv).r;
-        float g = texture2D(uTexture, uv).g;
+        float g = texture2D(uTexture, gUv).g;
         float b = texture2D(uTexture, bUv).b;
         color = vec3(r, g, b);
         
-        // Add scan lines
-        float scanLine = sin(uv.y * 400.0 + uTime * 5.0) * 0.03;
-        color += scanLine * uHigh;
+        // Soft edge vignette to hide any remaining edge artifacts
+        float edgeVignette = smoothstep(0.0, 0.08, uv.x) * smoothstep(1.0, 0.92, uv.x) *
+                            smoothstep(0.0, 0.08, uv.y) * smoothstep(1.0, 0.92, uv.y);
+        color *= edgeVignette;
+        
+        // Subtle scan lines for texture
+        float scanLine = sin(uv.y * 300.0 + uTime * 4.0) * 0.02;
+        color += scanLine * uHigh * 0.5;
         
         color *= vignette(uv, 0.75, 0.35);
         opacity = 0.45;
       }
       
-      // Filter type 7: Premium Liquid Wave
+      // Filter type 7: Premium Liquid Wave with Smoke/Fog effect
       else if (uFilterType == 7) {
-        // Complex wave distortion
+        // Reduced wave amplitude - subtle and dreamy
         vec2 waveUv = uv;
-        float waveAmount = 0.03 * uIntensity;
+        float waveAmount = 0.012 * uIntensity; // Reduced from 0.03
         
-        waveUv.x += sin(uv.y * 12.0 + uTime * 3.0) * waveAmount * (1.0 + uBass);
-        waveUv.y += cos(uv.x * 12.0 + uTime * 2.5) * waveAmount * (1.0 + uBass);
-        waveUv.x += sin(uv.y * 6.0 - uTime * 2.0) * waveAmount * 0.5 * uMid;
-        waveUv.y += cos(uv.x * 6.0 - uTime * 1.5) * waveAmount * 0.5 * uMid;
+        // Slower, broader waves - less aggressive oscillation
+        waveUv.x += sin(uv.y * 4.0 + uTime * 1.2) * waveAmount * (0.5 + uBass * 0.5);
+        waveUv.y += cos(uv.x * 4.0 + uTime * 1.0) * waveAmount * (0.5 + uBass * 0.5);
+        waveUv.x += sin(uv.y * 2.0 - uTime * 0.8) * waveAmount * 0.3 * uMid;
+        waveUv.y += cos(uv.x * 2.0 - uTime * 0.6) * waveAmount * 0.3 * uMid;
         
-        // Add organic noise distortion
-        float noiseVal = fbm(uv * 4.0 + uTime * 0.5);
-        waveUv += (noiseVal - 0.5) * 0.02 * uEnergy;
+        // Clamp UVs to prevent edge artifacts
+        waveUv = clamp(waveUv, 0.001, 0.999);
         
-        color = chromaticAberration(uTexture, waveUv, 0.01 * uHigh);
+        // Multi-layer smoke/fog effect
+        float smokeNoise1 = fbm(uv * 2.0 + uTime * 0.15);
+        float smokeNoise2 = fbm(uv * 3.5 + vec2(uTime * 0.1, -uTime * 0.08));
+        float smokeNoise3 = fbm(uv * 1.5 - uTime * 0.12);
+        float combinedSmoke = (smokeNoise1 + smokeNoise2 * 0.6 + smokeNoise3 * 0.4) / 2.0;
         
-        // Caustic-like highlights
-        float caustic = pow(noiseVal, 3.0) * uEnergy;
-        color += caustic * 0.3;
+        // Subtle wave depth from bass
+        waveUv += (combinedSmoke - 0.5) * 0.008 * uEnergy;
         
-        color *= vignette(uv, 0.8, 0.3);
-        opacity = 0.5;
+        // Base image with subtle chromatic aberration from highs
+        color = chromaticAberration(uTexture, waveUv, 0.004 * uHigh);
+        
+        // Volumetric smoke overlay - dominant mood element
+        vec3 smokeColor = vec3(0.9, 0.92, 1.0); // Slight cool tint
+        float smokeIntensity = combinedSmoke * 0.35 * (0.6 + uMid * 0.4);
+        color = mix(color, smokeColor, smokeIntensity * 0.4);
+        
+        // Soft smoke shimmer from highs
+        float shimmer = pow(smokeNoise2, 2.0) * uHigh * 0.15;
+        color += shimmer;
+        
+        // Dreamy soft glow
+        float softGlow = smoothstep(0.3, 0.7, combinedSmoke) * 0.1;
+        color += softGlow * vec3(1.0, 0.98, 0.95);
+        
+        color *= vignette(uv, 0.85, 0.25);
+        opacity = 0.55;
       }
       
-      // Filter type 8: Premium Zoom Pulse with motion blur
+      // Filter type 8: Premium Zoom Pulse - Audio-reactive with multi-directional motion
       else if (uFilterType == 8) {
-        float zoomAmount = sin(uTime * 2.0) * 0.12 * uIntensity * (1.0 + uEnergy);
+        // Audio-reactive zoom: Bass controls intensity, with asymmetric easing
+        float bassZoom = uBass * 0.08 * uIntensity;
+        float midSpeed = 1.0 + uMid * 0.5;
+        float highJitter = uHigh * 0.015;
         
-        // Multi-sample radial blur
+        // Non-linear zoom with phase offsets to break repetition
+        float phase1 = sin(uTime * 1.3 * midSpeed) * 0.6;
+        float phase2 = sin(uTime * 0.7 * midSpeed + 1.5) * 0.4;
+        float zoomAmount = (phase1 + phase2) * bassZoom + highJitter * sin(uTime * 8.0);
+        
+        // Lateral motion - organic parallax drift tied to mids
+        float driftX = sin(uTime * 0.4 + uMid) * 0.02 * uIntensity;
+        float driftY = cos(uTime * 0.35 + uMid * 0.8) * 0.015 * uIntensity;
+        
+        // Occasional diagonal movement synced to beat energy
+        float diagonalPhase = sin(uTime * 0.8) * uEnergy * 0.01;
+        driftX += diagonalPhase;
+        driftY += diagonalPhase * 0.7;
+        
+        // Dynamic focal point - not always center
+        vec2 focalPoint = vec2(0.5 + sin(uTime * 0.2) * 0.05 * uMid, 
+                               0.5 + cos(uTime * 0.25) * 0.04 * uMid);
+        
+        // Slight rotation during zoom for organic feel
+        float rotAngle = sin(uTime * 0.5) * 0.02 * uIntensity * uEnergy;
+        
+        // Multi-sample radial blur toward dynamic focal point
         vec3 blurColor = vec3(0.0);
         int samples = 8;
         for (int i = 0; i < 8; i++) {
           float t = float(i) / float(samples);
           float zoom = 1.0 + zoomAmount * t;
-          vec2 zoomUv = (uv - 0.5) / zoom + 0.5;
+          
+          // Apply zoom from dynamic focal point
+          vec2 zoomUv = (uv - focalPoint) / zoom + focalPoint;
+          
+          // Add lateral drift
+          zoomUv += vec2(driftX, driftY) * t;
+          
+          // Apply subtle rotation
+          vec2 rotCenter = zoomUv - 0.5;
+          float c = cos(rotAngle * t);
+          float s = sin(rotAngle * t);
+          zoomUv = vec2(rotCenter.x * c - rotCenter.y * s, 
+                       rotCenter.x * s + rotCenter.y * c) + 0.5;
+          
+          // Clamp to prevent edge artifacts
+          zoomUv = clamp(zoomUv, 0.001, 0.999);
+          
           blurColor += texture2D(uTexture, zoomUv).rgb;
         }
         color = blurColor / float(samples);
         
-        // Add radial glow
-        float radialIntensity = 1.0 - length(uv - 0.5) * 1.8;
+        // Radial glow tied to bass
+        float radialIntensity = 1.0 - length(uv - focalPoint) * 1.6;
         radialIntensity = max(0.0, radialIntensity);
-        color += color * radialIntensity * 0.3 * uBass;
+        color += color * radialIntensity * 0.25 * uBass;
         
-        // Subtle chromatic edges
-        color = mix(color, chromaticAberration(uTexture, uv, 0.005 * uHigh), 0.3);
+        // Chromatic edges on highs
+        color = mix(color, chromaticAberration(uTexture, uv, 0.004 * uHigh), 0.25);
         
-        color *= vignette(uv, 0.7, 0.4);
-        opacity = 0.45;
+        color *= vignette(uv, 0.75, 0.35);
+        opacity = 0.5;
       }
       
       else {
@@ -3477,7 +3545,7 @@ function BackgroundImage({
   const texture = useMemo(() => {
     const loader = new THREE.TextureLoader();
     const tex = loader.load(imageUrl);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
     return tex;
   }, [imageUrl]);
 
