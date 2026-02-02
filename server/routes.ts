@@ -276,8 +276,16 @@ Respond in JSON format:
     const host = req.headers['x-forwarded-host'] || req.headers.host;
     const redirectUri = `${protocol}://${host}/callback`;
 
-    // Store state for CSRF protection
+    // Generate CSRF state and store in cookie
     const state = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    
+    // Set state in HTTP-only cookie for CSRF protection
+    res.cookie('soundcloud_oauth_state', state, {
+      httpOnly: true,
+      secure: protocol === 'https',
+      sameSite: 'lax',
+      maxAge: 10 * 60 * 1000, // 10 minutes
+    });
     
     const authUrl = new URL('https://soundcloud.com/connect');
     authUrl.searchParams.set('client_id', clientId);
@@ -290,14 +298,25 @@ Respond in JSON format:
 
   // SoundCloud OAuth callback: Exchange code for token
   app.get('/callback', async (req, res) => {
-    const { code, error, error_description } = req.query;
+    const { code, state, error, error_description } = req.query;
     
     if (error) {
+      res.clearCookie('soundcloud_oauth_state');
       return res.redirect(`/#soundcloud_error=${encodeURIComponent(error_description as string || error as string)}`);
     }
 
     if (!code) {
+      res.clearCookie('soundcloud_oauth_state');
       return res.redirect('/#soundcloud_error=missing_code');
+    }
+
+    // Validate CSRF state from cookie
+    const storedState = req.cookies?.soundcloud_oauth_state;
+    res.clearCookie('soundcloud_oauth_state');
+    
+    if (!storedState || !state || storedState !== state) {
+      console.error('OAuth state mismatch - possible CSRF attack');
+      return res.redirect('/#soundcloud_error=invalid_state');
     }
 
     const clientId = process.env.SOUNDCLOUD_CLIENT_ID;
