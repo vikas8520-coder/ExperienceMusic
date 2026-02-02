@@ -61,7 +61,7 @@
   .settings-panel {
     pointer-events: auto !important;
     overflow: auto;
-    touch-action: pan-x pan-y;
+    touch-action: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     position: relative;
@@ -70,6 +70,14 @@
   
   .settings-panel * {
     pointer-events: auto;
+  }
+  
+  /* Ensure sliders and interactive elements work properly */
+  .settings-panel [role="slider"],
+  .settings-panel input[type="range"],
+  .settings-panel input[type="color"] {
+    touch-action: none;
+    pointer-events: auto !important;
   }
   
   .settings-panel::-webkit-scrollbar {
@@ -132,4 +140,41 @@
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:active {
   @apply bg-primary/90;
+}
+
+/* Color input styling for cross-browser compatibility */
+input[type="color"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: 2px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 0.25rem;
+}
+
+input[type="color"]::-moz-color-swatch {
+  border: none;
+  border-radius: 0.25rem;
+}
+
+input[type="color"]:hover {
+  border-color: hsl(var(--primary));
+}
+
+input[type="color"]:focus {
+  outline: none;
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 2px hsl(var(--primary) / 0.3);
 }

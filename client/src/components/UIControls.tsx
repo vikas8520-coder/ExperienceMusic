@@ -11,7 +11,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Upload, Save, Disc as DiscIcon, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn, Cloud } from "lucide-react";
+import { Upload, Save, Disc as DiscIcon, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn, Cloud, Pin, PinOff } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   colorPalettes, 
@@ -161,7 +161,8 @@ export function UIControls({
   
   // Auto-hide timer ref
   const autoHideTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const AUTO_HIDE_DELAY = 5000; // 5 seconds
+  const AUTO_HIDE_DELAY = 15000; // 15 seconds - extended for better usability
+  const [controlsPinned, setControlsPinned] = useState(false);
   
   // Throttle ref to prevent excessive timer resets
   const lastResetTime = useRef<number>(0);
@@ -169,6 +170,9 @@ export function UIControls({
   
   // Reset auto-hide timer on user interaction (throttled)
   const resetAutoHideTimer = useCallback(() => {
+    // Don't auto-hide if controls are pinned
+    if (controlsPinned) return;
+    
     const now = Date.now();
     if (now - lastResetTime.current < THROTTLE_MS) return;
     lastResetTime.current = now;
@@ -181,11 +185,19 @@ export function UIControls({
       setIsMobileExpanded(false);
       setIsDesktopPanelVisible(false);
     }, AUTO_HIDE_DELAY);
-  }, []);
+  }, [controlsPinned]);
   
-  // Start auto-hide timer when panels are shown
+  // Clear timer when controls are pinned
   useEffect(() => {
-    if (showMobileControls || isDesktopPanelVisible) {
+    if (controlsPinned && autoHideTimerRef.current) {
+      clearTimeout(autoHideTimerRef.current);
+      autoHideTimerRef.current = null;
+    }
+  }, [controlsPinned]);
+  
+  // Start auto-hide timer when panels are shown (only if not pinned)
+  useEffect(() => {
+    if (!controlsPinned && (showMobileControls || isDesktopPanelVisible)) {
       resetAutoHideTimer();
     }
     return () => {
@@ -193,7 +205,7 @@ export function UIControls({
         clearTimeout(autoHideTimerRef.current);
       }
     };
-  }, [showMobileControls, isDesktopPanelVisible, resetAutoHideTimer]);
+  }, [showMobileControls, isDesktopPanelVisible, controlsPinned, resetAutoHideTimer]);
   
   // File input refs for reliable click handling
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -299,7 +311,7 @@ export function UIControls({
         ref={audioInputMobileRef}
         type="file"
         accept="audio/*"
-        onChange={onFileUpload}
+        onChange={(e) => { onFileUpload(e); e.target.value = ''; }}
         className="hidden"
         data-testid="input-audio-upload-mobile"
       />
@@ -349,6 +361,17 @@ export function UIControls({
         <Cloud className="h-5 w-5" />
       </Button>
       
+      {/* Pin Controls Button */}
+      <Button 
+        variant="secondary"
+        size="icon"
+        className={`rounded-full shadow-lg ${controlsPinned ? 'bg-primary text-primary-foreground' : ''}`}
+        onClick={() => setControlsPinned(!controlsPinned)}
+        data-testid="button-pin-controls-mobile"
+      >
+        {controlsPinned ? <PinOff className="h-5 w-5" /> : <Pin className="h-5 w-5" />}
+      </Button>
+      
       {/* Fullscreen Button */}
       <Button 
         variant="secondary"
@@ -373,7 +396,7 @@ export function UIControls({
       onMouseMove={resetAutoHideTimer}
       onTouchStart={resetAutoHideTimer}
     >
-      <div className="glass-panel settings-panel rounded-t-3xl max-h-[70vh] overflow-y-auto scrollbar-thin" style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}>
+      <div className="glass-panel settings-panel rounded-t-3xl max-h-[70vh] overflow-y-auto scrollbar-thin" style={{ WebkitOverflowScrolling: 'touch' }}>
             {/* Drag Handle */}
             <button
               onClick={() => setIsMobileExpanded(!isMobileExpanded)}
@@ -833,6 +856,20 @@ export function UIControls({
                 >
                   <Cloud className="w-5 h-5 text-orange-500" />
                 </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setControlsPinned(!controlsPinned)}
+                      className={controlsPinned ? "text-primary" : ""}
+                      data-testid="button-pin-controls"
+                    >
+                      {controlsPinned ? <PinOff className="w-5 h-5" /> : <Pin className="w-5 h-5" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>{controlsPinned ? "Unpin controls (will auto-hide)" : "Pin controls (stay visible)"}</p></TooltipContent>
+                </Tooltip>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -852,7 +889,6 @@ export function UIControls({
                 maxHeight: 'calc(70vh - 50px)',
                 overscrollBehavior: 'contain',
                 pointerEvents: 'auto',
-                touchAction: 'pan-y',
                 WebkitOverflowScrolling: 'touch',
               }}
             >
@@ -1050,7 +1086,7 @@ export function UIControls({
                     ref={audioInputRef}
                     type="file"
                     accept="audio/*"
-                    onChange={onFileUpload}
+                    onChange={(e) => { onFileUpload(e); e.target.value = ''; }}
                     className="hidden"
                     data-testid="input-audio-upload"
                   />
