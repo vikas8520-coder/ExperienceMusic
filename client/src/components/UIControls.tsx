@@ -11,7 +11,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Upload, Save, Disc as DiscIcon, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn } from "lucide-react";
+import { Upload, Save, Disc as DiscIcon, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn, Cloud } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   colorPalettes, 
@@ -90,6 +90,7 @@ interface UIControlsProps {
   thumbnailUrl?: string | null;
   onSaveToLibrary?: () => void;
   onToggleLibrary?: () => void;
+  onToggleSoundCloud?: () => void;
   trackName?: string;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
@@ -136,6 +137,7 @@ export function UIControls({
   thumbnailUrl,
   onSaveToLibrary,
   onToggleLibrary,
+  onToggleSoundCloud,
   trackName,
   isFullscreen,
   onToggleFullscreen,
@@ -334,6 +336,17 @@ export function UIControls({
         data-testid="button-library-mobile"
       >
         <Library className="h-5 w-5" />
+      </Button>
+      
+      {/* SoundCloud Button */}
+      <Button 
+        variant="secondary"
+        size="icon"
+        className="rounded-full shadow-lg"
+        onClick={onToggleSoundCloud}
+        data-testid="button-soundcloud-mobile"
+      >
+        <Cloud className="h-5 w-5" />
       </Button>
       
       {/* Fullscreen Button */}
@@ -811,6 +824,14 @@ export function UIControls({
                   data-testid="button-toggle-library"
                 >
                   <Library className="w-5 h-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={onToggleSoundCloud}
+                  data-testid="button-toggle-soundcloud"
+                >
+                  <Cloud className="w-5 h-5 text-orange-500" />
                 </Button>
                 <Button
                   variant="ghost"

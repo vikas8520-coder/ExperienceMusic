@@ -254,6 +254,125 @@ Respond in JSON format:
     });
   }
 
+  // SoundCloud API proxy endpoints to avoid CORS issues
+  // Get SoundCloud client ID for OAuth flow initiation
+  app.get('/api/soundcloud/config', (req, res) => {
+    const clientId = process.env.SOUNDCLOUD_CLIENT_ID;
+    if (!clientId) {
+      return res.status(500).json({ error: 'SoundCloud not configured' });
+    }
+    res.json({ clientId });
+  });
+
+  // Proxy SoundCloud API requests
+  app.get('/api/soundcloud/me', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No authorization header' });
+    }
+
+    try {
+      const response = await fetch('https://api.soundcloud.com/me', {
+        headers: { 'Authorization': authHeader }
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error('SoundCloud /me error:', error);
+      res.status(500).json({ error: 'Failed to fetch user info' });
+    }
+  });
+
+  // Search tracks
+  app.get('/api/soundcloud/tracks', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    const { q, limit = '20' } = req.query;
+    
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No authorization header' });
+    }
+
+    try {
+      const url = new URL('https://api.soundcloud.com/tracks');
+      if (q) url.searchParams.set('q', q as string);
+      url.searchParams.set('limit', limit as string);
+      
+      const response = await fetch(url.toString(), {
+        headers: { 'Authorization': authHeader }
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error('SoundCloud tracks search error:', error);
+      res.status(500).json({ error: 'Failed to search tracks' });
+    }
+  });
+
+  // Get user's likes
+  app.get('/api/soundcloud/me/likes', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    const { limit = '50' } = req.query;
+    
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No authorization header' });
+    }
+
+    try {
+      const url = new URL('https://api.soundcloud.com/me/likes');
+      url.searchParams.set('limit', limit as string);
+      
+      const response = await fetch(url.toString(), {
+        headers: { 'Authorization': authHeader }
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error('SoundCloud likes error:', error);
+      res.status(500).json({ error: 'Failed to fetch likes' });
+    }
+  });
+
+  // Get user's playlists
+  app.get('/api/soundcloud/me/playlists', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No authorization header' });
+    }
+
+    try {
+      const response = await fetch('https://api.soundcloud.com/me/playlists', {
+        headers: { 'Authorization': authHeader }
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error('SoundCloud playlists error:', error);
+      res.status(500).json({ error: 'Failed to fetch playlists' });
+    }
+  });
+
+  // Get stream URL for a track
+  app.get('/api/soundcloud/tracks/:id/stream', async (req, res) => {
+    const authHeader = req.headers.authorization;
+    const { id } = req.params;
+    
+    if (!authHeader) {
+      return res.status(401).json({ error: 'No authorization header' });
+    }
+
+    try {
+      const response = await fetch(`https://api.soundcloud.com/tracks/${id}/streams`, {
+        headers: { 'Authorization': authHeader }
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error('SoundCloud stream error:', error);
+      res.status(500).json({ error: 'Failed to get stream URL' });
+    }
+  });
+
   // SoundCloud OAuth token exchange endpoint (for mobile app security)
   // Client secret is kept on server, mobile app only sends authorization code
   app.post('/api/auth/soundcloud/token', async (req, res) => {

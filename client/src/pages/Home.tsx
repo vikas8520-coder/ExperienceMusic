@@ -3,6 +3,7 @@ import { AudioVisualizer } from "@/components/AudioVisualizer";
 import { UIControls, type ThumbnailAnalysis } from "@/components/UIControls";
 import { TrackLibrary } from "@/components/TrackLibrary";
 import { TopPlayerDrawer } from "@/components/TopPlayerDrawer";
+import { SoundCloudPanel } from "@/components/SoundCloudPanel";
 import { useAudioAnalyzer } from "@/hooks/use-audio-analyzer";
 import { 
   colorPalettes, 
@@ -43,6 +44,7 @@ export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showSoundCloud, setShowSoundCloud] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [visualizationZoom, setVisualizationZoom] = useState(1);
   const [playerDrawerOpen, setPlayerDrawerOpen] = useState(false);
@@ -400,6 +402,35 @@ export default function Home() {
     }
   }, [toast]);
 
+  const handleSoundCloudTrack = useCallback(async (streamUrl: string, title: string, artworkUrl?: string) => {
+    setAudioFile(streamUrl);
+    setAudioFileName(title);
+    setCurrentTrackIndex(-1);
+    
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+    }
+    audioRef.current.src = streamUrl;
+    audioRef.current.volume = volume;
+    audioRef.current.load();
+    
+    if (artworkUrl) {
+      setThumbnailUrl(artworkUrl);
+    }
+    
+    try {
+      await audioRef.current.play();
+      setIsPlaying(true);
+      toast({
+        title: "Now Playing",
+        description: title,
+      });
+    } catch (e) {
+      console.error("Playback error:", e);
+      setIsPlaying(false);
+    }
+  }, [volume, toast]);
+
   const togglePlay = useCallback(async () => {
     if (!audioFile || !audioRef.current) {
       toast({
@@ -609,6 +640,7 @@ export default function Home() {
         thumbnailUrl={thumbnailUrl}
         onSaveToLibrary={handleSaveToLibrary}
         onToggleLibrary={() => setShowLibrary(!showLibrary)}
+        onToggleSoundCloud={() => setShowSoundCloud(!showSoundCloud)}
         trackName={audioFileName}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
@@ -633,6 +665,13 @@ export default function Home() {
           onClose={() => setShowLibrary(false)}
         />
       )}
+      
+      {/* SoundCloud Panel */}
+      <SoundCloudPanel
+        isOpen={showSoundCloud}
+        onClose={() => setShowSoundCloud(false)}
+        onPlayTrack={handleSoundCloudTrack}
+      />
       
     </div>
   );
