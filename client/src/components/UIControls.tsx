@@ -11,7 +11,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Upload, Save, Disc as DiscIcon, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn, Cloud, Pin, PinOff } from "lucide-react";
+import { Upload, Save, Disc as DiscIcon, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn, Cloud, Pin, PinOff, Plus, Minus } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   colorPalettes, 
@@ -246,8 +246,8 @@ export function UIControls({
   
   const updateSetting = useCallback(<K extends keyof typeof settings>(key: K, value: typeof settings[K]) => {
     saveScrollPositions();
-    setSettings({ ...settings, [key]: value });
-  }, [settings, setSettings, saveScrollPositions]);
+    setSettings((prev: typeof settings) => ({ ...prev, [key]: value }));
+  }, [setSettings, saveScrollPositions]);
 
   const displayThumbnail = thumbnailUrl || localThumbnailUrl;
 
@@ -574,30 +574,70 @@ export function UIControls({
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <Label className="text-xs uppercase tracking-widest">Intensity</Label>
-                      <span className="text-xs font-mono text-primary">{settings.intensity.toFixed(1)}</span>
+                      <span className="text-xs font-mono text-primary" data-testid="text-intensity-value-mobile">{settings.intensity.toFixed(1)}</span>
                     </div>
-                    <Slider
-                      min={0} max={3} step={0.1}
-                      value={[settings.intensity]}
-                      onValueChange={([val]) => updateSetting('intensity', val)}
-                      className="[&>.absolute]:bg-primary"
-                      data-testid="slider-intensity-mobile"
-                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 shrink-0"
+                        onClick={() => updateSetting('intensity', Math.max(0, settings.intensity - 0.2))}
+                        data-testid="button-intensity-decrease-mobile"
+                      >
+                        <Minus className="h-5 w-5" />
+                      </Button>
+                      <Slider
+                        min={0} max={3} step={0.1}
+                        value={[settings.intensity]}
+                        onValueChange={([val]) => updateSetting('intensity', val)}
+                        className="flex-1 [&>.absolute]:bg-primary"
+                        data-testid="slider-intensity-mobile"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 shrink-0"
+                        onClick={() => updateSetting('intensity', Math.min(3, settings.intensity + 0.2))}
+                        data-testid="button-intensity-increase-mobile"
+                      >
+                        <Plus className="h-5 w-5" />
+                      </Button>
+                    </div>
                   </div>
                   
                   {/* Speed Slider */}
                   <div className="space-y-3">
                     <div className="flex justify-between">
                       <Label className="text-xs uppercase tracking-widest">Speed</Label>
-                      <span className="text-xs font-mono text-secondary">{settings.speed.toFixed(1)}</span>
+                      <span className="text-xs font-mono text-secondary" data-testid="text-speed-value-mobile">{settings.speed.toFixed(1)}</span>
                     </div>
-                    <Slider
-                      min={0} max={2} step={0.1}
-                      value={[settings.speed]}
-                      onValueChange={([val]) => updateSetting('speed', val)}
-                      className="[&>.absolute]:bg-secondary"
-                      data-testid="slider-speed-mobile"
-                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 shrink-0"
+                        onClick={() => updateSetting('speed', Math.max(0, settings.speed - 0.1))}
+                        data-testid="button-speed-decrease-mobile"
+                      >
+                        <Minus className="h-5 w-5" />
+                      </Button>
+                      <Slider
+                        min={0} max={2} step={0.1}
+                        value={[settings.speed]}
+                        onValueChange={([val]) => updateSetting('speed', val)}
+                        className="flex-1 [&>.absolute]:bg-secondary"
+                        data-testid="slider-speed-mobile"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 shrink-0"
+                        onClick={() => updateSetting('speed', Math.min(2, settings.speed + 0.1))}
+                        data-testid="button-speed-increase-mobile"
+                      >
+                        <Plus className="h-5 w-5" />
+                      </Button>
+                    </div>
                   </div>
                   
                   {/* Thumbnail Upload */}
@@ -1054,28 +1094,68 @@ export function UIControls({
                   <div className="space-y-1">
                     <div className="flex justify-between text-xs">
                       <span className="uppercase tracking-widest text-muted-foreground">Intensity</span>
-                      <span className="font-mono text-primary">{settings.intensity.toFixed(1)}</span>
+                      <span className="font-mono text-primary" data-testid="text-intensity-value">{settings.intensity.toFixed(1)}</span>
                     </div>
-                    <Slider
-                      min={0} max={3} step={0.1}
-                      value={[settings.intensity]}
-                      onValueChange={([val]) => updateSetting('intensity', val)}
-                      className="[&>.absolute]:bg-primary"
-                      data-testid="slider-intensity"
-                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => updateSetting('intensity', Math.max(0, settings.intensity - 0.2))}
+                        data-testid="button-intensity-decrease"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <Slider
+                        min={0} max={3} step={0.1}
+                        value={[settings.intensity]}
+                        onValueChange={([val]) => updateSetting('intensity', val)}
+                        className="flex-1 [&>.absolute]:bg-primary"
+                        data-testid="slider-intensity"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => updateSetting('intensity', Math.min(3, settings.intensity + 0.2))}
+                        data-testid="button-intensity-increase"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <div className="flex justify-between text-xs">
                       <span className="uppercase tracking-widest text-muted-foreground">Speed</span>
-                      <span className="font-mono text-secondary">{settings.speed.toFixed(1)}</span>
+                      <span className="font-mono text-secondary" data-testid="text-speed-value">{settings.speed.toFixed(1)}</span>
                     </div>
-                    <Slider
-                      min={0} max={2} step={0.1}
-                      value={[settings.speed]}
-                      onValueChange={([val]) => updateSetting('speed', val)}
-                      className="[&>.absolute]:bg-secondary"
-                      data-testid="slider-speed"
-                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => updateSetting('speed', Math.max(0, settings.speed - 0.1))}
+                        data-testid="button-speed-decrease"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <Slider
+                        min={0} max={2} step={0.1}
+                        value={[settings.speed]}
+                        onValueChange={([val]) => updateSetting('speed', val)}
+                        className="flex-1 [&>.absolute]:bg-secondary"
+                        data-testid="slider-speed"
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => updateSetting('speed', Math.min(2, settings.speed + 0.1))}
+                        data-testid="button-speed-increase"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
