@@ -2,17 +2,7 @@
 
 ## Overview
 
-This is a production-ready audio-reactive visualization web application that allows users to upload audio tracks and generates real-time, high-quality WebGL visualizations in the browser. The app analyzes audio frequency bands (bass, mid, high) and uses them to drive GPU-accelerated 3D visuals with Three.js. It includes 15 visual presets:
-- **7 Base Presets**: Energy Rings, Psy Tunnel, Particle Field, Waveform Sphere, Audio Bars, Geometric Kaleidoscope, Cosmic Web
-- **4 Cymatics Presets**: Cymatic Sand Plate (particles settling on wave nodes), Water Membrane Orb (spherical standing waves), Chladni Geometry (ultra premium with multi-layer patterns, 3D displacement, and node particles), Resonant Field Lines (magnetic-field curves)
-- **4 Psy Shader Presets**: Blue Tunnel, BW Vortex, Rainbow Spiral, Red Mandala
-
-Features include 10 color palettes, customizable controls for intensity/speed/color, AI-powered thumbnail analysis for automatic theme extraction, and dominant frequency detection for mode-quantized resonance effects. The UI is fully responsive with mobile-optimized touch controls.
-
-### Psy Overlay System
-The app includes 4 psychedelic shader presets (Blue Tunnel, BW Vortex, Rainbow Spiral, Red Mandala) that can function both as:
-- **Standalone presets**: Selectable from the preset dropdown
-- **Overlay layers**: Can be toggled on/off via the "Psy Overlays" section in the control panel, layering on top of any active preset with additive blending. Multiple overlays can be active simultaneously.
+This project is a production-ready audio-reactive visualization web application designed to generate real-time, high-quality WebGL visualizations in the browser. It analyzes audio frequency bands to drive GPU-accelerated 3D visuals using Three.js. The application features 15 visual presets, including 7 base presets, 4 cymatics presets, and 4 psychedelic shader presets that can also function as overlay layers. Key capabilities include 10 color palettes, customizable controls, AI-powered thumbnail analysis for theme extraction, dominant frequency detection, and a fully responsive UI with mobile-optimized touch controls. The project aims to provide an immersive and customizable audio-visual experience, expanding into mobile platforms with a React Native app and native Unity integrations.
 
 ## User Preferences
 
@@ -21,221 +11,65 @@ Preferred communication style: Simple, everyday language.
 ## System Architecture
 
 ### Frontend Architecture
-- **Framework**: React 18 with TypeScript, bundled by Vite
-- **3D Rendering**: Three.js via @react-three/fiber (R3F) for declarative WebGL
-- **Visual Effects**: @react-three/postprocessing for Bloom, ChromaticAberration, and Noise effects
-- **UI Components**: shadcn/ui component library built on Radix UI primitives
-- **Styling**: Tailwind CSS with custom CSS variables for theming
-- **State Management**: React hooks + TanStack Query for server state
-- **Routing**: Wouter for lightweight client-side routing
-- **Animations**: Framer Motion for UI transitions
+- **Framework**: React 18 with TypeScript and Vite.
+- **3D Rendering**: Three.js via @react-three/fiber (R3F).
+- **UI Components**: shadcn/ui built on Radix UI, styled with Tailwind CSS.
+- **State Management**: React hooks and TanStack Query.
+- **Routing**: Wouter.
+- **Animations**: Framer Motion.
 
 ### Backend Architecture
-- **Runtime**: Node.js with Express.js
-- **Language**: TypeScript compiled with tsx for development, esbuild for production
-- **API Pattern**: REST endpoints defined in `shared/routes.ts` with Zod validation
-- **Database ORM**: Drizzle ORM with PostgreSQL dialect
-- **AI Integration**: OpenAI API via Replit AI Integrations for image/audio analysis
+- **Runtime**: Node.js with Express.js and TypeScript.
+- **API Pattern**: REST endpoints with Zod validation.
+- **Database ORM**: Drizzle ORM with PostgreSQL.
+- **AI Integration**: OpenAI API for image/audio analysis via Replit AI Integrations.
 
 ### Audio Processing
-- **Analysis**: Web Audio API with AnalyserNode for real-time frequency extraction
-- **Frequency Bands**: Enhanced psychedelic-optimized frequency analysis:
-  - **Sub (20-60Hz)**: Slow, heavy motion - drives global breathing/pulsing effects
-  - **Bass (60-250Hz)**: Bloom intensity, breathing, zoom effects
-  - **Mid (250-2000Hz)**: Rotation, shape deformation, particle density
-  - **High (2000-10000Hz)**: Sparkles, glitch, chromatic aberration
-  - **Kick Detection**: Beat/transient detection for sudden visual impacts
-- **Smoothing**: Per-band EMA (exponential moving average) with different rates:
-  - Sub: Very slow smoothing for body/feel
-  - Bass: Medium smoothing for punch
-  - Mid: Medium-fast for geometry
-  - High: Fast for sparkle responsiveness
-- **Recording**: MediaRecorder API for WebM/Opus audio capture
-- **Source Management**: Audio analyzer hook tracks MediaElementSource to avoid recreation errors and properly reconnects on source changes
-
-### Track Library
-- **Storage**: Client-side localStorage for saving tracks with audio URLs, thumbnails, and color palettes
-- **Interface**: Slide-out panel with visual track cards showing thumbnails and color swatches
-- **Operations**: Save new tracks, load saved tracks, delete tracks from library
+- **Analysis**: Web Audio API with AnalyserNode for real-time frequency extraction across multiple enhanced psychedelic-optimized frequency bands (Sub, Bass, Mid, High, Kick Detection).
+- **Smoothing**: Per-band Exponential Moving Average (EMA) for fluid visual response.
+- **Recording**: MediaRecorder API for audio capture.
 
 ### WebGL Fallback
-- **Detection**: Proactive WebGL support check before rendering Canvas component
-- **Fallback**: 2D animated visualization with pulsing rings using the selected color palette
-- **Thumbnail Integration**: Background image works in both WebGL and fallback modes
+- Proactive WebGL support check with a 2D animated visualization fallback.
 
 ### Premium Image Filters
-GPU-accelerated shader-based image filters applied to background thumbnails with audio-reactive modulation:
-
-**Filter Effects (9 types):**
-- **None**: Clean display with subtle vignette
-- **Kaleidoscope**: Multi-layer kaleidoscope with glow, radial brightness, audio-reactive segment count
-- **Mirror Fractal**: Multi-iteration fractal reflections with chromatic aberration and HSL color cycling
-- **Color Shift**: HSL-based hue rotation with wave distortion and film grain
-- **Invert Pulse**: Smooth wave-based inversion zones with audio-reactive color tints
-- **Mosaic**: Smooth-edged tiles with variable size based on energy, tile glow effects
-- **RGB Split**: Radial chromatic aberration with barrel distortion and scan lines
-- **Liquid Wave**: Complex multi-layer wave distortion with FBM noise and caustic highlights
-- **Zoom Pulse**: Multi-sample radial motion blur with radial glow and chromatic edges
-
-**Premium Shader Features:**
-- High-quality noise (hash-based) and FBM (5 octaves) for organic textures
-- HSL color space manipulation for natural color transitions
-- Barrel distortion for realistic lens effects
-- Film grain overlay for cinematic feel
-- Dynamic vignette per filter
-- Per-band audio reactivity (bass, mid, high, energy)
+- GPU-accelerated shader-based image filters (9 types) applied to background thumbnails with audio-reactive modulation. Features include high-quality noise, HSL color manipulation, barrel distortion, and dynamic vignettes.
 
 ### Quality Enhancements
-- **Post-Processing**: High-quality bloom (4x multisampling, large kernel), smooth chromatic aberration, vignette effects
-- **Smooth Transitions**: Fade effect when switching between visual presets via PresetTransition component
-- **Audio Interpolation**: Smooth lerping of audio data for fluid visual response
-- **Error Handling**: ErrorBoundary component for graceful error recovery with restart option
-- **Keyboard Shortcuts**: Space (play/pause), Arrow keys (volume/seek), F (fullscreen), M (mute with volume preservation)
-- **Mute Toggle**: Preserves previous volume level for seamless unmute
-- **Auto-Hide Controls**: Settings panel automatically hides after 5 seconds of inactivity; reappears on "Show Controls" click or any interaction (mouse, touch, keyboard)
+- **Post-Processing**: High-quality bloom, chromatic aberration, and vignette effects.
+- **Smooth Transitions**: Fade effects between visual presets and audio interpolation.
+- **Error Handling**: Graceful error recovery with ErrorBoundary.
+- **User Experience**: Keyboard shortcuts, mute toggle, and auto-hide controls.
 
-### Premium Visual Presets (Unique Visual Identities)
-All presets have been upgraded to premium+ quality with distinct visual concepts - avoiding the generic "center core + orbiting particles" pattern:
-
-**Base Presets:**
-- **EnergyRings**: Electric arcs jumping between concentric rings + energy trail particles spiraling around torus geometry
-- **PsyTunnel**: Deep tunnel effect with layered geometric rings
-- **ParticleField (Ultra Premium)**: Custom shader with 3 particle layers (core: 4000, glow: 2500, trail: 1500), glowing energy core orb with fresnel rim glow, energy ring halo, Fibonacci sphere distribution, vortex flow motion
-- **WaveformSphere**: Aurora ribbons wrapping around sphere + chromatic inner surface layer with world-space fresnel
-- **AudioBars (Holographic)**: Volumetric bars with holographic wireframe outlines + horizontal scan lines sweeping through bars + grid floor
-- **GeometricKaleidoscope (Fractal Morphing)**: Symmetry mirror planes + motion trails following shapes + morphing scale transitions
-- **CosmicWeb (Energy Flow)**: Energy pulses traveling along connections + nebula cloud particles scattered throughout
-
-**Cymatics Presets:**
-- **CymaticSandPlate (Standing Wave)**: Vibrating membrane surface + concentric interference pattern rings
-- **WaterMembraneOrb**: Spherical standing wave patterns
-- **ChladniGeometry**: Multi-layer Chladni patterns with 3D displacement
-- **ResonantFieldLines (Electromagnetic)**: Magnetic dipole poles + ionized particles following field lines (no center orb)
-
-- **Smooth Audio Interpolation**: Per-band lerp smoothing (sub: 0.06-0.08, bass: 0.1-0.15, mid: 0.12-0.18, high: 0.18-0.22, kick: 0.2-0.25)
-- **Multi-Layered Audio Reactivity**: Separate responses for sub/bass/mid/high/kick/energy per preset
-- **Dynamic Material Properties**: Emissive intensity, opacity, and color shift based on audio
-- **Performance Optimizations**: Reused Color objects, dynamic material sizes, clamped shader values for stability
+### Premium Visual Presets
+All presets are designed with unique visual identities, avoiding generic patterns, and feature multi-layered audio reactivity, dynamic material properties, and performance optimizations.
 
 ### Data Flow
-1. User uploads audio file → stored as blob URL
-2. Audio element connected to Web Audio API AnalyserNode
-3. Animation loop reads frequency data via `getAudioData()` callback
-4. Three.js shaders/meshes respond to bass/mid/high/energy values
-5. Optional: Thumbnail uploaded → AI Vision extracts colors → applied to visualization
+User audio upload or selection → Web Audio API analysis → Three.js rendering in response to audio data → Optional AI vision for thumbnail analysis.
 
 ### Build System
-- **Development**: Vite dev server with HMR, proxied through Express
-- **Production**: Vite builds static assets to `dist/public`, esbuild bundles server to `dist/index.cjs`
-- **Database**: Drizzle Kit for schema migrations via `npm run db:push`
+- **Development**: Vite dev server.
+- **Production**: Vite for static assets, esbuild for server.
+- **Database**: Drizzle Kit for schema migrations.
+
+### Mobile Application
+- **React Native (Expo)**: A full mobile app with SoundCloud integration, playback management (expo-av), offline downloads, shader-based WebGL visuals (expo-gl), gyroscope control, and simulated audio analysis.
+- **Native Mobile Preparation (Unity)**: Unity serves as the visual engine for native iOS/Android apps, receiving JSON messages for track, playback, audio bands, and preset data.
 
 ## External Dependencies
 
 ### Database
-- **PostgreSQL**: Primary data store for tracks, presets, conversations, and messages
-- **Connection**: `DATABASE_URL` environment variable required
-- **Session Storage**: connect-pg-simple for Express session persistence
+- **PostgreSQL**: Primary data store.
+- **connect-pg-simple**: For Express session persistence.
 
 ### AI Services
-- **OpenAI API**: Accessed via Replit AI Integrations
-  - Image analysis for thumbnail color/theme extraction
-  - Voice chat capabilities (speech-to-text, text-to-speech)
-  - Chat completions for conversational features
-- **Environment Variables**: `AI_INTEGRATIONS_OPENAI_API_KEY`, `AI_INTEGRATIONS_OPENAI_BASE_URL`
+- **OpenAI API**: For image analysis, voice chat, and chat completions (via Replit AI Integrations).
 
 ### Third-Party Libraries
-- **Three.js ecosystem**: @react-three/fiber, @react-three/drei, @react-three/postprocessing
-- **Audio utilities**: maath for mathematical helpers
-- **Batch processing**: p-limit and p-retry for rate-limited API calls
-- **Media conversion**: ffmpeg (system dependency) for audio format conversion
+- **Three.js Ecosystem**: @react-three/fiber, @react-three/drei, @react-three/postprocessing.
+- **maath**: Mathematical helpers.
+- **p-limit, p-retry**: For batch processing and rate-limited API calls.
+- **ffmpeg**: System dependency for audio format conversion.
 
-## Post-Processing Effects
-
-### Glow Enhancement Effect
-A custom post-processing effect that enhances brightness and adds subtle glow:
-- **Location**: `client/src/components/AfterimageEffect.tsx`
-- **Parameters**: `decay` and `blend` control glow intensity and spread
-- **Audio Reactivity**: Effect intensity is modulated by bass/high for responsive enhancement
-- **UI Controls**: Toggle and amount slider in Effects panel (mobile and desktop)
-- **Note**: True motion blur/afterimage (temporal accumulation) is planned for future enhancement
-
-## React Native Mobile App (Expo)
-
-A complete React Native mobile app with SoundCloud integration is available in the `mobile/` directory.
-
-### Mobile App Structure
-```
-mobile/
-├── App.tsx                      # Entry point
-├── src/
-│   ├── adapters/
-│   │   └── soundcloudAdapter.ts # SoundCloud API with OAuth
-│   ├── components/
-│   │   ├── NowPlayingTopDrawer.tsx
-│   │   └── GLVisualizer.tsx     # WebGL shader-based visuals
-│   ├── hooks/
-│   │   ├── useAudioAnalysis.ts  # Simulated FFT analysis
-│   │   └── useScreenCapture.ts  # Screenshot/sequence capture
-│   ├── navigation/
-│   │   └── AppNavigator.tsx     # Stack + Tab navigation
-│   ├── screens/
-│   │   ├── ConnectSourcesScreen.tsx  # SoundCloud OAuth
-│   │   ├── LibraryScreen.tsx         # Search/Likes/Playlists
-│   │   └── VisualizerScreen.tsx      # Visual presets + GL toggle
-│   ├── stores/
-│   │   ├── authStore.ts         # Zustand auth state
-│   │   ├── downloadStore.ts     # Offline downloads
-│   │   ├── playerStore.ts       # expo-av playback + queue
-│   │   └── visualizerStore.ts   # Preset settings + gyroscope
-│   └── types/
-│       └── index.ts
-```
-
-### Mobile Features
-- **SoundCloud OAuth**: Full OAuth 2.0 flow with secure backend token exchange
-- **Library**: Search tracks, view likes, browse playlists
-- **Playback**: expo-av audio with background support (iOS & Android)
-- **Queue Management**: Add/remove/reorder tracks, repeat (off/one/all), shuffle
-- **Offline Downloads**: Download tracks for offline playback with expo-file-system
-- **WebGL Visualizer**: 7 shader-based presets ported from web app (expo-gl)
-- **2D Fallback**: Simple animated ring visualization for unsupported presets
-- **Gyroscope Control**: Device tilt affects visual parameters (expo-sensors)
-- **Audio Analysis**: Simulated FFT using time-based mathematical patterns
-- **Screen Capture**: Screenshot and frame sequence capture for export (PNG frames saved to media library)
-- **Future**: Native FFT for real audio analysis, video export with audio encoding
-
-### Running the Mobile App
-```bash
-cd mobile
-npm install
-npm start
-```
-
-See `mobile/README.md` for detailed setup instructions.
-
-## Native Mobile Preparation (Unity)
-
-The project also includes code for building native iOS/Android apps with Unity as the visual engine.
-
-### Native Code Structure
-```
-native/
-├── unity/Scripts/           # Unity C# scripts for receiving messages
-├── ios/AudioVisualizer/     # SwiftUI wrapper with UnityBridge
-└── android/app/             # Kotlin/Compose wrapper with UnityBridge
-```
-
-### JSON Bridge Contract
-Defined in `shared/native-bridge.ts`, provides standardized message types:
-- **TrackMessage**: Track metadata (source, title, artist, artwork, duration)
-- **PlaybackMessage**: Playback state (isPlaying, positionMs, volume)
-- **BandsMessage**: Audio frequency bands (sub, bass, mid, high, kick, energy)
-- **PresetMessage**: Visual preset settings (name, intensity, speed, trails)
-- **ControlMessage**: Playback control actions
-
-### Architecture (Option B)
-- Native wrapper (iOS/Android) owns authentication, playback, and UI
-- Unity is the visual engine screen receiving JSON messages via `UnitySendMessage`
-- Native code performs FFT audio analysis and sends band data at 20-60 FPS
-
-See `native/README.md` for detailed setup instructions.
+### SoundCloud Integration
+- **SoundCloud API**: Full OAuth 2.0 flow for search and streaming, with server-side token exchange, CSRF protection, and automatic token refresh.
