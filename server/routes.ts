@@ -276,7 +276,7 @@ Respond in JSON format:
         headers: { 'Authorization': authHeader }
       });
       const data = await response.json();
-      res.json(data);
+      res.status(response.status).json(data);
     } catch (error) {
       console.error('SoundCloud /me error:', error);
       res.status(500).json({ error: 'Failed to fetch user info' });
@@ -301,7 +301,7 @@ Respond in JSON format:
         headers: { 'Authorization': authHeader }
       });
       const data = await response.json();
-      res.json(data);
+      res.status(response.status).json(data);
     } catch (error) {
       console.error('SoundCloud tracks search error:', error);
       res.status(500).json({ error: 'Failed to search tracks' });
@@ -325,7 +325,7 @@ Respond in JSON format:
         headers: { 'Authorization': authHeader }
       });
       const data = await response.json();
-      res.json(data);
+      res.status(response.status).json(data);
     } catch (error) {
       console.error('SoundCloud likes error:', error);
       res.status(500).json({ error: 'Failed to fetch likes' });
@@ -345,7 +345,7 @@ Respond in JSON format:
         headers: { 'Authorization': authHeader }
       });
       const data = await response.json();
-      res.json(data);
+      res.status(response.status).json(data);
     } catch (error) {
       console.error('SoundCloud playlists error:', error);
       res.status(500).json({ error: 'Failed to fetch playlists' });
@@ -366,7 +366,7 @@ Respond in JSON format:
         headers: { 'Authorization': authHeader }
       });
       const data = await response.json();
-      res.json(data);
+      res.status(response.status).json(data);
     } catch (error) {
       console.error('SoundCloud stream error:', error);
       res.status(500).json({ error: 'Failed to get stream URL' });
