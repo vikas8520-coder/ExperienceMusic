@@ -142,6 +142,27 @@
   @apply bg-primary/90;
 }
 
+/* Ensure Radix Select/Dropdown portals work during playback */
+[data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
+  pointer-events: auto !important;
+}
+
+/* Scope pointer-events to specific Radix interactive containers only */
+[data-radix-select-viewport],
+[data-radix-dropdown-menu-viewport],
+[data-radix-context-menu-viewport] {
+  pointer-events: auto !important;
+  touch-action: auto !important;
+  overflow-y: auto !important;
+}
+
+/* Ensure file inputs are clickable via their associated buttons */
+.settings-panel button:not(:disabled) {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
 /* Color input styling for cross-browser compatibility */
 input[type="color"] {
   -webkit-appearance: none;

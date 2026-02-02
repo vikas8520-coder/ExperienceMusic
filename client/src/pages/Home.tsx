@@ -184,9 +184,27 @@ export default function Home() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is typing in an input field
+      // Ignore if user is interacting with form elements, dropdowns, or dialogs
       const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      if (
+        target.tagName === 'INPUT' || 
+        target.tagName === 'TEXTAREA' || 
+        target.tagName === 'SELECT' ||
+        target.tagName === 'BUTTON' ||
+        target.isContentEditable ||
+        target.role === 'listbox' ||
+        target.role === 'option' ||
+        target.role === 'combobox' ||
+        target.role === 'menu' ||
+        target.role === 'menuitem' ||
+        target.role === 'dialog' ||
+        target.role === 'slider' ||
+        target.closest('[role="listbox"]') ||
+        target.closest('[role="dialog"]') ||
+        target.closest('[role="menu"]') ||
+        target.closest('[data-radix-popper-content-wrapper]') ||
+        target.closest('.settings-panel')
+      ) {
         return;
       }
 

@@ -1,0 +1,123 @@
+Cool — here’s a polished bug report tailored for a web app / desktop web app context, plus the most likely root cause in that environment.
+
+Bug Report: UI becomes non-interactive during music playback (artwork upload, dropdowns, scrolling)
+
+Title
+
+UI controls fail during music playback: cannot change artwork; dropdowns/scrolling/color changes unresponsive
+
+Environment
+	•	Platform: Web app (desktop browser)
+	•	Browser: Brave
+	•	OS: (macOS
+	•	Build/version: (if available)
+	•	Repro frequency: (Always 
+
+Preconditions
+	•	User is on a screen where artwork upload + customization controls are available.
+	•	A track is available to play (music playback feature enabled).
+
+⸻
+
+Issue Summary
+
+When music playback is active, multiple UI interactions stop working:
+	•	Artwork can be uploaded when music is not playing (except thumbnail), and works as expected.
+	•	When music is playing, artwork cannot be changed/uploaded.
+	•	While music is playing, dropdowns and scrolling don’t work, so color changes (and other dropdown-driven options) can’t be applied.
+
+This suggests playback mode is preventing pointer/scroll events from reaching the UI.
+
+⸻
+
+Steps to Reproduce
+
+A) Artwork change blocked during playback
+	1.	Open the app in desktop browser.
+	2.	Navigate to the artwork upload/change section.
+	3.	Start music playback.
+	4.	Attempt to upload or change artwork (including thumbnail).
+
+Expected: Artwork can be changed during playback, or UI clearly shows it is disabled with a message.
+Actual: Artwork cannot be changed/uploaded while music is playing.
+
+B) Dropdowns / scrolling blocked during playback
+	1.	Start music playback.
+	2.	Try opening a dropdown (example: color selection).
+	3.	Try scrolling within the page and/or within dropdown lists.
+
+Expected: Dropdown opens; scrolling works; option selections apply normally.
+Actual: Dropdown/scrolling interactions do not respond while music is playing.
+
+⸻
+
+Additional Note: Thumbnail Upload
+	•	Main artwork upload works as expected when not playing.
+	•	Thumbnail upload does not work as expected (unclear if always or only during playback).
+
+Need to capture: What exactly happens with thumbnail upload?
+	•	Button disabled? Nothing happens? Error message? Upload succeeds but doesn’t display?
+
+⸻
+
+Impact
+	•	Prevents users from editing artwork and appearance settings during playback.
+	•	Makes key UI controls feel broken/unresponsive.
+	•	Blocks testing and normal workflow if users want to preview while music plays.
+
+Severity / Priority
+	•	Severity: High (core editing workflow blocked)
+	•	Priority: P1 / P2 depending on how central “edit while playing” is to expected behavior
+
+⸻
+
+Likely Root Cause (Web/Desktop)
+
+Most likely one of these:
+
+1) Playback overlay/canvas is covering the UI and capturing pointer events
+
+Common in audio visualizer / interactive modes:
+	•	A full-screen <canvas> or overlay div sits above the UI (higher z-index)
+	•	It captures clicks/scrolls (because pointer-events is enabled)
+
+Symptoms match exactly: clicks, dropdowns, scrolling stop working only during playback.
+
+Fix pattern: ensure overlay layer uses:
+	•	pointer-events: none; (if it shouldn’t block UI)
+	•	or reduce z-index / confine overlay to its container
+
+2) Global event listeners during playback are preventing default scrolling/click behavior
+
+Playback mode might add:
+	•	wheel, touchmove, keydown handlers with event.preventDefault()
+
+This will break:
+	•	scrolling
+	•	dropdown scrolling
+	•	some click interactions
+
+3) Main-thread performance lock (visualizer too heavy)
+
+If playback/visualization runs heavy JS on the main thread:
+	•	UI becomes sluggish or appears “dead”
+	•	Dropdown animations and file picker triggers can fail
+
+⸻
+
+Quick Dev Verification Steps
+	•	Inspect DOM while playing: is a canvas/overlay positioned over the UI?
+	•	Check computed CSS: z-index, position: fixed/absolute, pointer-events
+	•	Temporarily toggle overlay pointer-events: none and retest
+	•	Check event listeners added on play (wheel/touchmove/mousedown)
+	•	Performance profiler: look for “Long Tasks” during playback
+
+⸻
+
+Suggested Fix / Acceptance Criteria
+	•	User can interact with dropdowns and scroll normally while music is playing.
+	•	User can change/upload artwork during playback OR the UI explicitly disables it with a clear message.
+	•	Thumbnail upload works consistently with main artwork upload (or is clearly documented/disabled).
+
+⸻
+
