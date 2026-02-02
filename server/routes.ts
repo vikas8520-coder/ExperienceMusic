@@ -264,6 +264,88 @@ Respond in JSON format:
     res.json({ clientId });
   });
 
+  // SoundCloud OAuth: Redirect user to SoundCloud login page
+  app.get('/auth/soundcloud', (req, res) => {
+    const clientId = process.env.SOUNDCLOUD_CLIENT_ID;
+    if (!clientId) {
+      return res.status(500).send('SoundCloud not configured');
+    }
+
+    // Get the origin from the request to build redirect URI
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const redirectUri = `${protocol}://${host}/callback`;
+
+    // Store state for CSRF protection
+    const state = Math.random().toString(36).substring(2) + Date.now().toString(36);
+    
+    const authUrl = new URL('https://soundcloud.com/connect');
+    authUrl.searchParams.set('client_id', clientId);
+    authUrl.searchParams.set('redirect_uri', redirectUri);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('state', state);
+
+    res.redirect(authUrl.toString());
+  });
+
+  // SoundCloud OAuth callback: Exchange code for token
+  app.get('/callback', async (req, res) => {
+    const { code, error, error_description } = req.query;
+    
+    if (error) {
+      return res.redirect(`/#soundcloud_error=${encodeURIComponent(error_description as string || error as string)}`);
+    }
+
+    if (!code) {
+      return res.redirect('/#soundcloud_error=missing_code');
+    }
+
+    const clientId = process.env.SOUNDCLOUD_CLIENT_ID;
+    const clientSecret = process.env.SOUNDCLOUD_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      return res.redirect('/#soundcloud_error=not_configured');
+    }
+
+    // Build the same redirect URI that was used in the auth request
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const redirectUri = `${protocol}://${host}/callback`;
+
+    try {
+      const tokenResponse = await fetch('https://api.soundcloud.com/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          client_id: clientId,
+          client_secret: clientSecret,
+          redirect_uri: redirectUri,
+          code: code as string,
+        }).toString(),
+      });
+
+      const tokenData = await tokenResponse.json();
+      
+      if (!tokenResponse.ok || tokenData.error) {
+        console.error('SoundCloud token exchange failed:', tokenData);
+        return res.redirect(`/#soundcloud_error=${encodeURIComponent(tokenData.error_description || tokenData.error || 'token_exchange_failed')}`);
+      }
+
+      // Redirect back to app with token in URL fragment (not sent to server logs)
+      const accessToken = tokenData.access_token;
+      const refreshToken = tokenData.refresh_token || '';
+      const expiresIn = tokenData.expires_in || 0;
+      
+      res.redirect(`/#soundcloud_token=${encodeURIComponent(accessToken)}&refresh_token=${encodeURIComponent(refreshToken)}&expires_in=${expiresIn}`);
+    } catch (err) {
+      console.error('SoundCloud callback error:', err);
+      res.redirect('/#soundcloud_error=server_error');
+    }
+  });
+
   // Proxy SoundCloud API requests
   app.get('/api/soundcloud/me', async (req, res) => {
     const authHeader = req.headers.authorization;

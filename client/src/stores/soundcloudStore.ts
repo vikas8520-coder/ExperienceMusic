@@ -30,8 +30,8 @@ export interface SoundCloudPlaylist {
 
 interface SoundCloudAuth {
   accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
+  refreshToken?: string;
+  expiresAt?: number;
 }
 
 interface SoundCloudUser {
@@ -73,6 +73,7 @@ interface SoundCloudStore {
   refreshTokenIfNeeded: () => Promise<boolean>;
   initiateLogin: () => void;
   validateOAuthCallback: (code: string, state: string) => boolean;
+  handleTokenFromHash: () => boolean;
 }
 
 export const useSoundCloudStore = create<SoundCloudStore>()(
@@ -111,34 +112,53 @@ export const useSoundCloudStore = create<SoundCloudStore>()(
       }),
       
       initiateLogin: () => {
-        const { clientId } = get();
-        if (!clientId) {
-          set({ error: 'SoundCloud is not configured' });
-          return;
-        }
-        
-        const state = generateState();
-        set({ oauthState: state });
-        
-        const redirectUri = `${window.location.origin}${window.location.pathname}`;
-        const authUrl = new URL('https://api.soundcloud.com/connect');
-        authUrl.searchParams.set('client_id', clientId);
-        authUrl.searchParams.set('redirect_uri', redirectUri);
-        authUrl.searchParams.set('response_type', 'code');
-        authUrl.searchParams.set('scope', 'non-expiring');
-        authUrl.searchParams.set('state', state);
-        
-        window.location.href = authUrl.toString();
+        // Redirect to backend OAuth endpoint which handles the full flow
+        window.location.href = '/auth/soundcloud';
       },
       
       validateOAuthCallback: (code: string, state: string) => {
-        const { oauthState } = get();
-        if (!oauthState || oauthState !== state) {
-          set({ error: 'Invalid OAuth state - possible CSRF attack', oauthState: null });
-          return false;
-        }
-        set({ oauthState: null });
+        // This is now handled by the backend callback
         return true;
+      },
+      
+      handleTokenFromHash: () => {
+        const hash = window.location.hash;
+        
+        // Check for error first
+        if (hash.includes('soundcloud_error=')) {
+          const errorMatch = hash.match(/soundcloud_error=([^&]*)/);
+          if (errorMatch) {
+            const errorMsg = decodeURIComponent(errorMatch[1]);
+            set({ error: `SoundCloud login failed: ${errorMsg}` });
+            window.history.replaceState({}, '', window.location.pathname);
+            return false;
+          }
+        }
+        
+        // Check for token
+        if (hash.includes('soundcloud_token=')) {
+          const tokenMatch = hash.match(/soundcloud_token=([^&]*)/);
+          const refreshMatch = hash.match(/refresh_token=([^&]*)/);
+          const expiresMatch = hash.match(/expires_in=([^&]*)/);
+          
+          if (tokenMatch) {
+            const accessToken = decodeURIComponent(tokenMatch[1]);
+            const refreshToken = refreshMatch ? decodeURIComponent(refreshMatch[1]) : undefined;
+            const expiresIn = expiresMatch ? parseInt(expiresMatch[1], 10) : undefined;
+            
+            const auth: SoundCloudAuth = {
+              accessToken,
+              refreshToken,
+              expiresAt: expiresIn ? Date.now() + expiresIn * 1000 : undefined,
+            };
+            
+            set({ auth, error: null });
+            window.history.replaceState({}, '', window.location.pathname);
+            return true;
+          }
+        }
+        
+        return false;
       },
       
       setSearchQuery: (query) => set({ searchQuery: query }),
@@ -151,7 +171,10 @@ export const useSoundCloudStore = create<SoundCloudStore>()(
       
       isAuthenticated: () => {
         const { auth } = get();
-        return auth !== null && auth.expiresAt > Date.now();
+        if (!auth) return false;
+        // If no expiry set, assume token is valid
+        if (!auth.expiresAt) return true;
+        return auth.expiresAt > Date.now();
       },
       
       getAuthHeader: () => {
@@ -164,7 +187,8 @@ export const useSoundCloudStore = create<SoundCloudStore>()(
         const { auth, setAuth, logout } = get();
         if (!auth) return false;
         
-        if (auth.expiresAt > Date.now() + 60000) {
+        // If no expiry or still valid with buffer, return true
+        if (!auth.expiresAt || auth.expiresAt > Date.now() + 60000) {
           return true;
         }
         

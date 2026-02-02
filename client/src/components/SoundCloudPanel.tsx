@@ -45,7 +45,6 @@ export function SoundCloudPanel({ isOpen, onClose, onPlayTrack }: SoundCloudPane
     searchQuery,
     activeTab,
     setClientId,
-    setAuth,
     setUser,
     logout,
     setSearchQuery,
@@ -59,7 +58,7 @@ export function SoundCloudPanel({ isOpen, onClose, onPlayTrack }: SoundCloudPane
     getAuthHeader,
     refreshTokenIfNeeded,
     initiateLogin,
-    validateOAuthCallback,
+    handleTokenFromHash,
   } = useSoundCloudStore();
 
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
@@ -73,54 +72,16 @@ export function SoundCloudPanel({ isOpen, onClose, onPlayTrack }: SoundCloudPane
     if (!clientId) loadConfig();
   }, [clientId, setClientId]);
 
+  // Check for OAuth token in URL hash (from backend callback redirect)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const state = params.get('state');
-    
-    if (code && state) {
-      if (validateOAuthCallback(code, state)) {
-        handleOAuthCallback(code);
-      }
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, [validateOAuthCallback]);
+    handleTokenFromHash();
+  }, [handleTokenFromHash]);
 
   useEffect(() => {
     if (isAuthenticated() && !user) {
       loadUserInfo();
     }
   }, [auth, user]);
-
-  const handleOAuthCallback = async (code: string) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const redirectUri = `${window.location.origin}${window.location.pathname}`;
-      const response = await fetch('/api/auth/soundcloud/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, redirect_uri: redirectUri }),
-      });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Token exchange failed');
-      }
-      
-      const data = await response.json();
-      setAuth({
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token,
-        expiresAt: Date.now() + (data.expires_in * 1000),
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadUserInfo = async () => {
     const authHeader = getAuthHeader();
