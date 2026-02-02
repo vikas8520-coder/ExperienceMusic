@@ -3257,13 +3257,13 @@ const PsyFilterMaterial = shaderMaterial(
     }
     
     // Luminance calculation for noise gating (Option 2)
-    float luminance(vec3 c) {
+    float calcLuma(vec3 c) {
       return dot(c, vec3(0.299, 0.587, 0.114));
     }
     
     // Luminance-aware noise gate - reduces grain/shimmer on dark pixels
     float noiseGate(vec3 color) {
-      float l = luminance(color);
+      float l = calcLuma(color);
       // Dark pixels = 0, bright pixels = 1
       // Lower threshold for dark images, higher for bright areas
       return smoothstep(0.08, 0.30, l);
