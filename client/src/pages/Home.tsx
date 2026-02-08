@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { AnimatePresence } from "framer-motion";
 import { AudioVisualizer } from "@/components/AudioVisualizer";
 import { UIControls, type ThumbnailAnalysis } from "@/components/UIControls";
 import { TrackLibrary } from "@/components/TrackLibrary";
@@ -685,14 +686,16 @@ export default function Home() {
       />
       
       {/* Track Library Panel */}
-      {showLibrary && (
-        <TrackLibrary 
-          tracks={savedTracks}
-          onLoadTrack={handleLoadTrack}
-          onDeleteTrack={handleDeleteTrack}
-          onClose={() => setShowLibrary(false)}
-        />
-      )}
+      <AnimatePresence>
+        {showLibrary && (
+          <TrackLibrary 
+            tracks={savedTracks}
+            onLoadTrack={handleLoadTrack}
+            onDeleteTrack={handleDeleteTrack}
+            onClose={() => setShowLibrary(false)}
+          />
+        )}
+      </AnimatePresence>
       
       {/* SoundCloud Panel */}
       <SoundCloudPanel
