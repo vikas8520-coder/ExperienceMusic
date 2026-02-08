@@ -39,7 +39,7 @@ Preferred communication style: Simple, everyday language.
 - **Post-Processing**: High-quality bloom, chromatic aberration, and vignette effects.
 - **Smooth Transitions**: Fade effects between visual presets and audio interpolation.
 - **Error Handling**: Graceful error recovery with ErrorBoundary.
-- **User Experience**: Keyboard shortcuts, mute toggle, and auto-hide controls.
+- **User Experience**: Keyboard shortcuts (Space play/pause, F fullscreen, M mute, Escape close UI, arrows seek/volume), mute toggle, auto-hide controls, canvas click-to-close-UI, double-click/double-tap fullscreen toggle.
 
 ### Premium Visual Presets
 All presets are designed with unique visual identities, avoiding generic patterns, and feature multi-layered audio reactivity, dynamic material properties, and performance optimizations.

@@ -50,6 +50,8 @@ export default function Home() {
   const [showSoundCloud, setShowSoundCloud] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [visualizationZoom, setVisualizationZoom] = useState(1);
+  const [activeTab, setActiveTab] = useState<"listen" | "create" | "perform" | "record">("listen");
+  const lastTapRef = useRef(0);
   
   const [savedTracks, setSavedTracks] = useState<SavedTrack[]>(() => {
     try {
@@ -152,6 +154,38 @@ export default function Home() {
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
+
+  const isUIOpen = activeTab !== "listen" || showLibrary || showSoundCloud;
+
+  const closeAllUI = useCallback(() => {
+    setActiveTab("listen");
+    setShowLibrary(false);
+    setShowSoundCloud(false);
+  }, []);
+
+  const handleCanvasClick = useCallback(() => {
+    if (isUIOpen) {
+      closeAllUI();
+    }
+  }, [isUIOpen, closeAllUI]);
+
+  const handleCanvasDoubleClick = useCallback(() => {
+    toggleFullscreen();
+  }, [toggleFullscreen]);
+
+  const handleCanvasTouchEnd = useCallback(() => {
+    const now = Date.now();
+    const delta = now - lastTapRef.current;
+    if (delta < 300 && delta > 0) {
+      toggleFullscreen();
+      lastTapRef.current = 0;
+    } else {
+      lastTapRef.current = now;
+      if (isUIOpen) {
+        closeAllUI();
+      }
+    }
+  }, [isUIOpen, closeAllUI, toggleFullscreen]);
 
   useEffect(() => {
     let lastTouchY = 0;
@@ -290,12 +324,16 @@ export default function Home() {
             }
           });
           break;
+        case 'Escape':
+          e.preventDefault();
+          closeAllUI();
+          break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [audioFile, isPlaying, duration, toggleFullscreen]);
+  }, [audioFile, isPlaying, duration, toggleFullscreen, closeAllUI]);
 
   // Audio time/duration tracking
   useEffect(() => {
@@ -652,7 +690,10 @@ export default function Home() {
   };
 
   return (
-    <div className="w-full h-screen relative bg-background overflow-hidden selection:bg-primary/30">
+    <div 
+      className="w-full h-screen relative bg-background overflow-hidden selection:bg-primary/30"
+      data-testid="app-root"
+    >
       
       {/* Background Thumbnail Layer */}
       {thumbnailUrl && (
@@ -675,6 +716,16 @@ export default function Home() {
         fractalUniforms={fractalUniforms}
       />
 
+      {/* Canvas Click Catcher - covers visualization area, sits below UI panels */}
+      <div
+        className="absolute inset-0 z-10"
+        onClick={handleCanvasClick}
+        onDoubleClick={handleCanvasDoubleClick}
+        onTouchEnd={handleCanvasTouchEnd}
+        style={{ pointerEvents: 'auto' }}
+        data-testid="canvas-click-catcher"
+      />
+
       {/* UI Overlay */}
       <UIControls 
         isPlaying={isPlaying}
@@ -695,6 +746,8 @@ export default function Home() {
         onSaveToLibrary={handleSaveToLibrary}
         onToggleLibrary={() => setShowLibrary(!showLibrary)}
         onToggleSoundCloud={() => setShowSoundCloud(!showSoundCloud)}
+        activeTab={activeTab}
+        onActiveTabChange={setActiveTab}
         trackName={audioFileName}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}

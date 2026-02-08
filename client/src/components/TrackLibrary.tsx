@@ -25,6 +25,7 @@ export function TrackLibrary({ tracks, onLoadTrack, onDeleteTrack, onClose }: Tr
       transition={{ type: "spring", damping: 25, stiffness: 200 }}
       className="fixed top-0 right-0 h-full w-full max-w-[340px] glass-panel z-[60] flex flex-col"
       data-testid="panel-library"
+      data-ui-root="true"
     >
       <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
         <div className="flex items-center gap-2.5">

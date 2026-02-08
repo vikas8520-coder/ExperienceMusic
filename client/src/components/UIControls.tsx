@@ -121,6 +121,8 @@ interface UIControlsProps {
   fractalMacros?: import("@/engine/presets/types").UniformSpec[];
   fractalUniforms?: import("@/engine/presets/types").UniformValues;
   onFractalUniformChange?: (key: string, value: any) => void;
+  activeTab?: "listen" | "create" | "perform" | "record";
+  onActiveTabChange?: (tab: "listen" | "create" | "perform" | "record") => void;
 }
 
 export interface ThumbnailAnalysis {
@@ -175,11 +177,18 @@ export function UIControls({
   fractalMacros,
   fractalUniforms,
   onFractalUniformChange,
+  activeTab: controlledTab,
+  onActiveTabChange,
 }: UIControlsProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ThumbnailAnalysis | null>(null);
   const [localThumbnailUrl, setLocalThumbnailUrl] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>("listen");
+  const [internalTab, setInternalTab] = useState<TabId>("listen");
+  const activeTab = controlledTab ?? internalTab;
+  const setActiveTab = useCallback((tab: TabId) => {
+    if (onActiveTabChange) onActiveTabChange(tab);
+    else setInternalTab(tab);
+  }, [onActiveTabChange]);
 
   const audioInputRef = useRef<HTMLInputElement>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
@@ -316,7 +325,7 @@ export function UIControls({
       />
 
       {/* Top Navigation Bar */}
-      <div className="fixed top-0 left-0 right-0 z-50 glass-panel border-b border-white/10" style={{ pointerEvents: 'auto' }}>
+      <div className="fixed top-0 left-0 right-0 z-50 glass-panel border-b border-white/10" data-ui-root="true" style={{ pointerEvents: 'auto' }}>
         <div className="flex items-center justify-between px-3 md:px-6 py-2 gap-2">
           <div className="flex items-center gap-2 shrink-0">
             <h1 className="text-sm md:text-lg font-bold font-display text-primary text-glow tracking-widest" data-testid="text-title">
@@ -352,7 +361,7 @@ export function UIControls({
       </div>
 
       {/* Right-side Floating Action Buttons */}
-      <div className="fixed right-3 md:right-5 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-3" style={{ pointerEvents: 'auto' }}>
+      <div className="fixed right-3 md:right-5 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-3" data-ui-root="true" style={{ pointerEvents: 'auto' }}>
         <button
           onClick={onToggleLibrary}
           className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white/70 hover:text-white transition-colors"
@@ -409,7 +418,7 @@ export function UIControls({
       />}
 
       {/* Bottom Player Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 glass-panel border-t border-white/10" style={{ pointerEvents: 'auto' }}>
+      <div className="fixed bottom-0 left-0 right-0 z-50 glass-panel border-t border-white/10" data-ui-root="true" style={{ pointerEvents: 'auto' }}>
         <div className="flex items-center gap-2 md:gap-3 px-3 md:px-6 py-2">
           <button
             onClick={() => audioInputRef.current?.click()}
@@ -532,7 +541,7 @@ function CreateTabContent({
     <div className="fixed inset-0 z-30 pointer-events-none" style={{ top: '52px', bottom: '52px' }}>
       <div className="flex flex-col md:flex-row h-full gap-3 md:gap-0 p-3 md:p-4 overflow-y-auto md:overflow-visible pointer-events-auto md:pointer-events-none">
         {/* Left Panel - Presets */}
-        <div className="w-full md:w-[280px] shrink-0 glass-panel rounded-xl settings-panel overflow-y-auto pointer-events-auto" style={{ maxHeight: 'calc(100vh - 130px)' }}>
+        <div className="w-full md:w-[280px] shrink-0 glass-panel rounded-xl settings-panel overflow-y-auto pointer-events-auto" data-ui-root="true" style={{ maxHeight: 'calc(100vh - 130px)' }}>
           <div className="p-4 space-y-4">
             <h2 className="text-sm font-bold font-display uppercase tracking-widest text-white" data-testid="heading-presets">Presets</h2>
 
@@ -782,7 +791,7 @@ function CreateTabContent({
         <div className="hidden md:block flex-1" />
 
         {/* Right Panel - Controls */}
-        <div className="w-full md:w-[280px] shrink-0 glass-panel rounded-xl settings-panel overflow-y-auto pointer-events-auto" style={{ maxHeight: 'calc(100vh - 130px)' }}>
+        <div className="w-full md:w-[280px] shrink-0 glass-panel rounded-xl settings-panel overflow-y-auto pointer-events-auto" data-ui-root="true" style={{ maxHeight: 'calc(100vh - 130px)' }}>
           <div className="p-4 space-y-5">
             <h2 className="text-sm font-bold font-display uppercase tracking-widest text-white" data-testid="heading-controls">Controls</h2>
 
@@ -971,7 +980,7 @@ function PerformTabContent({
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none" style={{ top: '52px', bottom: '52px' }}>
       <div className="space-y-4 max-w-lg w-full">
-        <div className="grid grid-cols-2 gap-3 md:gap-4 p-4 pointer-events-auto w-full">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 p-4 pointer-events-auto w-full" data-ui-root="true">
           {cards.map((card) => (
             <div
               key={card.testId}
@@ -1024,7 +1033,7 @@ function RecordTabContent({
 }) {
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none" style={{ top: '52px', bottom: '52px' }}>
-      <div className="glass-panel rounded-xl border border-white/10 p-6 md:p-8 pointer-events-auto w-[320px] md:w-[360px] space-y-6">
+      <div className="glass-panel rounded-xl border border-white/10 p-6 md:p-8 pointer-events-auto w-[320px] md:w-[360px] space-y-6" data-ui-root="true">
         <h2 className="text-sm font-bold font-display uppercase tracking-widest text-white text-center" data-testid="heading-record">Recording</h2>
 
         {/* Quality Selector */}
