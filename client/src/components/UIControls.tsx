@@ -548,7 +548,7 @@ function CreateTabContent({
             {presetCategories.map((category) => (
               <div key={category.name} className="space-y-2">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">{category.name}</p>
-                <div className="space-y-1.5">
+                <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))' }}>
                   {category.presets.map((preset) => {
                     const IconComponent = presetIconMap[preset.icon];
                     const isActive = settings.presetName === preset.name;
@@ -556,18 +556,16 @@ function CreateTabContent({
                       <button
                         key={preset.name}
                         onClick={() => setSettings((prev: typeof settings) => ({ ...prev, presetName: preset.name }))}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                        className={`flex flex-col items-center justify-center rounded-lg transition-all aspect-square ${
                           isActive
-                            ? "bg-white/10 border border-primary/60 text-white"
-                            : "bg-white/5 border border-white/10 text-white/70 hover:bg-white/10"
+                            ? "bg-white/15 ring-1 ring-primary/70 text-white shadow-[0_0_8px_rgba(var(--primary),0.2)]"
+                            : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 active:scale-[0.97]"
                         }`}
+                        title={preset.name}
                         data-testid={`button-preset-${preset.shortName.toLowerCase()}`}
                       >
-                        {IconComponent && <IconComponent className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : 'text-white/40'}`} />}
-                        <div className="text-left">
-                          <p className="text-xs font-medium">{preset.name}</p>
-                          <p className="text-[10px] text-muted-foreground">Visual preset</p>
-                        </div>
+                        {IconComponent && <IconComponent className={`w-4 h-4 shrink-0 mb-1 ${isActive ? 'text-primary' : 'text-white/40'}`} />}
+                        <span className="text-[9px] font-medium leading-tight text-center line-clamp-2 px-0.5">{preset.shortName}</span>
                       </button>
                     );
                   })}
