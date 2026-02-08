@@ -44,6 +44,16 @@ Preferred communication style: Simple, everyday language.
 ### Premium Visual Presets
 All presets are designed with unique visual identities, avoiding generic patterns, and feature multi-layered audio reactivity, dynamic material properties, and performance optimizations.
 
+### Fractal Preset Engine
+- **Architecture**: Typed preset engine in `client/src/engine/presets/` with full lifecycle management (init/update/dispose).
+- **Types** (`types.ts`): AudioFeatures, PresetContext, UniformSpec (with type/min/max/step/group/macro/transform/visibleIf), FractalPreset interface.
+- **Engine Hook** (`usePresetEngine.ts`): Manages preset lifecycle, uniform state, per-frame tick. Available for standalone use.
+- **Bridge** (`FractalPresetBridge.tsx`): R3F component that bridges AudioData to AudioFeatures format, calls init/dispose lifecycle, and renders the preset's Render component.
+- **Registry** (`registry.ts`): Maps preset names to FractalPreset instances. `isFractalPreset()` and `getFractalPreset()` for lookup.
+- **Auto-Generated UI**: ControlPanel renders sliders/color pickers/toggles/vec2 inputs from uniformSpecs. PerformOverlay renders macro-flagged uniforms as large slider cards.
+- **Current Presets**: Mandelbrot Explorer (GLSL shader2d with audio-reactive zoom, rotation, color cycling, beat punch).
+- **Adding New Fractals**: Create a new file in `fractals/`, implement FractalPreset interface, add to registry.ts and visualizer-presets.ts.
+
 ### Data Flow
 User audio upload or selection → Web Audio API analysis → Three.js rendering in response to audio data → Optional AI vision for thumbnail analysis.
 

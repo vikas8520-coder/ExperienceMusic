@@ -197,6 +197,7 @@ export const presets = [
   "BW Vortex",
   "Rainbow Spiral",
   "Red Mandala",
+  "Mandelbrot Explorer",
 ] as const;
 
 export type PresetName = typeof presets[number];
@@ -231,6 +232,12 @@ export const presetCategories = [
       { name: "BW Vortex" as PresetName, icon: "vortex", shortName: "B/W" },
       { name: "Rainbow Spiral" as PresetName, icon: "rainbow", shortName: "Rainbow" },
       { name: "Red Mandala" as PresetName, icon: "mandala", shortName: "Mandala" },
+    ],
+  },
+  {
+    name: "Fractals",
+    presets: [
+      { name: "Mandelbrot Explorer" as PresetName, icon: "mandelbrot", shortName: "Mandelbrot" },
     ],
   },
 ] as const;

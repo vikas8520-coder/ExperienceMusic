@@ -18,6 +18,8 @@ import {
 } from "@/lib/visualizer-presets";
 import { useCreatePreset } from "@/hooks/use-presets";
 import { useToast } from "@/hooks/use-toast";
+import { isFractalPreset, getFractalPreset } from "@/engine/presets/registry";
+import type { UniformValues, UniformSpec } from "@/engine/presets/types";
 
 export interface SavedTrack {
   id: string;
@@ -102,7 +104,29 @@ export default function Home() {
     glowEnabled: true,
     glowIntensity: 1.0,
   });
-  
+
+  const [fractalUniforms, setFractalUniforms] = useState<UniformValues>({});
+  const [fractalSpecs, setFractalSpecs] = useState<UniformSpec[]>([]);
+  const [fractalMacros, setFractalMacros] = useState<UniformSpec[]>([]);
+
+  useEffect(() => {
+    const fp = getFractalPreset(settings.presetName);
+    if (fp) {
+      const defaults: UniformValues = {};
+      for (const spec of fp.uniformSpecs) defaults[spec.key] = spec.default;
+      setFractalUniforms(defaults);
+      setFractalSpecs(fp.uniformSpecs);
+      setFractalMacros(fp.uniformSpecs.filter(s => s.macro));
+    } else {
+      setFractalSpecs([]);
+      setFractalMacros([]);
+    }
+  }, [settings.presetName]);
+
+  const setFractalUniform = useCallback((key: string, value: any) => {
+    setFractalUniforms(prev => ({ ...prev, [key]: value }));
+  }, []);
+
   // Update color palette when color settings or time changes
   useEffect(() => {
     const newPalette = generateColorPalette(colorSettings, colorTime);
@@ -648,6 +672,7 @@ export default function Home() {
         settings={settings}
         backgroundImage={thumbnailUrl}
         zoom={visualizationZoom}
+        fractalUniforms={fractalUniforms}
       />
 
       {/* UI Overlay */}
@@ -683,6 +708,10 @@ export default function Home() {
         onPreviousTrack={handlePreviousTrack}
         onNextTrack={handleNextTrack}
         hasLibraryTracks={savedTracks.length > 0}
+        fractalSpecs={fractalSpecs}
+        fractalMacros={fractalMacros}
+        fractalUniforms={fractalUniforms}
+        onFractalUniformChange={setFractalUniform}
       />
       
       {/* Track Library Panel */}

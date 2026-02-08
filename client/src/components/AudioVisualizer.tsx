@@ -7,6 +7,9 @@ import { PsyTunnel as PsyTunnelShader } from "./PsyTunnel";
 import { PsyPresetLayer, type PsyPresetName } from "./PsyPresetLayer";
 import { type AudioData } from "@/hooks/use-audio-analyzer";
 import { type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
+import { isFractalPreset, getFractalPreset } from "@/engine/presets/registry";
+import { FractalPresetBridge } from "@/engine/presets/FractalPresetBridge";
+import type { UniformValues } from "@/engine/presets/types";
 
 interface AudioVisualizerProps {
   getAudioData: () => AudioData;
@@ -21,6 +24,7 @@ interface AudioVisualizerProps {
   };
   backgroundImage?: string | null;
   zoom?: number;
+  fractalUniforms?: UniformValues;
 }
 
 // Check WebGL support
@@ -3786,7 +3790,7 @@ function PresetTransition({ children, presetName }: { children: React.ReactNode;
   );
 }
 
-function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: AudioVisualizerProps) {
+function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1, fractalUniforms }: AudioVisualizerProps) {
   const [hasError, setHasError] = useState(false);
   
   const activeFilters = settings.imageFilters || ["none"];
@@ -3875,6 +3879,12 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
               {settings.presetName === "Water Membrane Orb" && <WaterMembraneOrb getAudioData={getAudioData} settings={settings} />}
               {settings.presetName === "Chladni Geometry" && <ChladniGeometry getAudioData={getAudioData} settings={settings} />}
               {settings.presetName === "Resonant Field Lines" && <ResonantFieldLines getAudioData={getAudioData} settings={settings} />}
+
+              {isFractalPreset(settings.presetName) && (() => {
+                const fp = getFractalPreset(settings.presetName);
+                if (!fp) return null;
+                return <FractalPresetBridge preset={fp} getAudioData={getAudioData} uniforms={fractalUniforms || {}} />;
+              })()}
               
               {isPsyPreset && (
                 <PsyPresetWrapper 
@@ -3908,12 +3918,12 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1 }: Audio
   );
 }
 
-export function AudioVisualizer({ getAudioData, settings, backgroundImage, zoom = 1 }: AudioVisualizerProps) {
+export function AudioVisualizer({ getAudioData, settings, backgroundImage, zoom = 1, fractalUniforms }: AudioVisualizerProps) {
   const [webglSupported] = useState(() => isWebGLAvailable());
 
   if (!webglSupported) {
     return <FallbackVisualizer settings={settings} backgroundImage={backgroundImage} />;
   }
 
-  return <ThreeScene getAudioData={getAudioData} settings={settings} backgroundImage={backgroundImage} zoom={zoom} />;
+  return <ThreeScene getAudioData={getAudioData} settings={settings} backgroundImage={backgroundImage} zoom={zoom} fractalUniforms={fractalUniforms} />;
 }

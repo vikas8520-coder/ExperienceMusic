@@ -13,6 +13,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Upload, Save, Disc as DiscIcon, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn, Cloud, Pin, PinOff, Plus, Minus, SkipBack, SkipForward, Music } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ControlPanel as FractalControlPanel } from "@/engine/presets/ControlPanel";
+import { PerformOverlay as FractalPerformOverlay } from "@/engine/presets/PerformOverlay";
 import { 
   colorPalettes, 
   presets,
@@ -68,6 +70,7 @@ const presetIconMap: Record<string, React.ComponentType<{ className?: string }>>
   vortex: RotateCcw,
   rainbow: Rainbow,
   mandala: Sun,
+  mandelbrot: Hexagon,
 };
 
 interface UIControlsProps {
@@ -114,6 +117,10 @@ interface UIControlsProps {
   onPreviousTrack?: () => void;
   onNextTrack?: () => void;
   hasLibraryTracks?: boolean;
+  fractalSpecs?: import("@/engine/presets/types").UniformSpec[];
+  fractalMacros?: import("@/engine/presets/types").UniformSpec[];
+  fractalUniforms?: import("@/engine/presets/types").UniformValues;
+  onFractalUniformChange?: (key: string, value: any) => void;
 }
 
 export interface ThumbnailAnalysis {
@@ -164,6 +171,10 @@ export function UIControls({
   onPreviousTrack,
   onNextTrack,
   hasLibraryTracks = false,
+  fractalSpecs,
+  fractalMacros,
+  fractalUniforms,
+  onFractalUniformChange,
 }: UIControlsProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ThumbnailAnalysis | null>(null);
@@ -372,6 +383,9 @@ export function UIControls({
         thumbnailInputRef={thumbnailInputRef}
         zoom={zoom}
         onZoomChange={onZoomChange}
+        fractalSpecs={fractalSpecs}
+        fractalUniforms={fractalUniforms}
+        onFractalUniformChange={onFractalUniformChange}
       />}
 
       {activeTab === "perform" && <PerformTabContent
@@ -379,6 +393,9 @@ export function UIControls({
         updateSetting={updateSetting}
         zoom={zoom}
         onZoomChange={onZoomChange}
+        fractalMacros={fractalMacros}
+        fractalUniforms={fractalUniforms}
+        onFractalUniformChange={onFractalUniformChange}
       />}
 
       {activeTab === "record" && <RecordTabContent
@@ -491,6 +508,9 @@ function CreateTabContent({
   thumbnailInputRef,
   zoom,
   onZoomChange,
+  fractalSpecs,
+  fractalUniforms,
+  onFractalUniformChange,
 }: {
   settings: UIControlsProps["settings"];
   setSettings: UIControlsProps["setSettings"];
@@ -504,6 +524,9 @@ function CreateTabContent({
   thumbnailInputRef: React.RefObject<HTMLInputElement | null>;
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
+  fractalSpecs?: import("@/engine/presets/types").UniformSpec[];
+  fractalUniforms?: import("@/engine/presets/types").UniformValues;
+  onFractalUniformChange?: (key: string, value: any) => void;
 }) {
   return (
     <div className="fixed inset-0 z-30 pointer-events-none" style={{ top: '52px', bottom: '52px' }}>
@@ -866,6 +889,14 @@ function CreateTabContent({
                 data-testid="toggle-glow"
               />
             </div>
+
+            {fractalSpecs && fractalSpecs.length > 0 && fractalUniforms && onFractalUniformChange && (
+              <>
+                <div className="h-px bg-white/10" />
+                <h2 className="text-sm font-bold font-display uppercase tracking-widest text-white" data-testid="heading-fractal-controls">Fractal Controls</h2>
+                <FractalControlPanel specs={fractalSpecs} uniforms={fractalUniforms} setUniform={onFractalUniformChange} />
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -878,11 +909,17 @@ function PerformTabContent({
   updateSetting,
   zoom,
   onZoomChange,
+  fractalMacros,
+  fractalUniforms,
+  onFractalUniformChange,
 }: {
   settings: UIControlsProps["settings"];
   updateSetting: <K extends keyof UIControlsProps["settings"]>(key: K, value: UIControlsProps["settings"][K]) => void;
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
+  fractalMacros?: import("@/engine/presets/types").UniformSpec[];
+  fractalUniforms?: import("@/engine/presets/types").UniformValues;
+  onFractalUniformChange?: (key: string, value: any) => void;
 }) {
   const cards = [
     {
@@ -933,28 +970,36 @@ function PerformTabContent({
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none" style={{ top: '52px', bottom: '52px' }}>
-      <div className="grid grid-cols-2 gap-3 md:gap-4 p-4 pointer-events-auto max-w-lg w-full">
-        {cards.map((card) => (
-          <div
-            key={card.testId}
-            className="glass-panel rounded-xl border border-white/10 p-4 md:p-5 space-y-3"
-            data-testid={`card-${card.testId}`}
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs uppercase tracking-widest text-muted-foreground">{card.label}</span>
-              <span className={`text-lg md:text-xl font-bold font-mono ${card.color}`}>{card.value}%</span>
+      <div className="space-y-4 max-w-lg w-full">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 p-4 pointer-events-auto w-full">
+          {cards.map((card) => (
+            <div
+              key={card.testId}
+              className="glass-panel rounded-xl border border-white/10 p-4 md:p-5 space-y-3"
+              data-testid={`card-${card.testId}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs uppercase tracking-widest text-muted-foreground">{card.label}</span>
+                <span className={`text-lg md:text-xl font-bold font-mono ${card.color}`}>{card.value}%</span>
+              </div>
+              <Slider
+                min={card.min}
+                max={card.max}
+                step={card.step}
+                value={[card.current]}
+                onValueChange={([val]) => card.onChange(val)}
+                className="w-full"
+                data-testid={`slider-${card.testId}`}
+              />
             </div>
-            <Slider
-              min={card.min}
-              max={card.max}
-              step={card.step}
-              value={[card.current]}
-              onValueChange={([val]) => card.onChange(val)}
-              className="w-full"
-              data-testid={`slider-${card.testId}`}
-            />
+          ))}
+        </div>
+
+        {fractalMacros && fractalMacros.length > 0 && fractalUniforms && onFractalUniformChange && (
+          <div className="pointer-events-auto">
+            <FractalPerformOverlay macros={fractalMacros} uniforms={fractalUniforms} setUniform={onFractalUniformChange} />
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
