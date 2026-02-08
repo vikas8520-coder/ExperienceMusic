@@ -36,7 +36,7 @@ export type UniformSpec = {
   step?: number;
 
   options?: { label: string; value: any }[];
-  group?: "Fractal" | "Color" | "Motion" | "Audio" | "Quality" | "Overlay";
+  group?: "Fractal" | "Color" | "Motion" | "Audio" | "Quality" | "Overlay" | "Julia" | "Effects";
 
   default: any;
   macro?: boolean;
