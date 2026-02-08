@@ -2,7 +2,6 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { AudioVisualizer } from "@/components/AudioVisualizer";
 import { UIControls, type ThumbnailAnalysis } from "@/components/UIControls";
 import { TrackLibrary } from "@/components/TrackLibrary";
-import { TopPlayerDrawer } from "@/components/TopPlayerDrawer";
 import { SoundCloudPanel } from "@/components/SoundCloudPanel";
 import { useAudioAnalyzer } from "@/hooks/use-audio-analyzer";
 import { 
@@ -48,7 +47,6 @@ export default function Home() {
   const [showSoundCloud, setShowSoundCloud] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [visualizationZoom, setVisualizationZoom] = useState(1);
-  const [playerDrawerOpen, setPlayerDrawerOpen] = useState(false);
   
   const [savedTracks, setSavedTracks] = useState<SavedTrack[]>(() => {
     try {
@@ -649,23 +647,6 @@ export default function Home() {
         settings={settings}
         backgroundImage={thumbnailUrl}
         zoom={visualizationZoom}
-      />
-
-      {/* Top Player Drawer - Separate from settings panel */}
-      <TopPlayerDrawer
-        isOpen={playerDrawerOpen}
-        onToggle={() => setPlayerDrawerOpen(!playerDrawerOpen)}
-        isPlaying={isPlaying}
-        onPlayPause={togglePlay}
-        currentTime={currentTime}
-        duration={duration}
-        onSeek={handleSeek}
-        volume={volume}
-        onVolume={handleVolumeChange}
-        onPreviousTrack={handlePreviousTrack}
-        onNextTrack={handleNextTrack}
-        title={audioFileName ? audioFileName.replace(/\.[^/.]+$/, "") : "No Track Loaded"}
-        hasLibraryTracks={savedTracks.length > 0}
       />
 
       {/* UI Overlay */}

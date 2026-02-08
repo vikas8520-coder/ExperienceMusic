@@ -11,7 +11,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Upload, Save, Disc as DiscIcon, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn, Cloud, Pin, PinOff, Plus, Minus } from "lucide-react";
+import { Upload, Save, Disc as DiscIcon, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn, Cloud, Pin, PinOff, Plus, Minus, SkipBack, SkipForward, Music } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   colorPalettes, 
@@ -42,10 +42,16 @@ import {
   CircleDot,
   RotateCcw,
   Rainbow,
-  Sun
+  Sun,
+  Eye,
+  Zap,
+  Video,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX
 } from "lucide-react";
 
-// Map preset icons to Lucide components
 const presetIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   rings: Circle,
   tunnel: Disc,
@@ -117,13 +123,14 @@ export interface ThumbnailAnalysis {
   visualSuggestions: string[];
 }
 
-// Format time in mm:ss format
 function formatTime(seconds: number): string {
   if (!seconds || !isFinite(seconds)) return "0:00";
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
+
+type TabId = "listen" | "create" | "perform" | "record";
 
 export function UIControls({
   isPlaying,
@@ -161,110 +168,21 @@ export function UIControls({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ThumbnailAnalysis | null>(null);
   const [localThumbnailUrl, setLocalThumbnailUrl] = useState<string | null>(null);
-  const [isMobileExpanded, setIsMobileExpanded] = useState(false);
-  const [showMobileControls, setShowMobileControls] = useState(true);
-  const [isDesktopPanelVisible, setIsDesktopPanelVisible] = useState(true);
-  
-  // Auto-hide timer ref
-  const autoHideTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const AUTO_HIDE_DELAY = 15000; // 15 seconds - extended for better usability
-  const [controlsPinned, setControlsPinned] = useState(false);
-  
-  // Throttle ref to prevent excessive timer resets
-  const lastResetTime = useRef<number>(0);
-  const THROTTLE_MS = 100;
-  
-  // Reset auto-hide timer on user interaction (throttled)
-  const resetAutoHideTimer = useCallback(() => {
-    // Don't auto-hide if controls are pinned
-    if (controlsPinned) return;
-    
-    const now = Date.now();
-    if (now - lastResetTime.current < THROTTLE_MS) return;
-    lastResetTime.current = now;
-    
-    if (autoHideTimerRef.current) {
-      clearTimeout(autoHideTimerRef.current);
-    }
-    autoHideTimerRef.current = setTimeout(() => {
-      setShowMobileControls(false);
-      setIsMobileExpanded(false);
-      setIsDesktopPanelVisible(false);
-    }, AUTO_HIDE_DELAY);
-  }, [controlsPinned]);
-  
-  // Clear timer when controls are pinned
-  useEffect(() => {
-    if (controlsPinned && autoHideTimerRef.current) {
-      clearTimeout(autoHideTimerRef.current);
-      autoHideTimerRef.current = null;
-    }
-  }, [controlsPinned]);
-  
-  // Start auto-hide timer when panels are shown (only if not pinned)
-  useEffect(() => {
-    if (!controlsPinned && (showMobileControls || isDesktopPanelVisible)) {
-      resetAutoHideTimer();
-    }
-    return () => {
-      if (autoHideTimerRef.current) {
-        clearTimeout(autoHideTimerRef.current);
-      }
-    };
-  }, [showMobileControls, isDesktopPanelVisible, controlsPinned, resetAutoHideTimer]);
-  
-  // File input refs for reliable click handling
+  const [activeTab, setActiveTab] = useState<TabId>("listen");
+
   const audioInputRef = useRef<HTMLInputElement>(null);
-  const audioInputMobileRef = useRef<HTMLInputElement>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
-  const thumbnailInputMobileRef = useRef<HTMLInputElement>(null);
-  
-  const desktopScrollRef = useRef<HTMLDivElement>(null);
-  const mobileScrollRef = useRef<HTMLDivElement>(null);
-  const desktopScrollPosition = useRef<number>(0);
-  const mobileScrollPosition = useRef<number>(0);
-  
-  // Save scroll positions before state updates
-  const saveScrollPositions = useCallback(() => {
-    if (desktopScrollRef.current) {
-      desktopScrollPosition.current = desktopScrollRef.current.scrollLeft;
-    }
-    if (mobileScrollRef.current) {
-      mobileScrollPosition.current = mobileScrollRef.current.scrollLeft;
-    }
-  }, []);
-  
-  // Restore scroll positions after settings change
-  useEffect(() => {
-    const desktopEl = desktopScrollRef.current;
-    const mobileEl = mobileScrollRef.current;
-    
-    // Use requestAnimationFrame to ensure DOM has updated
-    requestAnimationFrame(() => {
-      if (desktopEl && desktopScrollPosition.current > 0) {
-        desktopEl.scrollLeft = desktopScrollPosition.current;
-      }
-      if (mobileEl && mobileScrollPosition.current > 0) {
-        mobileEl.scrollLeft = mobileScrollPosition.current;
-      }
-    });
-  }, [settings]);
-  
+
   const updateSetting = useCallback(<K extends keyof typeof settings>(key: K, value: typeof settings[K]) => {
-    saveScrollPositions();
     setSettings((prev: typeof settings) => ({ ...prev, [key]: value }));
-  }, [setSettings, saveScrollPositions]);
+  }, [setSettings]);
 
   const displayThumbnail = thumbnailUrl || localThumbnailUrl;
-  
-  // Track the last analyzed URL to prevent duplicate analysis
+
   const lastAnalyzedUrlRef = useRef<string | null>(null);
-  
-  // Auto-analyze artwork when thumbnailUrl changes (from track upload or SoundCloud)
+
   useEffect(() => {
     const analyzeArtwork = async () => {
-      // Only analyze if we have a new thumbnailUrl that differs from the local one
-      // and we haven't already analyzed it
       if (thumbnailUrl && 
           thumbnailUrl !== localThumbnailUrl && 
           thumbnailUrl !== lastAnalyzedUrlRef.current &&
@@ -272,10 +190,9 @@ export function UIControls({
         
         lastAnalyzedUrlRef.current = thumbnailUrl;
         setIsAnalyzing(true);
-        setAnalysis(null); // Clear previous analysis while analyzing new artwork
+        setAnalysis(null);
         
         try {
-          // Fetch the image and convert to base64
           const response = await fetch(thumbnailUrl);
           const blob = await response.blob();
           
@@ -350,1226 +267,777 @@ export function UIControls({
   };
 
   const updateColorSetting = useCallback(<K extends keyof ColorSettings>(key: K, value: ColorSettings[K]) => {
-    saveScrollPositions();
     setColorSettings({ ...colorSettings, [key]: value });
-  }, [colorSettings, setColorSettings, saveScrollPositions]);
+  }, [colorSettings, setColorSettings]);
 
   const applyAIPalette = () => {
     if (analysis?.colorPalette) {
-      saveScrollPositions();
       setColorSettings({ ...colorSettings, mode: "ai", aiColors: analysis.colorPalette });
     }
   };
-  
-  // Color mode display name
+
   const currentColorModeName = colorModes.find(m => m.id === colorSettings.mode)?.name || "Gradient";
 
-  // Mobile floating controls (simplified - player controls moved to top drawer)
-  const MobileFloatingControls = () => (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 md:hidden" style={{ pointerEvents: 'auto' }}>
-      {/* Upload Button */}
+  const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+    { id: "listen", label: "Listen", icon: Eye },
+    { id: "create", label: "Create", icon: Sparkles },
+    { id: "perform", label: "Perform", icon: Zap },
+    { id: "record", label: "Record", icon: Video },
+  ];
+
+  return (
+    <>
       <input
-        ref={audioInputMobileRef}
+        ref={audioInputRef}
         type="file"
         accept="audio/*"
         onChange={(e) => { onFileUpload(e); e.target.value = ''; }}
         className="hidden"
-        data-testid="input-audio-upload-mobile"
+        data-testid="input-audio-upload"
       />
-      <Button 
-        variant="secondary"
-        size="icon"
-        className="rounded-full shadow-lg"
-        onClick={() => audioInputMobileRef.current?.click()}
-        data-testid="button-audio-upload-mobile"
-      >
-        <Upload className="h-5 w-5" />
-      </Button>
-      
-      {/* Settings Toggle */}
-      <Button 
-        variant="secondary"
-        size="icon"
-        className="rounded-full shadow-lg"
-        onClick={() => {
-          setShowMobileControls(!showMobileControls);
-          resetAutoHideTimer();
-        }}
-        data-testid="button-settings-mobile"
-      >
-        <Settings className="h-5 w-5" />
-      </Button>
-      
-      {/* Library Button */}
-      <Button 
-        variant="secondary"
-        size="icon"
-        className="rounded-full shadow-lg"
-        onClick={onToggleLibrary}
-        data-testid="button-library-mobile"
-      >
-        <Library className="h-5 w-5" />
-      </Button>
-      
-      {/* SoundCloud Button */}
-      <Button 
-        variant="secondary"
-        size="icon"
-        className="rounded-full shadow-lg"
-        onClick={onToggleSoundCloud}
-        data-testid="button-soundcloud-mobile"
-      >
-        <Cloud className="h-5 w-5" />
-      </Button>
-      
-      {/* Pin Controls Button */}
-      <Button 
-        variant="secondary"
-        size="icon"
-        className={`rounded-full shadow-lg ${controlsPinned ? 'bg-primary text-primary-foreground' : ''}`}
-        onClick={() => setControlsPinned(!controlsPinned)}
-        data-testid="button-pin-controls-mobile"
-      >
-        {controlsPinned ? <PinOff className="h-5 w-5" /> : <Pin className="h-5 w-5" />}
-      </Button>
-      
-      {/* Fullscreen Button */}
-      <Button 
-        variant="secondary"
-        size="icon"
-        className="rounded-full shadow-lg"
-        onClick={onToggleFullscreen}
-        data-testid="button-fullscreen-mobile"
-      >
-        {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
-      </Button>
-    </div>
-  );
+      <input
+        ref={thumbnailInputRef}
+        type="file"
+        accept="image/*"
+        onChange={(e) => { handleThumbnailUpload(e); e.target.value = ''; }}
+        className="hidden"
+        data-testid="input-thumbnail-upload"
+      />
 
-  // Mobile bottom sheet - using CSS transitions for stability
-  const MobileBottomSheet = () => (
-    <div 
-      className={`fixed bottom-20 left-0 right-0 z-40 md:hidden transition-transform duration-300 ease-out ${
-        showMobileControls 
-          ? (isMobileExpanded ? 'translate-y-0' : 'translate-y-[calc(100%-180px)]')
-          : 'translate-y-full'
-      }`}
-      onMouseMove={resetAutoHideTimer}
-      onTouchStart={resetAutoHideTimer}
-    >
-      <div className="glass-panel settings-panel rounded-t-3xl max-h-[70vh] overflow-y-auto scrollbar-thin" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {/* Drag Handle */}
-            <button
-              onClick={() => setIsMobileExpanded(!isMobileExpanded)}
-              className="w-full flex flex-col items-center py-3 active:bg-white/5"
-              data-testid="button-expand-controls"
-            >
-              <div className="w-12 h-1 bg-white/30 rounded-full mb-2" />
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <span className="text-xs uppercase tracking-wider">Controls</span>
-                {isMobileExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
-              </div>
-            </button>
-            
-            {/* Quick Controls Row */}
-            <div className="px-4 pb-4 space-y-4">
-              {/* Current Track */}
-              {trackName && (
-                <div className="p-2 bg-black/30 rounded-lg text-center">
-                  <p className="text-xs text-muted-foreground">Now Playing</p>
-                  <p className="text-sm font-medium truncate">{trackName.replace(/\.[^/.]+$/, "")}</p>
-                </div>
-              )}
-              
-              {/* Preset Selector - Categorized Buttons */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Preset</Label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Enable</span>
-                    <Switch
-                      checked={settings.presetEnabled}
-                      onCheckedChange={(checked) => { saveScrollPositions(); setSettings({ ...settings, presetEnabled: checked }); }}
-                      data-testid="switch-preset-toggle-mobile"
-                    />
-                  </div>
-                </div>
-                
-                {presetCategories.map((category) => (
-                  <div key={category.name} className={`space-y-2 ${!settings.presetEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{category.name}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {category.presets.map((preset) => {
-                        const IconComponent = presetIconMap[preset.icon];
-                        const isActive = settings.presetName === preset.name;
-                        return (
-                          <button
-                            key={preset.name}
-                            onClick={() => { saveScrollPositions(); setSettings({ ...settings, presetName: preset.name }); }}
-                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-all ${
-                              isActive
-                                ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
-                                : "bg-white/10 text-white/70 hover:bg-white/20"
-                            }`}
-                            data-testid={`button-preset-mobile-${preset.shortName.toLowerCase()}`}
-                          >
-                            {IconComponent && <IconComponent className="w-3.5 h-3.5" />}
-                            <span>{preset.shortName}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              {/* Color Mode Selector */}
-              <div className="space-y-3">
-                <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4">
-                  {colorModes.filter(m => m.id !== "ai" && m.id !== "custom").map((mode) => (
-                    <button
-                      key={mode.id}
-                      onClick={() => updateColorSetting("mode", mode.id)}
-                      className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs transition-all ${
-                        colorSettings.mode === mode.id
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-white/10 text-white/70"
-                      }`}
-                      data-testid={`button-color-mode-mobile-${mode.id}`}
-                    >
-                      {mode.name}
-                    </button>
-                  ))}
-                </div>
-                
-                {/* Color Pickers based on mode */}
-                <div className="flex gap-3 items-center">
-                  {(colorSettings.mode === "single" || colorSettings.mode === "gradient" || colorSettings.mode === "triadic") && (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={colorSettings.primaryColor}
-                        onChange={(e) => updateColorSetting("primaryColor", e.target.value)}
-                        className="w-10 h-10 rounded-lg cursor-pointer border-0"
-                        data-testid="input-color-primary-mobile"
-                      />
-                      {(colorSettings.mode === "gradient" || colorSettings.mode === "triadic") && (
-                        <input
-                          type="color"
-                          value={colorSettings.secondaryColor}
-                          onChange={(e) => updateColorSetting("secondaryColor", e.target.value)}
-                          className="w-10 h-10 rounded-lg cursor-pointer border-0"
-                          data-testid="input-color-secondary-mobile"
-                        />
-                      )}
-                      {colorSettings.mode === "triadic" && (
-                        <input
-                          type="color"
-                          value={colorSettings.tertiaryColor}
-                          onChange={(e) => updateColorSetting("tertiaryColor", e.target.value)}
-                          className="w-10 h-10 rounded-lg cursor-pointer border-0"
-                          data-testid="input-color-tertiary-mobile"
-                        />
-                      )}
-                    </div>
-                  )}
-                  
-                  {colorSettings.mode === "mood" && (
-                    <div className="flex gap-2 overflow-x-auto flex-1">
-                      {moodPresets.map((mood) => (
-                        <button
-                          key={mood.id}
-                          onClick={() => updateColorSetting("moodPreset", mood.id)}
-                          className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs transition-all ${
-                            colorSettings.moodPreset === mood.id
-                              ? "ring-2 ring-white"
-                              : "opacity-60"
-                          }`}
-                          style={{ background: `linear-gradient(135deg, ${mood.colors[0]}, ${mood.colors[1]})` }}
-                          data-testid={`button-mood-mobile-${mood.id}`}
-                        >
-                          {mood.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  
-                  {colorSettings.mode === "spectrum" && (
-                    <div className="flex-1 flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Speed</span>
-                      <Slider
-                        min={0.1} max={3} step={0.1}
-                        value={[colorSettings.spectrumSpeed]}
-                        onValueChange={([val]) => updateColorSetting("spectrumSpeed", val)}
-                        className="flex-1"
-                        data-testid="slider-spectrum-speed-mobile"
-                      />
-                    </div>
-                  )}
-                </div>
-                
-                {/* Color Preview */}
-                <div className="flex gap-1 h-6 rounded-lg overflow-hidden">
-                  {settings.colorPalette.map((color, idx) => (
-                    <div
-                      key={idx}
-                      className="flex-1"
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-            
-            {/* Expanded Controls - CSS transition for stability */}
-            <div 
-              className={`px-4 pb-6 space-y-6 overflow-y-auto max-h-[40vh] transition-all duration-200 ${
-                isMobileExpanded ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden pointer-events-none'
-              }`}
-              style={{ overscrollBehavior: 'contain' }}
-              ref={mobileScrollRef}
-            >
-              {isMobileExpanded && (
-                <>
-                  {/* Intensity Slider */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <Label className="text-xs uppercase tracking-widest">Intensity</Label>
-                      <span className="text-xs font-mono text-primary" data-testid="text-intensity-value-mobile">{settings.intensity.toFixed(1)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-10 w-10 shrink-0"
-                        onClick={() => updateSetting('intensity', Math.max(0, settings.intensity - 0.2))}
-                        data-testid="button-intensity-decrease-mobile"
-                      >
-                        <Minus className="h-5 w-5" />
-                      </Button>
-                      <Slider
-                        min={0} max={3} step={0.1}
-                        value={[settings.intensity]}
-                        onValueChange={([val]) => updateSetting('intensity', val)}
-                        className="flex-1 [&>.absolute]:bg-primary"
-                        data-testid="slider-intensity-mobile"
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-10 w-10 shrink-0"
-                        onClick={() => updateSetting('intensity', Math.min(3, settings.intensity + 0.2))}
-                        data-testid="button-intensity-increase-mobile"
-                      >
-                        <Plus className="h-5 w-5" />
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  {/* Speed Slider */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <Label className="text-xs uppercase tracking-widest">Speed</Label>
-                      <span className="text-xs font-mono text-secondary" data-testid="text-speed-value-mobile">{settings.speed.toFixed(1)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-10 w-10 shrink-0"
-                        onClick={() => updateSetting('speed', Math.max(0, settings.speed - 0.1))}
-                        data-testid="button-speed-decrease-mobile"
-                      >
-                        <Minus className="h-5 w-5" />
-                      </Button>
-                      <Slider
-                        min={0} max={2} step={0.1}
-                        value={[settings.speed]}
-                        onValueChange={([val]) => updateSetting('speed', val)}
-                        className="flex-1 [&>.absolute]:bg-secondary"
-                        data-testid="slider-speed-mobile"
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-10 w-10 shrink-0"
-                        onClick={() => updateSetting('speed', Math.min(2, settings.speed + 0.1))}
-                        data-testid="button-speed-increase-mobile"
-                      >
-                        <Plus className="h-5 w-5" />
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  {/* Thumbnail Upload */}
-                  <div className="space-y-3">
-                    <Label className="text-xs uppercase tracking-widest text-accent font-bold">Artwork</Label>
-                    <div className="relative aspect-video rounded-xl border border-white/10 bg-black/50 overflow-hidden">
-                      {displayThumbnail ? (
-                        <img 
-                          src={displayThumbnail} 
-                          alt="Thumbnail" 
-                          className="w-full h-full object-cover pointer-events-none"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2 pointer-events-none">
-                          <ImagePlus className="w-8 h-8 opacity-30" />
-                          <span className="text-xs opacity-50">Tap to add artwork</span>
-                        </div>
-                      )}
-                      
-                      {isAnalyzing && (
-                        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 pointer-events-none z-10">
-                          <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                          <span className="text-xs text-primary">Analyzing...</span>
-                        </div>
-                      )}
-                      
-                      <input
-                        ref={thumbnailInputMobileRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => { handleThumbnailUpload(e); e.target.value = ''; }}
-                        className="hidden"
-                        data-testid="input-thumbnail-upload-mobile"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => thumbnailInputMobileRef.current?.click()}
-                        className="absolute inset-0 w-full h-full cursor-pointer bg-transparent border-0 z-20"
-                        aria-label="Upload thumbnail"
-                        data-testid="button-thumbnail-upload-mobile"
-                      />
-                    </div>
-                    
-                    {isAnalyzing ? (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="w-full text-xs border-accent/50 text-accent/60"
-                        disabled
-                        data-testid="button-analyzing-ai-palette-mobile"
-                      >
-                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                        Analyzing...
-                      </Button>
-                    ) : analysis ? (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="w-full text-xs border-accent/50 text-accent"
-                        onClick={applyAIPalette}
-                        data-testid="button-apply-ai-palette-mobile"
-                      >
-                        <Sparkles className="mr-2 h-3 w-3" />
-                        Apply AI Palette
-                      </Button>
-                    ) : null}
-                  </div>
-                  
-                  {/* Image Filter Selector - Multiple */}
-                  <div className="space-y-3">
-                    <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Artwork Filters (Layer Multiple)</Label>
-                    <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                      {imageFilters.filter(f => f.id !== "none").map((filter) => {
-                        const isActive = settings.imageFilters.includes(filter.id);
-                        return (
-                          <button
-                            key={filter.id}
-                            onClick={() => {
-                              saveScrollPositions();
-                              const newFilters = isActive
-                                ? settings.imageFilters.filter(f => f !== filter.id)
-                                : [...settings.imageFilters.filter(f => f !== "none"), filter.id];
-                              setSettings({ 
-                                ...settings, 
-                                imageFilters: newFilters.length === 0 ? ["none"] : newFilters 
-                              });
-                            }}
-                            className={`text-xs py-2 px-3 rounded-lg border transition-all ${
-                              isActive 
-                                ? "border-purple-500 bg-purple-500/20 text-purple-300" 
-                                : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
-                            }`}
-                            data-testid={`filter-toggle-mobile-${filter.id}`}
-                          >
-                            {filter.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">Tap to toggle multiple filters</p>
-                  </div>
-                  
-                  {/* Psy Overlays - Mobile */}
-                  <div className="space-y-3">
-                    <Label className="text-xs uppercase tracking-widest text-cyan-400 font-bold">Psy Overlays</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {psyOverlays.map((overlay) => {
-                        const isActive = (settings.psyOverlays || []).includes(overlay.id);
-                        return (
-                          <button
-                            key={overlay.id}
-                            onClick={() => {
-                              saveScrollPositions();
-                              const currentOverlays = settings.psyOverlays || [];
-                              const newOverlays = isActive
-                                ? currentOverlays.filter(o => o !== overlay.id)
-                                : [...currentOverlays, overlay.id];
-                              setSettings({ 
-                                ...settings, 
-                                psyOverlays: newOverlays 
-                              });
-                            }}
-                            className={`text-xs py-2 px-3 rounded-lg border transition-all ${
-                              isActive 
-                                ? "border-cyan-500 bg-cyan-500/20 text-cyan-300" 
-                                : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
-                            }`}
-                            data-testid={`overlay-toggle-mobile-${overlay.id}`}
-                          >
-                            {overlay.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">Layer on any preset</p>
-                  </div>
-                  
-                  {/* Glow Enhancement Effect - Mobile */}
-                  <div className="space-y-3">
-                    <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Glow Effect</Label>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">Enable Glow</span>
-                      <Switch
-                        checked={settings.glowEnabled ?? true}
-                        onCheckedChange={(checked) => {
-                          saveScrollPositions();
-                          setSettings((prev: typeof settings) => ({ ...prev, glowEnabled: checked }));
-                        }}
-                        data-testid="toggle-glow-mobile"
-                      />
-                    </div>
-                    {settings.glowEnabled && (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground">Brightness</span>
-                          <span className="text-xs text-muted-foreground">{(settings.glowIntensity ?? 1.0).toFixed(1)}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-10 w-10 shrink-0"
-                            onClick={() => setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: Math.max(0.2, (prev.glowIntensity ?? 1.0) - 0.2) }))}
-                            data-testid="button-glow-decrease-mobile"
-                          >
-                            <Minus className="h-5 w-5" />
-                          </Button>
-                          <Slider
-                            min={0.2}
-                            max={2.0}
-                            step={0.1}
-                            value={[settings.glowIntensity ?? 1.0]}
-                            onValueChange={([val]) => {
-                              saveScrollPositions();
-                              setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: val }));
-                            }}
-                            className="flex-1"
-                            data-testid="slider-glow-intensity-mobile"
-                          />
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-10 w-10 shrink-0"
-                            onClick={() => setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: Math.min(2.0, (prev.glowIntensity ?? 1.0) + 0.2) }))}
-                            data-testid="button-glow-increase-mobile"
-                          >
-                            <Plus className="h-5 w-5" />
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                    <p className="text-[10px] text-muted-foreground">Controls bloom/glow brightness on presets</p>
-                  </div>
-                  
-                  {/* Recording Quality */}
-                  <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">Recording Quality</label>
-                    <div className="flex gap-1">
-                      {(["1080p", "2k", "4k"] as const).map((q) => (
-                        <Button
-                          key={q}
-                          variant={recordingQuality === q ? "default" : "outline"}
-                          size="sm"
-                          className="flex-1 text-xs"
-                          onClick={() => onRecordingQualityChange?.(q)}
-                          data-testid={`button-quality-${q}-mobile`}
-                        >
-                          {q.toUpperCase()}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <Button 
-                      variant="outline" 
-                      className={`border-destructive/50 text-destructive ${isRecording ? 'animate-pulse bg-destructive/20' : ''}`}
-                      onClick={onToggleRecording}
-                      data-testid="button-record-mobile"
-                    >
-                      <Disc className={`mr-2 h-4 w-4 ${isRecording ? 'animate-spin' : ''}`} />
-                      {isRecording ? "Stop" : "Record"}
-                    </Button>
-                    
-                    <Button 
-                      variant="outline"
-                      onClick={onSaveToLibrary}
-                      data-testid="button-save-library-mobile"
-                    >
-                      <FolderPlus className="mr-2 h-4 w-4" />
-                      Save
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
+      {/* Top Navigation Bar */}
+      <div className="fixed top-0 left-0 right-0 z-50 glass-panel border-b border-white/10" style={{ pointerEvents: 'auto' }}>
+        <div className="flex items-center justify-between px-3 md:px-6 py-2 gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <h1 className="text-sm md:text-lg font-bold font-display text-primary text-glow tracking-widest" data-testid="text-title">
+              EXPERIENCE
+            </h1>
+            <span className="text-[10px] md:text-xs text-muted-foreground hidden sm:inline">Instrument for seeing sound</span>
           </div>
-    </div>
-  );
 
-  // Desktop bottom panel - using CSS transitions instead of AnimatePresence
-  const DesktopBottomPanel = () => (
-    <div className="hidden md:block">
-      {/* Toggle button when panel is hidden */}
-      <div 
-        className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 transition-all duration-200 ${
-          isDesktopPanelVisible 
-            ? 'opacity-0 pointer-events-none translate-y-4' 
-            : 'opacity-100 pointer-events-auto translate-y-0'
-        }`}
-      >
-        <Button
-          variant="outline"
-          onClick={() => {
-            setIsDesktopPanelVisible(true);
-            resetAutoHideTimer();
-          }}
-          className="glass-panel flex items-center gap-2"
-          data-testid="button-show-panel"
-        >
-          <Settings className="w-4 h-4" />
-          <span>Show Controls</span>
-          <ChevronUp className="w-4 h-4" />
-        </Button>
+          <div className="flex items-center gap-1 md:gap-2">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-1 md:gap-1.5 px-2.5 md:px-4 py-1.5 md:py-2 rounded-full text-[11px] md:text-xs font-medium transition-all ${
+                    isActive
+                      ? "bg-white/10 text-white"
+                      : "text-white/50 hover:text-white/80"
+                  }`}
+                  data-testid={`tab-${tab.id}`}
+                >
+                  <Icon className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="w-16 md:w-24 shrink-0" />
+        </div>
       </div>
 
-      {/* Main bottom panel - CSS transition based */}
-      <div 
-        className={`fixed bottom-0 left-0 right-0 glass-panel z-50 border-t border-white/10 transition-transform duration-300 ease-out ${
-          isDesktopPanelVisible ? 'translate-y-0' : 'translate-y-full'
-        }`}
-        style={{ pointerEvents: 'auto' }}
-        onMouseMove={resetAutoHideTimer}
-        onMouseEnter={resetAutoHideTimer}
-      >
-            {/* Panel Header with hide button */}
-            <div className="flex items-center justify-between gap-4 px-6 py-2 border-b border-white/10 shrink-0">
-              <div className="flex items-center gap-4 flex-wrap">
-                <h1 className="text-lg font-bold font-display text-primary text-glow tracking-widest">
-                  AURAL<span className="text-foreground">VIS</span>
-                </h1>
-                {trackName && (
-                  <div className="flex items-center gap-2 px-3 py-1 bg-black/30 rounded-lg border border-white/5">
-                    <span className="text-[10px] text-muted-foreground uppercase">Playing:</span>
-                    <span className="text-sm font-medium text-foreground truncate max-w-40" data-testid="text-current-track">
-                      {trackName.replace(/\.[^/.]+$/, "")}
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onToggleLibrary}
-                  data-testid="button-toggle-library"
-                >
-                  <Library className="w-5 h-5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onToggleSoundCloud}
-                  data-testid="button-toggle-soundcloud"
-                >
-                  <Cloud className="w-5 h-5 text-orange-500" />
-                </Button>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setControlsPinned(!controlsPinned)}
-                      className={controlsPinned ? "text-primary" : ""}
-                      data-testid="button-pin-controls"
-                      aria-pressed={controlsPinned}
-                      data-pinned={controlsPinned}
-                    >
-                      {controlsPinned ? <PinOff className="w-5 h-5" /> : <Pin className="w-5 h-5" />}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>{controlsPinned ? "Unpin controls (will auto-hide)" : "Pin controls (stay visible)"}</p></TooltipContent>
-                </Tooltip>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsDesktopPanelVisible(false)}
-                  data-testid="button-hide-panel"
-                >
-                  <ChevronDown className="w-5 h-5" />
-                </Button>
-              </div>
-            </div>
+      {/* Right-side Floating Action Buttons */}
+      <div className="fixed right-3 md:right-5 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-3" style={{ pointerEvents: 'auto' }}>
+        <button
+          onClick={onToggleLibrary}
+          className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white/70 hover:text-white transition-colors"
+          data-testid="button-toggle-library"
+        >
+          <BarChart3 className="w-4 h-4 md:w-5 md:h-5" />
+        </button>
+        <button
+          onClick={onToggleSoundCloud}
+          className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-orange-500/20 backdrop-blur-sm border border-orange-500/30 flex items-center justify-center text-orange-400 hover:text-orange-300 transition-colors"
+          data-testid="button-toggle-soundcloud"
+        >
+          <Cloud className="w-4 h-4 md:w-5 md:h-5" />
+        </button>
+      </div>
 
-            {/* Reorganized Grid Layout */}
-            <div 
-              ref={desktopScrollRef} 
-              className="settings-panel overflow-y-auto p-4" 
-              style={{ 
-                maxHeight: 'calc(70vh - 50px)',
-                overscrollBehavior: 'contain',
-                pointerEvents: 'auto',
-                WebkitOverflowScrolling: 'touch',
-              }}
+      {/* Tab Content */}
+      {activeTab === "create" && <CreateTabContent
+        settings={settings}
+        setSettings={setSettings}
+        updateSetting={updateSetting}
+        colorSettings={colorSettings}
+        updateColorSetting={updateColorSetting}
+        displayThumbnail={displayThumbnail}
+        isAnalyzing={isAnalyzing}
+        analysis={analysis}
+        applyAIPalette={applyAIPalette}
+        thumbnailInputRef={thumbnailInputRef}
+        zoom={zoom}
+        onZoomChange={onZoomChange}
+      />}
+
+      {activeTab === "perform" && <PerformTabContent
+        settings={settings}
+        updateSetting={updateSetting}
+        zoom={zoom}
+        onZoomChange={onZoomChange}
+      />}
+
+      {activeTab === "record" && <RecordTabContent
+        isRecording={isRecording}
+        onToggleRecording={onToggleRecording}
+        recordingQuality={recordingQuality}
+        onRecordingQualityChange={onRecordingQualityChange}
+        onSaveToLibrary={onSaveToLibrary}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={onToggleFullscreen}
+      />}
+
+      {/* Bottom Player Bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 glass-panel border-t border-white/10" style={{ pointerEvents: 'auto' }}>
+        <div className="flex items-center gap-2 md:gap-3 px-3 md:px-6 py-2">
+          <button
+            onClick={() => audioInputRef.current?.click()}
+            className="text-white/50 hover:text-white transition-colors shrink-0"
+            data-testid="button-audio-upload"
+          >
+            <Upload className="w-4 h-4" />
+          </button>
+
+          {hasLibraryTracks && (
+            <button
+              onClick={onPreviousTrack}
+              className="text-white/50 hover:text-white transition-colors shrink-0"
+              data-testid="button-previous-track"
             >
-              {/* Row 1: Main Controls */}
-              <div className="grid grid-cols-12 gap-4 mb-4">
-                
-                {/* Preset Selection - Categorized Buttons */}
-                <div className="col-span-5 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs uppercase tracking-widest text-primary font-bold">Preset</Label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground">Enable</span>
-                      <Switch
-                        checked={settings.presetEnabled}
-                        onCheckedChange={(checked) => { saveScrollPositions(); setSettings({ ...settings, presetEnabled: checked }); }}
-                        data-testid="switch-preset-toggle"
-                      />
-                    </div>
-                  </div>
-                  <div className={`space-y-1.5 ${!settings.presetEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
-                    {presetCategories.map((category) => (
-                      <div key={category.name} className="flex items-center gap-2">
-                        <span className="text-[9px] text-muted-foreground uppercase w-14 flex-shrink-0">{category.name}</span>
-                        <div className="flex flex-wrap gap-1">
-                          {category.presets.map((preset) => {
-                            const IconComponent = presetIconMap[preset.icon];
-                            const isActive = settings.presetName === preset.name;
-                            return (
-                              <Tooltip key={preset.name}>
-                                <TooltipTrigger asChild>
-                                  <button
-                                    onClick={() => { saveScrollPositions(); setSettings({ ...settings, presetName: preset.name }); }}
-                                    className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-all ${
-                                      isActive
-                                        ? "bg-primary text-primary-foreground ring-1 ring-primary/50"
-                                        : "bg-white/10 text-white/60 hover:bg-white/20"
-                                    }`}
-                                    data-testid={`button-preset-${preset.shortName.toLowerCase()}`}
-                                  >
-                                    {IconComponent && <IconComponent className="w-3 h-3" />}
-                                    <span>{preset.shortName}</span>
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs">
-                                  {preset.name}
-                                </TooltipContent>
-                              </Tooltip>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              <SkipBack className="w-4 h-4" />
+            </button>
+          )}
 
-                {/* Color Mode */}
-                <div className="col-span-3 space-y-2">
-                  <Label className="text-xs uppercase tracking-widest text-accent font-bold">Color Mode</Label>
-                  
-                  {/* Mode Selector */}
-                  <div className="flex gap-1 flex-wrap">
-                    {colorModes.filter(m => m.id !== "ai" && m.id !== "custom").map((mode) => (
+          <button
+            onClick={onPlayPause}
+            className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white shrink-0 hover:bg-white/20 transition-colors"
+            data-testid="button-play-pause"
+          >
+            {isPlaying ? <Pause className="w-4 h-4 md:w-5 md:h-5" /> : <Play className="w-4 h-4 md:w-5 md:h-5 ml-0.5" />}
+          </button>
+
+          {hasLibraryTracks && (
+            <button
+              onClick={onNextTrack}
+              className="text-white/50 hover:text-white transition-colors shrink-0"
+              data-testid="button-next-track"
+            >
+              <SkipForward className="w-4 h-4" />
+            </button>
+          )}
+
+          <div className="hidden md:block max-w-[120px] truncate text-xs text-white/60 shrink-0" data-testid="text-track-name">
+            {trackName ? trackName.replace(/\.[^/.]+$/, "") : "No Track"}
+          </div>
+
+          <span className="text-[11px] md:text-xs text-muted-foreground font-mono w-10 md:w-12 text-right shrink-0" data-testid="text-current-time">
+            {formatTime(currentTime)}
+          </span>
+
+          <div className="flex-1 min-w-0">
+            <Slider
+              min={0}
+              max={duration || 1}
+              step={0.1}
+              value={[currentTime]}
+              onValueChange={([val]) => onSeek?.(val)}
+              className="w-full"
+              data-testid="slider-seek"
+            />
+          </div>
+
+          <span className="text-[11px] md:text-xs text-muted-foreground font-mono w-10 md:w-12 shrink-0" data-testid="text-duration">
+            {formatTime(duration)}
+          </span>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => onVolumeChange?.(volume > 0 ? 0 : 1)}
+              className="text-white/60 hover:text-white transition-colors"
+              data-testid="button-volume-toggle"
+            >
+              {volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            </button>
+            <Slider
+              min={0}
+              max={1}
+              step={0.01}
+              value={[volume]}
+              onValueChange={([val]) => onVolumeChange?.(val)}
+              className="w-16 md:w-24"
+              data-testid="slider-volume"
+            />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function CreateTabContent({
+  settings,
+  setSettings,
+  updateSetting,
+  colorSettings,
+  updateColorSetting,
+  displayThumbnail,
+  isAnalyzing,
+  analysis,
+  applyAIPalette,
+  thumbnailInputRef,
+  zoom,
+  onZoomChange,
+}: {
+  settings: UIControlsProps["settings"];
+  setSettings: UIControlsProps["setSettings"];
+  updateSetting: <K extends keyof UIControlsProps["settings"]>(key: K, value: UIControlsProps["settings"][K]) => void;
+  colorSettings: ColorSettings;
+  updateColorSetting: <K extends keyof ColorSettings>(key: K, value: ColorSettings[K]) => void;
+  displayThumbnail: string | null | undefined;
+  isAnalyzing: boolean;
+  analysis: ThumbnailAnalysis | null;
+  applyAIPalette: () => void;
+  thumbnailInputRef: React.RefObject<HTMLInputElement | null>;
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-30 pointer-events-none" style={{ top: '52px', bottom: '52px' }}>
+      <div className="flex flex-col md:flex-row h-full gap-3 md:gap-0 p-3 md:p-4 overflow-y-auto md:overflow-visible pointer-events-auto md:pointer-events-none">
+        {/* Left Panel - Presets */}
+        <div className="w-full md:w-[280px] shrink-0 glass-panel rounded-xl settings-panel overflow-y-auto pointer-events-auto" style={{ maxHeight: 'calc(100vh - 130px)' }}>
+          <div className="p-4 space-y-4">
+            <h2 className="text-sm font-bold font-display uppercase tracking-widest text-white" data-testid="heading-presets">Presets</h2>
+
+            {presetCategories.map((category) => (
+              <div key={category.name} className="space-y-2">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">{category.name}</p>
+                <div className="space-y-1.5">
+                  {category.presets.map((preset) => {
+                    const IconComponent = presetIconMap[preset.icon];
+                    const isActive = settings.presetName === preset.name;
+                    return (
                       <button
-                        key={mode.id}
-                        onClick={() => updateColorSetting("mode", mode.id)}
-                        className={`px-2 py-1 rounded text-[10px] transition-all ${
-                          colorSettings.mode === mode.id
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-white/10 text-white/60 hover:bg-white/20"
+                        key={preset.name}
+                        onClick={() => setSettings((prev: typeof settings) => ({ ...prev, presetName: preset.name }))}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                          isActive
+                            ? "bg-white/10 border border-primary/60 text-white"
+                            : "bg-white/5 border border-white/10 text-white/70 hover:bg-white/10"
                         }`}
-                        title={mode.description}
-                        data-testid={`button-color-mode-${mode.id}`}
+                        data-testid={`button-preset-${preset.shortName.toLowerCase()}`}
                       >
-                        {mode.name}
+                        {IconComponent && <IconComponent className={`w-4 h-4 shrink-0 ${isActive ? 'text-primary' : 'text-white/40'}`} />}
+                        <div className="text-left">
+                          <p className="text-xs font-medium">{preset.name}</p>
+                          <p className="text-[10px] text-muted-foreground">Visual preset</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            <div className="h-px bg-white/10" />
+
+            {/* Color Mode Selector */}
+            <div className="space-y-3">
+              <Label className="text-xs uppercase tracking-widest text-accent font-bold">Color Mode</Label>
+              <div className="flex gap-1 flex-wrap">
+                {colorModes.filter(m => m.id !== "ai" && m.id !== "custom").map((mode) => (
+                  <button
+                    key={mode.id}
+                    onClick={() => updateColorSetting("mode", mode.id)}
+                    className={`px-2 py-1 rounded text-[10px] transition-all ${
+                      colorSettings.mode === mode.id
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-white/10 text-white/60 hover:bg-white/20"
+                    }`}
+                    data-testid={`button-color-mode-${mode.id}`}
+                  >
+                    {mode.name}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-2 items-center flex-wrap">
+                {(colorSettings.mode === "single" || colorSettings.mode === "gradient" || colorSettings.mode === "triadic") && (
+                  <>
+                    <input
+                      type="color"
+                      value={colorSettings.primaryColor}
+                      onChange={(e) => updateColorSetting("primaryColor", e.target.value)}
+                      className="w-7 h-7 rounded cursor-pointer border-0"
+                      data-testid="input-color-primary"
+                    />
+                    {(colorSettings.mode === "gradient" || colorSettings.mode === "triadic") && (
+                      <input
+                        type="color"
+                        value={colorSettings.secondaryColor}
+                        onChange={(e) => updateColorSetting("secondaryColor", e.target.value)}
+                        className="w-7 h-7 rounded cursor-pointer border-0"
+                        data-testid="input-color-secondary"
+                      />
+                    )}
+                    {colorSettings.mode === "triadic" && (
+                      <input
+                        type="color"
+                        value={colorSettings.tertiaryColor}
+                        onChange={(e) => updateColorSetting("tertiaryColor", e.target.value)}
+                        className="w-7 h-7 rounded cursor-pointer border-0"
+                        data-testid="input-color-tertiary"
+                      />
+                    )}
+                  </>
+                )}
+
+                {colorSettings.mode === "mood" && (
+                  <div className="flex gap-1 flex-wrap">
+                    {moodPresets.map((mood) => (
+                      <button
+                        key={mood.id}
+                        onClick={() => updateColorSetting("moodPreset", mood.id)}
+                        className={`px-2 py-1 rounded text-[10px] transition-all ${
+                          colorSettings.moodPreset === mood.id
+                            ? "ring-1 ring-white"
+                            : "opacity-50 hover:opacity-80"
+                        }`}
+                        style={{ background: `linear-gradient(135deg, ${mood.colors[0]}, ${mood.colors[1]})` }}
+                        data-testid={`button-mood-${mood.id}`}
+                      >
+                        {mood.name}
                       </button>
                     ))}
                   </div>
-                  
-                  {/* Color Pickers / Options based on mode */}
-                  <div className="flex gap-2 items-center flex-wrap">
-                    {(colorSettings.mode === "single" || colorSettings.mode === "gradient" || colorSettings.mode === "triadic") && (
-                      <>
-                        <input
-                          type="color"
-                          value={colorSettings.primaryColor}
-                          onChange={(e) => updateColorSetting("primaryColor", e.target.value)}
-                          className="w-7 h-7 rounded cursor-pointer border-0"
-                          title="Primary Color"
-                          data-testid="input-color-primary"
-                        />
-                        {(colorSettings.mode === "gradient" || colorSettings.mode === "triadic") && (
-                          <input
-                            type="color"
-                            value={colorSettings.secondaryColor}
-                            onChange={(e) => updateColorSetting("secondaryColor", e.target.value)}
-                            className="w-7 h-7 rounded cursor-pointer border-0"
-                            title="Secondary Color"
-                            data-testid="input-color-secondary"
-                          />
-                        )}
-                        {colorSettings.mode === "triadic" && (
-                          <input
-                            type="color"
-                            value={colorSettings.tertiaryColor}
-                            onChange={(e) => updateColorSetting("tertiaryColor", e.target.value)}
-                            className="w-7 h-7 rounded cursor-pointer border-0"
-                            title="Tertiary Color"
-                            data-testid="input-color-tertiary"
-                          />
-                        )}
-                      </>
-                    )}
-                    
-                    {colorSettings.mode === "mood" && (
-                      <div className="flex gap-1 flex-wrap">
-                        {moodPresets.map((mood) => (
-                          <button
-                            key={mood.id}
-                            onClick={() => updateColorSetting("moodPreset", mood.id)}
-                            className={`px-2 py-1 rounded text-[10px] transition-all ${
-                              colorSettings.moodPreset === mood.id
-                                ? "ring-1 ring-white"
-                                : "opacity-50 hover:opacity-80"
-                            }`}
-                            style={{ background: `linear-gradient(135deg, ${mood.colors[0]}, ${mood.colors[1]})` }}
-                            data-testid={`button-mood-${mood.id}`}
-                          >
-                            {mood.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {colorSettings.mode === "spectrum" && (
-                      <div className="flex-1 flex items-center gap-2">
-                        <span className="text-[10px] text-muted-foreground">Speed</span>
-                        <Slider
-                          min={0.1} max={3} step={0.1}
-                          value={[colorSettings.spectrumSpeed]}
-                          onValueChange={([val]) => updateColorSetting("spectrumSpeed", val)}
-                          className="flex-1"
-                          data-testid="slider-spectrum-speed"
-                        />
-                        <span className="text-[10px] font-mono">{colorSettings.spectrumSpeed.toFixed(1)}x</span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Color Preview Bar */}
-                  <div className="flex gap-0.5 h-4 rounded overflow-hidden">
-                    {settings.colorPalette.map((color, idx) => (
-                      <div
-                        key={idx}
-                        className="flex-1"
-                        style={{ backgroundColor: color }}
-                      />
-                    ))}
-                  </div>
-                </div>
+                )}
 
-                {/* Sliders */}
-                <div className="col-span-3 space-y-3">
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="uppercase tracking-widest text-muted-foreground">Intensity</span>
-                      <span className="font-mono text-primary" data-testid="text-intensity-value">{settings.intensity.toFixed(1)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        onClick={() => updateSetting('intensity', Math.max(0, settings.intensity - 0.2))}
-                        data-testid="button-intensity-decrease"
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <Slider
-                        min={0} max={3} step={0.1}
-                        value={[settings.intensity]}
-                        onValueChange={([val]) => updateSetting('intensity', val)}
-                        className="flex-1 [&>.absolute]:bg-primary"
-                        data-testid="slider-intensity"
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        onClick={() => updateSetting('intensity', Math.min(3, settings.intensity + 0.2))}
-                        data-testid="button-intensity-increase"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
+                {colorSettings.mode === "spectrum" && (
+                  <div className="flex-1 flex items-center gap-2">
+                    <span className="text-[10px] text-muted-foreground">Speed</span>
+                    <Slider
+                      min={0.1} max={3} step={0.1}
+                      value={[colorSettings.spectrumSpeed]}
+                      onValueChange={([val]) => updateColorSetting("spectrumSpeed", val)}
+                      className="flex-1"
+                      data-testid="slider-spectrum-speed"
+                    />
+                    <span className="text-[10px] font-mono">{colorSettings.spectrumSpeed.toFixed(1)}x</span>
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="uppercase tracking-widest text-muted-foreground">Speed</span>
-                      <span className="font-mono text-secondary" data-testid="text-speed-value">{settings.speed.toFixed(1)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        onClick={() => updateSetting('speed', Math.max(0, settings.speed - 0.1))}
-                        data-testid="button-speed-decrease"
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
-                      <Slider
-                        min={0} max={2} step={0.1}
-                        value={[settings.speed]}
-                        onValueChange={([val]) => updateSetting('speed', val)}
-                        className="flex-1 [&>.absolute]:bg-secondary"
-                        data-testid="slider-speed"
-                      />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        onClick={() => updateSetting('speed', Math.min(2, settings.speed + 0.1))}
-                        data-testid="button-speed-increase"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Actions */}
-                <div className="col-span-2 space-y-2">
-                  <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Actions</Label>
-                  <input
-                    ref={audioInputRef}
-                    type="file"
-                    accept="audio/*"
-                    onChange={(e) => { onFileUpload(e); e.target.value = ''; }}
-                    className="hidden"
-                    data-testid="input-audio-upload"
-                  />
-                  <div className="flex flex-wrap gap-1">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="icon" 
-                          className="h-8 w-8 border-primary/50"
-                          onClick={() => audioInputRef.current?.click()}
-                          data-testid="button-audio-upload"
-                        >
-                          <Upload className="h-4 w-4 text-primary" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Upload audio</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="icon"
-                          className={`h-8 w-8 ${isRecording ? 'animate-pulse bg-destructive/20 border-destructive' : 'border-destructive/50'}`}
-                          onClick={onToggleRecording}
-                          data-testid="button-record"
-                        >
-                          <Disc className={`h-4 w-4 text-destructive ${isRecording ? 'animate-spin' : ''}`} />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>{isRecording ? "Stop recording" : "Record"}</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={onToggleFullscreen}
-                          data-testid="button-fullscreen"
-                        >
-                          {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Fullscreen (F)</p></TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={onSaveToLibrary}
-                          data-testid="button-save-library"
-                        >
-                          <FolderPlus className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent><p>Save to Library</p></TooltipContent>
-                    </Tooltip>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* Divider */}
-              <div className="h-px bg-white/10 mb-4" />
-
-              {/* Row 2: Effects & Overlays */}
-              <div className="grid grid-cols-12 gap-4">
-                
-                {/* Artwork + AI */}
-                <div className="col-span-2 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-xs uppercase tracking-widest text-accent font-bold">Artwork</Label>
-                    {isAnalyzing && <Loader2 className="w-3 h-3 text-primary animate-spin" />}
-                  </div>
-                  <input
-                    ref={thumbnailInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => { handleThumbnailUpload(e); e.target.value = ''; }}
-                    className="hidden"
-                    data-testid="input-thumbnail-upload"
-                  />
-                  <button
-                    type="button"
-                    className="relative w-16 h-16 rounded-lg border border-white/10 bg-black/50 overflow-hidden cursor-pointer p-0"
-                    onClick={() => thumbnailInputRef.current?.click()}
-                    data-testid="button-thumbnail-upload"
-                  >
-                    {displayThumbnail ? (
-                      <img src={displayThumbnail} alt="Thumbnail" className="w-full h-full object-cover pointer-events-none" data-testid="img-thumbnail" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center pointer-events-none">
-                        <ImagePlus className="w-5 h-5 opacity-30" />
-                      </div>
-                    )}
-                  </button>
-                  {isAnalyzing ? (
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="text-[10px] h-7 border-accent/50 text-accent/60 w-full"
-                      disabled
-                      data-testid="button-analyzing-ai-palette"
-                    >
-                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                      Analyzing...
-                    </Button>
-                  ) : analysis ? (
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="text-[10px] h-7 border-accent/50 text-accent w-full"
-                      onClick={applyAIPalette}
-                      data-testid="button-apply-ai-palette"
-                    >
-                      <Sparkles className="mr-1 h-3 w-3" />
-                      AI Colors
-                    </Button>
-                  ) : null}
-                </div>
-
-                {/* Filters */}
-                <div className="col-span-4 space-y-2">
-                  <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Image Filters</Label>
-                  <div className="flex gap-1 flex-wrap">
-                    {imageFilters.filter(f => f.id !== "none").map((filter) => {
-                      const isActive = settings.imageFilters.includes(filter.id);
-                      return (
-                        <button
-                          key={filter.id}
-                          onClick={() => {
-                            saveScrollPositions();
-                            const newFilters = isActive
-                              ? settings.imageFilters.filter(f => f !== filter.id)
-                              : [...settings.imageFilters.filter(f => f !== "none"), filter.id];
-                            setSettings({ 
-                              ...settings, 
-                              imageFilters: newFilters.length === 0 ? ["none"] : newFilters 
-                            });
-                          }}
-                          className={`text-[10px] py-1.5 px-2.5 rounded-md border transition-all ${
-                            isActive 
-                              ? "border-purple-500 bg-purple-500/20 text-purple-300" 
-                              : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
-                          }`}
-                          data-testid={`filter-toggle-${filter.id}`}
-                        >
-                          {filter.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Psy Overlays */}
-                <div className="col-span-4 space-y-2">
-                  <Label className="text-xs uppercase tracking-widest text-cyan-400 font-bold">Psy Overlays</Label>
-                  <div className="flex gap-1 flex-wrap">
-                    {psyOverlays.map((overlay) => {
-                      const currentOverlays = settings.psyOverlays || [];
-                      const isActive = currentOverlays.includes(overlay.id);
-                      return (
-                        <button
-                          key={overlay.id}
-                          onClick={() => {
-                            saveScrollPositions();
-                            const newOverlays = isActive
-                              ? currentOverlays.filter(o => o !== overlay.id)
-                              : [...currentOverlays, overlay.id];
-                            setSettings({ 
-                              ...settings, 
-                              psyOverlays: newOverlays 
-                            });
-                          }}
-                          className={`text-[10px] py-1.5 px-2.5 rounded-md border transition-all ${
-                            isActive 
-                              ? "border-cyan-500 bg-cyan-500/20 text-cyan-300" 
-                              : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
-                          }`}
-                          data-testid={`overlay-toggle-${overlay.id}`}
-                        >
-                          {overlay.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">Layer effects on top of presets</p>
-                </div>
-
-                {/* Glow Effect - Desktop */}
-                <div className="col-span-2 space-y-2">
-                  <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Glow</Label>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-muted-foreground">Enable</span>
-                    <Switch
-                      checked={settings.glowEnabled ?? true}
-                      onCheckedChange={(checked) => {
-                        saveScrollPositions();
-                        setSettings((prev: typeof settings) => ({ ...prev, glowEnabled: checked }));
-                      }}
-                      className="scale-75"
-                      data-testid="toggle-glow"
-                    />
-                  </div>
-                  {settings.glowEnabled && (
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-muted-foreground">Brightness</span>
-                        <span className="text-[10px] text-muted-foreground">{(settings.glowIntensity ?? 1.0).toFixed(1)}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-6 w-6 shrink-0"
-                          onClick={() => setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: Math.max(0.2, (prev.glowIntensity ?? 1.0) - 0.2) }))}
-                          data-testid="button-glow-decrease"
-                        >
-                          <Minus className="h-3 w-3" />
-                        </Button>
-                        <Slider
-                          min={0.2}
-                          max={2.0}
-                          step={0.1}
-                          value={[settings.glowIntensity ?? 1.0]}
-                          onValueChange={([val]) => {
-                            saveScrollPositions();
-                            setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: val }));
-                          }}
-                          className="flex-1"
-                          data-testid="slider-glow-intensity"
-                        />
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-6 w-6 shrink-0"
-                          onClick={() => setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: Math.min(2.0, (prev.glowIntensity ?? 1.0) + 0.2) }))}
-                          data-testid="button-glow-increase"
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  <p className="text-[10px] text-muted-foreground">Bloom/glow brightness</p>
-                </div>
-
-                {/* Save Options */}
-                <div className="col-span-2 space-y-2">
-                  <Label className="text-xs uppercase tracking-widest text-muted-foreground font-bold">Save</Label>
-                  <div className="space-y-1">
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      className="w-full justify-start text-xs h-8"
-                      onClick={onSavePreset}
-                      data-testid="button-save-preset"
-                    >
-                      <Save className="mr-2 h-3 w-3" /> Preset
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      className="w-full justify-start text-xs h-8"
-                      onClick={onSaveToLibrary}
-                      data-testid="button-save-library-alt"
-                    >
-                      <FolderPlus className="mr-2 h-3 w-3" /> Library
-                    </Button>
-                  </div>
-                  {zoom !== undefined && (
-                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <ZoomIn className="h-3 w-3" />
-                      <span>{(zoom * 100).toFixed(0)}%</span>
-                    </div>
-                  )}
-                </div>
+              <div className="flex gap-0.5 h-4 rounded overflow-hidden">
+                {settings.colorPalette.map((color, idx) => (
+                  <div key={idx} className="flex-1" style={{ backgroundColor: color }} />
+                ))}
               </div>
             </div>
+
+            <div className="h-px bg-white/10" />
+
+            {/* Image Filters */}
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Image Filters</Label>
+              <div className="flex gap-1 flex-wrap">
+                {imageFilters.filter(f => f.id !== "none").map((filter) => {
+                  const isActive = settings.imageFilters.includes(filter.id);
+                  return (
+                    <button
+                      key={filter.id}
+                      onClick={() => {
+                        const newFilters = isActive
+                          ? settings.imageFilters.filter(f => f !== filter.id)
+                          : [...settings.imageFilters.filter(f => f !== "none"), filter.id];
+                        setSettings((prev: typeof settings) => ({
+                          ...prev,
+                          imageFilters: newFilters.length === 0 ? ["none"] : newFilters
+                        }));
+                      }}
+                      className={`text-[10px] py-1.5 px-2.5 rounded-md border transition-all ${
+                        isActive
+                          ? "border-purple-500 bg-purple-500/20 text-purple-300"
+                          : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
+                      }`}
+                      data-testid={`filter-toggle-${filter.id}`}
+                    >
+                      {filter.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Psy Overlays */}
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-widest text-cyan-400 font-bold">Psy Overlays</Label>
+              <div className="flex gap-1 flex-wrap">
+                {psyOverlays.map((overlay) => {
+                  const currentOverlays = settings.psyOverlays || [];
+                  const isActive = currentOverlays.includes(overlay.id);
+                  return (
+                    <button
+                      key={overlay.id}
+                      onClick={() => {
+                        const newOverlays = isActive
+                          ? currentOverlays.filter(o => o !== overlay.id)
+                          : [...currentOverlays, overlay.id];
+                        setSettings((prev: typeof settings) => ({
+                          ...prev,
+                          psyOverlays: newOverlays
+                        }));
+                      }}
+                      className={`text-[10px] py-1.5 px-2.5 rounded-md border transition-all ${
+                        isActive
+                          ? "border-cyan-500 bg-cyan-500/20 text-cyan-300"
+                          : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
+                      }`}
+                      data-testid={`overlay-toggle-${overlay.id}`}
+                    >
+                      {overlay.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="h-px bg-white/10" />
+
+            {/* Thumbnail / Artwork Upload + AI */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label className="text-xs uppercase tracking-widest text-accent font-bold">Artwork</Label>
+                {isAnalyzing && <Loader2 className="w-3 h-3 text-primary animate-spin" />}
+              </div>
+              <button
+                type="button"
+                className="relative w-full aspect-video rounded-lg border border-white/10 bg-black/50 overflow-hidden cursor-pointer p-0"
+                onClick={() => thumbnailInputRef.current?.click()}
+                data-testid="button-thumbnail-upload"
+              >
+                {displayThumbnail ? (
+                  <img src={displayThumbnail} alt="Thumbnail" className="w-full h-full object-cover pointer-events-none" data-testid="img-thumbnail" />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center pointer-events-none gap-1">
+                    <ImagePlus className="w-6 h-6 opacity-30" />
+                    <span className="text-[10px] text-muted-foreground">Upload artwork</span>
+                  </div>
+                )}
+              </button>
+              {isAnalyzing ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-[10px] h-7 border-accent/50 text-accent/60 w-full"
+                  disabled
+                  data-testid="button-analyzing-ai-palette"
+                >
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  Analyzing...
+                </Button>
+              ) : analysis ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-[10px] h-7 border-accent/50 text-accent w-full"
+                  onClick={applyAIPalette}
+                  data-testid="button-apply-ai-palette"
+                >
+                  <Sparkles className="mr-1 h-3 w-3" />
+                  AI Colors
+                </Button>
+              ) : null}
+            </div>
           </div>
+        </div>
+
+        {/* Spacer pushes right panel to right on desktop */}
+        <div className="hidden md:block flex-1" />
+
+        {/* Right Panel - Controls */}
+        <div className="w-full md:w-[280px] shrink-0 glass-panel rounded-xl settings-panel overflow-y-auto pointer-events-auto" style={{ maxHeight: 'calc(100vh - 130px)' }}>
+          <div className="p-4 space-y-5">
+            <h2 className="text-sm font-bold font-display uppercase tracking-widest text-white" data-testid="heading-controls">Controls</h2>
+
+            {/* Intensity */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="uppercase tracking-widest text-muted-foreground">Intensity</span>
+                <span className="font-mono text-primary" data-testid="text-intensity-value">{Math.round(settings.intensity / 3 * 100)}%</span>
+              </div>
+              <Slider
+                min={0} max={3} step={0.1}
+                value={[settings.intensity]}
+                onValueChange={([val]) => updateSetting('intensity', val)}
+                className="w-full"
+                data-testid="slider-intensity"
+              />
+            </div>
+
+            {/* Speed */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="uppercase tracking-widest text-muted-foreground">Speed</span>
+                <span className="font-mono text-green-400" data-testid="text-speed-value">{Math.round(settings.speed / 2 * 100)}%</span>
+              </div>
+              <Slider
+                min={0} max={2} step={0.1}
+                value={[settings.speed]}
+                onValueChange={([val]) => updateSetting('speed', val)}
+                className="w-full"
+                data-testid="slider-speed"
+              />
+            </div>
+
+            {/* Glow */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="uppercase tracking-widest text-muted-foreground">Glow</span>
+                <span className="font-mono text-blue-400" data-testid="text-glow-value">{Math.round((settings.glowIntensity ?? 1.0) / 2 * 100)}%</span>
+              </div>
+              <Slider
+                min={0.2} max={2.0} step={0.1}
+                value={[settings.glowIntensity ?? 1.0]}
+                onValueChange={([val]) => {
+                  setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: val }));
+                }}
+                className="w-full"
+                data-testid="slider-glow-intensity"
+              />
+            </div>
+
+            {/* Zoom */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="uppercase tracking-widest text-muted-foreground">Zoom</span>
+                <span className="font-mono text-amber-400" data-testid="text-zoom-value">{zoom !== undefined ? Math.round(zoom * 100) : 100}%</span>
+              </div>
+              <Slider
+                min={50} max={300} step={1}
+                value={[zoom !== undefined ? zoom * 100 : 100]}
+                onValueChange={([val]) => onZoomChange?.(val / 100)}
+                className="w-full"
+                data-testid="slider-zoom"
+              />
+            </div>
+
+            <div className="h-px bg-white/10" />
+
+            {/* Dark Overlay Toggle */}
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Dark Overlay</Label>
+              <Switch
+                checked={settings.trailsOn ?? false}
+                onCheckedChange={(checked) => {
+                  setSettings((prev: typeof settings) => ({ ...prev, trailsOn: checked }));
+                }}
+                data-testid="toggle-dark-overlay"
+              />
+            </div>
+
+            {/* Motion Trails Toggle */}
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Motion Trails</Label>
+              <Switch
+                checked={(settings.trailsOn ?? false) && (settings.trailsAmount ?? 0) > 0}
+                onCheckedChange={(checked) => {
+                  setSettings((prev: typeof settings) => ({
+                    ...prev,
+                    trailsOn: checked,
+                    trailsAmount: checked ? 0.75 : 0
+                  }));
+                }}
+                data-testid="toggle-motion-trails"
+              />
+            </div>
+
+            {/* Glow Enable Toggle */}
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Glow Enable</Label>
+              <Switch
+                checked={settings.glowEnabled ?? true}
+                onCheckedChange={(checked) => {
+                  setSettings((prev: typeof settings) => ({ ...prev, glowEnabled: checked }));
+                }}
+                data-testid="toggle-glow"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
+}
+
+function PerformTabContent({
+  settings,
+  updateSetting,
+  zoom,
+  onZoomChange,
+}: {
+  settings: UIControlsProps["settings"];
+  updateSetting: <K extends keyof UIControlsProps["settings"]>(key: K, value: UIControlsProps["settings"][K]) => void;
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
+}) {
+  const cards = [
+    {
+      label: "Intensity",
+      value: Math.round(settings.intensity / 3 * 100),
+      color: "text-primary",
+      min: 0,
+      max: 3,
+      step: 0.1,
+      current: settings.intensity,
+      onChange: (val: number) => updateSetting('intensity', val),
+      testId: "perform-intensity",
+    },
+    {
+      label: "Speed",
+      value: Math.round(settings.speed / 2 * 100),
+      color: "text-green-400",
+      min: 0,
+      max: 2,
+      step: 0.1,
+      current: settings.speed,
+      onChange: (val: number) => updateSetting('speed', val),
+      testId: "perform-speed",
+    },
+    {
+      label: "Glow",
+      value: Math.round((settings.glowIntensity ?? 1.0) / 2 * 100),
+      color: "text-blue-400",
+      min: 0.2,
+      max: 2.0,
+      step: 0.1,
+      current: settings.glowIntensity ?? 1.0,
+      onChange: (val: number) => updateSetting('glowIntensity' as any, val),
+      testId: "perform-glow",
+    },
+    {
+      label: "Zoom",
+      value: zoom !== undefined ? Math.round(zoom * 100) : 100,
+      color: "text-amber-400",
+      min: 50,
+      max: 300,
+      step: 1,
+      current: zoom !== undefined ? zoom * 100 : 100,
+      onChange: (val: number) => onZoomChange?.(val / 100),
+      testId: "perform-zoom",
+    },
+  ];
 
   return (
-    <>
-      <DesktopBottomPanel />
-      <MobileBottomSheet />
-      <MobileFloatingControls />
-    </>
+    <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none" style={{ top: '52px', bottom: '52px' }}>
+      <div className="grid grid-cols-2 gap-3 md:gap-4 p-4 pointer-events-auto max-w-lg w-full">
+        {cards.map((card) => (
+          <div
+            key={card.testId}
+            className="glass-panel rounded-xl border border-white/10 p-4 md:p-5 space-y-3"
+            data-testid={`card-${card.testId}`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs uppercase tracking-widest text-muted-foreground">{card.label}</span>
+              <span className={`text-lg md:text-xl font-bold font-mono ${card.color}`}>{card.value}%</span>
+            </div>
+            <Slider
+              min={card.min}
+              max={card.max}
+              step={card.step}
+              value={[card.current]}
+              onValueChange={([val]) => card.onChange(val)}
+              className="w-full"
+              data-testid={`slider-${card.testId}`}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RecordTabContent({
+  isRecording,
+  onToggleRecording,
+  recordingQuality,
+  onRecordingQualityChange,
+  onSaveToLibrary,
+  isFullscreen,
+  onToggleFullscreen,
+}: {
+  isRecording: boolean;
+  onToggleRecording: () => void;
+  recordingQuality: "1080p" | "2k" | "4k";
+  onRecordingQualityChange?: (quality: "1080p" | "2k" | "4k") => void;
+  onSaveToLibrary?: () => void;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none" style={{ top: '52px', bottom: '52px' }}>
+      <div className="glass-panel rounded-xl border border-white/10 p-6 md:p-8 pointer-events-auto w-[320px] md:w-[360px] space-y-6">
+        <h2 className="text-sm font-bold font-display uppercase tracking-widest text-white text-center" data-testid="heading-record">Recording</h2>
+
+        {/* Quality Selector */}
+        <div className="space-y-2">
+          <Label className="text-xs uppercase tracking-widest text-muted-foreground">Quality</Label>
+          <div className="flex gap-2">
+            {(["1080p", "2k", "4k"] as const).map((q) => (
+              <Button
+                key={q}
+                variant={recordingQuality === q ? "default" : "outline"}
+                size="sm"
+                className="flex-1 text-xs"
+                onClick={() => onRecordingQualityChange?.(q)}
+                data-testid={`button-quality-${q}`}
+              >
+                {q.toUpperCase()}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Record Button */}
+        <div className="flex justify-center">
+          <button
+            onClick={onToggleRecording}
+            className={`w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center transition-all ${
+              isRecording
+                ? "bg-destructive/30 border-2 border-destructive animate-pulse"
+                : "bg-destructive/20 border-2 border-destructive/50 hover:bg-destructive/30"
+            }`}
+            data-testid="button-record"
+          >
+            <Disc className={`w-6 h-6 md:w-8 md:h-8 text-destructive ${isRecording ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+        <p className="text-center text-xs text-muted-foreground">{isRecording ? "Recording... tap to stop" : "Tap to start recording"}</p>
+
+        {/* Save + Fullscreen */}
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={onSaveToLibrary}
+            data-testid="button-save-library"
+          >
+            <FolderPlus className="mr-2 h-4 w-4" />
+            Save
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={onToggleFullscreen}
+            data-testid="button-fullscreen"
+          >
+            {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
