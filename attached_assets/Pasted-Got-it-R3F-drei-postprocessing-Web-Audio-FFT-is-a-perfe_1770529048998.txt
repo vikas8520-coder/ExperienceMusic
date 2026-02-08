@@ -1,0 +1,650 @@
+Got it — R3F + drei + postprocessing + Web Audio FFT is a perfect setup for a **data-driven preset engine**.
+
+Below you’ll get **three concrete, copy/paste-ready pieces**:
+
+1. **Preset engine hook** (`usePresetEngine`) that runs init/update/dispose and feeds uniforms + audio into presets
+2. **One real preset**: `MandelbrotPreset` (shader2d) using an R3F fullscreen plane + GLSL fragment shader
+3. **UI plan implementation**: a `ControlPanel` that auto-renders sliders/toggles from `uniformSpecs` + a Perform macro extractor
+
+Everything is designed so adding a new fractal is basically: **create a new preset file + specs**.
+
+---
+
+## 1) Engine: preset lifecycle + uniforms + audio
+
+### `engine/presets/types.ts`
+
+```ts
+export type AudioFeatures = {
+  rms: number;    // 0..1
+  bass: number;
+  mid: number;
+  treble: number;
+  beat: number;   // 0..1 spike
+  spectrum?: Float32Array; // optional N bins
+};
+
+export type PresetContext = {
+  now: number;
+  dt: number;
+  width: number;
+  height: number;
+  dpr: number;
+  quality: "low" | "med" | "high";
+  isMobile: boolean;
+};
+
+export type UniformType =
+  | "float"
+  | "int"
+  | "bool"
+  | "vec2"
+  | "vec3"
+  | "vec4"
+  | "color";
+
+export type UniformSpec = {
+  key: string;
+  label: string;
+  type: UniformType;
+
+  min?: number;
+  max?: number;
+  step?: number;
+
+  options?: { label: string; value: any }[];
+  group?: "Fractal" | "Color" | "Motion" | "Audio" | "Quality" | "Overlay";
+
+  default: any;
+  macro?: boolean;
+
+  visibleIf?: (uniforms: Record<string, any>) => boolean;
+  transform?: (v: any) => any;
+};
+
+export type UniformValues = Record<string, any>;
+
+export interface FractalPreset {
+  id: string;
+  name: string;
+  category:
+    | "Fractals/Complex"
+    | "Fractals/Geometry"
+    | "Fractals/3D"
+    | "Fractals/Noise";
+
+  kind: "shader2d" | "geometry" | "raymarch3d";
+
+  uniformSpecs: UniformSpec[];
+
+  init(ctx: PresetContext): Promise<void> | void;
+  update(args: {
+    ctx: PresetContext;
+    audio: AudioFeatures;
+    uniforms: UniformValues;
+    state: any;
+  }): void;
+  dispose(ctx: PresetContext): void;
+
+  // Optional: preset-specific render component hook
+  // Use this if the preset needs to render R3F objects.
+  Render?: React.FC<{ uniforms: UniformValues; state: any }>;
+}
+```
+
+### `engine/presets/usePresetEngine.ts`
+
+```ts
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { AudioFeatures, FractalPreset, PresetContext, UniformValues } from "./types";
+
+// helper: build default uniforms from specs
+function buildDefaults(preset: FractalPreset): UniformValues {
+  const u: UniformValues = {};
+  for (const spec of preset.uniformSpecs) u[spec.key] = spec.default;
+  return u;
+}
+
+export function usePresetEngine(opts: {
+  preset: FractalPreset;
+  audio: AudioFeatures;
+  ctx: PresetContext;
+}) {
+  const { preset, audio, ctx } = opts;
+
+  const [uniforms, setUniforms] = useState<UniformValues>(() => buildDefaults(preset));
+  const stateRef = useRef<any>({});
+  const presetRef = useRef<FractalPreset | null>(null);
+
+  // When preset changes: dispose old, init new, reset defaults
+  useEffect(() => {
+    const prev = presetRef.current;
+    if (prev) {
+      try { prev.dispose(ctx); } catch {}
+    }
+
+    presetRef.current = preset;
+    stateRef.current = {};
+
+    setUniforms(buildDefaults(preset));
+
+    (async () => {
+      try { await preset.init(ctx); } catch (e) { console.error("preset.init failed", e); }
+    })();
+
+    return () => {
+      try { preset.dispose(ctx); } catch {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preset.id]);
+
+  // Per-frame update caller — you call this from useFrame
+  const tick = () => {
+    const p = presetRef.current;
+    if (!p) return;
+    p.update({ ctx, audio, uniforms, state: stateRef.current });
+  };
+
+  // UI helpers
+  const setUniform = (key: string, value: any) => {
+    setUniforms((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const macros = useMemo(() => {
+    return preset.uniformSpecs.filter((s) => s.macro);
+  }, [preset]);
+
+  return {
+    uniforms,
+    setUniform,
+    tick,
+    state: stateRef.current,
+    Render: preset.Render,
+    macros,
+  };
+}
+```
+
+---
+
+## 2) Mandelbrot fractal preset (shader2d) for R3F
+
+This renders a **fullscreen plane** in your R3F scene (orthographic camera recommended or just place it in front).
+
+### `engine/presets/fractals/MandelbrotPreset.tsx`
+
+```tsx
+import * as React from "react";
+import * as THREE from "three";
+import { useFrame, useThree } from "@react-three/fiber";
+import type { FractalPreset, PresetContext, UniformValues } from "../types";
+
+const vert = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const frag = /* glsl */ `
+precision highp float;
+
+varying vec2 vUv;
+
+uniform vec2  u_resolution;
+uniform float u_time;
+
+// fractal controls
+uniform vec2  u_center;
+uniform float u_zoom;
+uniform float u_rotation;
+uniform int   u_iterations;
+uniform float u_power;
+
+// audio controls
+uniform float u_audioGain;
+uniform float u_bassImpact;
+uniform float u_midMorph;
+uniform float u_trebleShimmer;
+uniform float u_beatPunch;
+
+// palette
+uniform vec3 u_paletteA;
+uniform vec3 u_paletteB;
+uniform vec3 u_paletteC;
+uniform float u_colorCycle;
+
+// rotate helper
+mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
+
+// smooth palette
+vec3 palette(float t) {
+  // 3-stop blend with subtle cycling
+  t = fract(t + u_colorCycle);
+  vec3 a = mix(u_paletteA, u_paletteB, smoothstep(0.0, 0.5, t));
+  vec3 b = mix(u_paletteB, u_paletteC, smoothstep(0.5, 1.0, t));
+  return mix(a, b, step(0.5, t));
+}
+
+void main() {
+  // Normalize coordinates to -1..1 with aspect correction
+  vec2 uv = vUv * 2.0 - 1.0;
+  uv.x *= u_resolution.x / u_resolution.y;
+
+  // Audio modulation (stable, musical)
+  float zoomPunch = 1.0 + (u_bassImpact * u_audioGain) * 0.25;
+  float morph = (u_midMorph * u_audioGain) * 0.15;
+  float shimmer = (u_trebleShimmer * u_audioGain) * 0.15;
+
+  // Apply rotation + zoom + center
+  uv = rot(u_rotation + u_time * 0.02 * morph) * uv;
+  vec2 c = u_center + uv / (u_zoom * zoomPunch);
+
+  // Mandelbrot with "power" (Multibrot-like)
+  vec2 z = vec2(0.0);
+  float it = 0.0;
+
+  // escape-time
+  for (int i = 0; i < 2000; i++) {
+    if (i >= u_iterations) break;
+
+    // complex power: z = z^p + c (approx for p ~ 2..8)
+    // For simplicity and speed, implement p=2 path + small morphing
+    // You can replace with a true polar power if you want later.
+    vec2 z2 = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y);
+    z = mix(z2, z2 + 0.15*vec2(sin(u_time), cos(u_time)), clamp(u_power-2.0, 0.0, 1.0));
+    z += c;
+
+    if (dot(z,z) > 4.0) { it = float(i); break; }
+    it = float(i);
+  }
+
+  // Smooth coloring-ish
+  float t = it / float(u_iterations);
+  t = pow(t, 0.85);
+
+  // Beat flash on edges
+  float edge = smoothstep(0.2, 1.0, t);
+  float beat = u_beatPunch * 0.35;
+  vec3 col = palette(t + shimmer * sin(8.0*u_time + t*12.0));
+  col += beat * edge;
+
+  // Dark interior
+  col *= smoothstep(0.02, 0.25, t);
+
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+function vec3FromHex(hex: string) {
+  const c = new THREE.Color(hex);
+  return new THREE.Vector3(c.r, c.g, c.b);
+}
+
+const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ uniforms }) => {
+  const matRef = React.useRef<THREE.ShaderMaterial>(null!);
+  const { size, viewport } = useThree();
+
+  useFrame(({ clock }) => {
+    const m = matRef.current;
+    if (!m) return;
+
+    // core
+    m.uniforms.u_time.value = clock.getElapsedTime();
+    m.uniforms.u_resolution.value.set(size.width, size.height);
+
+    // user uniforms -> shader uniforms
+    m.uniforms.u_center.value.set(uniforms.u_center[0], uniforms.u_center[1]);
+    m.uniforms.u_zoom.value = uniforms.u_zoom;
+    m.uniforms.u_rotation.value = uniforms.u_rotation;
+    m.uniforms.u_iterations.value = uniforms.u_iterations;
+    m.uniforms.u_power.value = uniforms.u_power;
+
+    m.uniforms.u_audioGain.value = uniforms.u_audioGain;
+    m.uniforms.u_bassImpact.value = uniforms.u_bassImpact;
+    m.uniforms.u_midMorph.value = uniforms.u_midMorph;
+    m.uniforms.u_trebleShimmer.value = uniforms.u_trebleShimmer;
+    m.uniforms.u_beatPunch.value = uniforms.u_beatPunch;
+
+    const pa = vec3FromHex(uniforms.u_paletteA);
+    const pb = vec3FromHex(uniforms.u_paletteB);
+    const pc = vec3FromHex(uniforms.u_paletteC);
+    m.uniforms.u_paletteA.value.copy(pa);
+    m.uniforms.u_paletteB.value.copy(pb);
+    m.uniforms.u_paletteC.value.copy(pc);
+    m.uniforms.u_colorCycle.value = uniforms.u_colorCycle;
+  });
+
+  return (
+    <mesh position={[0, 0, 0]}>
+      {/* Fullscreen plane: scale to viewport */}
+      <planeGeometry args={[viewport.width, viewport.height]} />
+      <shaderMaterial
+        ref={matRef}
+        vertexShader={vert}
+        fragmentShader={frag}
+        uniforms={{
+          u_resolution: { value: new THREE.Vector2(1, 1) },
+          u_time: { value: 0 },
+
+          u_center: { value: new THREE.Vector2(0, 0) },
+          u_zoom: { value: 1 },
+          u_rotation: { value: 0 },
+          u_iterations: { value: 200 },
+          u_power: { value: 2 },
+
+          u_audioGain: { value: 1 },
+          u_bassImpact: { value: 0.7 },
+          u_midMorph: { value: 0.5 },
+          u_trebleShimmer: { value: 0.5 },
+          u_beatPunch: { value: 0.6 },
+
+          u_paletteA: { value: new THREE.Vector3(0.2, 0.1, 0.5) },
+          u_paletteB: { value: new THREE.Vector3(0.0, 0.8, 0.9) },
+          u_paletteC: { value: new THREE.Vector3(1.0, 0.5, 0.1) },
+          u_colorCycle: { value: 0.0 },
+        }}
+      />
+    </mesh>
+  );
+};
+
+export const MandelbrotPreset: FractalPreset = {
+  id: "mandelbrot",
+  name: "Mandelbrot Explorer",
+  category: "Fractals/Complex",
+  kind: "shader2d",
+
+  uniformSpecs: [
+    { key: "u_center", label: "Center", type: "vec2", group: "Fractal", default: [0, 0] },
+    { key: "u_zoom", label: "Zoom", type: "float", group: "Fractal", min: 0.5, max: 8, step: 0.01, default: 1.6, macro: true },
+    { key: "u_rotation", label: "Rotation", type: "float", group: "Fractal", min: -3.14, max: 3.14, step: 0.001, default: 0 },
+    { key: "u_iterations", label: "Iterations", type: "int", group: "Fractal", min: 50, max: 800, step: 1, default: 220 },
+    { key: "u_power", label: "Power", type: "float", group: "Fractal", min: 2, max: 4, step: 0.01, default: 2.0 },
+
+    { key: "u_paletteA", label: "Palette A", type: "color", group: "Color", default: "#2f1a86" },
+    { key: "u_paletteB", label: "Palette B", type: "color", group: "Color", default: "#00d7ff" },
+    { key: "u_paletteC", label: "Palette C", type: "color", group: "Color", default: "#ff7a18" },
+    { key: "u_colorCycle", label: "Color Cycle", type: "float", group: "Color", min: 0, max: 1, step: 0.001, default: 0.0, macro: true },
+
+    { key: "u_audioGain", label: "Audio Gain", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 1.0, macro: true },
+    { key: "u_bassImpact", label: "Bass Impact", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 0.8, macro: true },
+    { key: "u_midMorph", label: "Mid Morph", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 0.6, macro: true },
+    { key: "u_trebleShimmer", label: "Treble Shimmer", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 0.6, macro: true },
+    { key: "u_beatPunch", label: "Beat Punch", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 0.8 },
+  ],
+
+  init(_ctx: PresetContext) {},
+  update() {},
+  dispose() {},
+
+  Render: MandelbrotRender,
+};
+```
+
+> Notes:
+
+* This preset is “shader2d”: it **owns its render mesh** but doesn’t own the whole scene.
+* Your audio system will drive `uniforms.u_bassImpact`, `u_midMorph`, etc. (or you let users tune them).
+
+---
+
+## 3) ControlPanel: auto-render from `uniformSpecs`
+
+This shows how to build **Create Mode → Right Panel** without hardcoding each control.
+
+### `components/ControlPanel.tsx`
+
+```tsx
+import React from "react";
+import type { UniformSpec, UniformValues } from "../engine/presets/types";
+
+function isVisible(spec: UniformSpec, u: UniformValues) {
+  return spec.visibleIf ? spec.visibleIf(u) : true;
+}
+
+export function ControlPanel(props: {
+  specs: UniformSpec[];
+  uniforms: UniformValues;
+  setUniform: (key: string, value: any) => void;
+}) {
+  const { specs, uniforms, setUniform } = props;
+
+  // group in order
+  const groups: Array<NonNullable<UniformSpec["group"]>> = ["Fractal", "Color", "Audio", "Motion", "Quality", "Overlay"];
+
+  return (
+    <div className="w-[360px] p-3 space-y-3">
+      {groups.map((g) => {
+        const items = specs.filter((s) => s.group === g && isVisible(s, uniforms));
+        if (!items.length) return null;
+
+        return (
+          <section key={g} className="rounded-xl border border-white/10 p-3">
+            <div className="text-sm font-semibold mb-2">{g}</div>
+            <div className="space-y-3">
+              {items.map((spec) => (
+                <ControlRow
+                  key={spec.key}
+                  spec={spec}
+                  value={uniforms[spec.key]}
+                  onChange={(v) => setUniform(spec.key, spec.transform ? spec.transform(v) : v)}
+                />
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function ControlRow(props: {
+  spec: UniformSpec;
+  value: any;
+  onChange: (v: any) => void;
+}) {
+  const { spec, value, onChange } = props;
+
+  if (spec.type === "bool") {
+    return (
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-sm">{spec.label}</span>
+        <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />
+      </label>
+    );
+  }
+
+  if (spec.type === "color") {
+    return (
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-sm">{spec.label}</span>
+        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} />
+      </label>
+    );
+  }
+
+  if (spec.type === "int" || spec.type === "float") {
+    const min = spec.min ?? 0;
+    const max = spec.max ?? 1;
+    const step = spec.step ?? (spec.type === "int" ? 1 : 0.01);
+
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-sm">{spec.label}</span>
+          <span className="text-xs opacity-70 tabular-nums">{String(value)}</span>
+        </div>
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(spec.type === "int" ? parseInt(e.target.value, 10) : parseFloat(e.target.value))}
+          className="w-full"
+        />
+      </div>
+    );
+  }
+
+  if (spec.type === "vec2") {
+    const [x, y] = Array.isArray(value) ? value : [0, 0];
+    return (
+      <div className="space-y-2">
+        <div className="text-sm">{spec.label}</div>
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            className="w-full rounded-md border border-white/10 bg-white/5 p-2 text-sm"
+            value={x}
+            onChange={(e) => onChange([parseFloat(e.target.value), y])}
+          />
+          <input
+            className="w-full rounded-md border border-white/10 bg-white/5 p-2 text-sm"
+            value={y}
+            onChange={(e) => onChange([x, parseFloat(e.target.value)])}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+```
+
+---
+
+## Perform Mode macros (auto from `macro: true`)
+
+### `components/PerformOverlay.tsx`
+
+```tsx
+import React from "react";
+import type { UniformSpec, UniformValues } from "../engine/presets/types";
+
+export function PerformOverlay(props: {
+  macroSpecs: UniformSpec[];
+  uniforms: UniformValues;
+  setUniform: (key: string, value: any) => void;
+  maxMacros?: number;
+}) {
+  const { macroSpecs, uniforms, setUniform, maxMacros = 6 } = props;
+  const macros = macroSpecs.slice(0, maxMacros);
+
+  return (
+    <div className="absolute bottom-20 left-1/2 -translate-x-1/2 w-[min(900px,92vw)] grid grid-cols-3 gap-3 p-3">
+      {macros.map((m) => (
+        <MacroSlider
+          key={m.key}
+          label={m.label}
+          value={uniforms[m.key]}
+          min={m.min ?? 0}
+          max={m.max ?? 1}
+          step={m.step ?? 0.01}
+          onChange={(v) => setUniform(m.key, v)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function MacroSlider(props: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  const { label, value, min, max, step, onChange } = props;
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+      <div className="text-sm font-semibold mb-2">{label}</div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="w-full"
+      />
+    </div>
+  );
+}
+```
+
+---
+
+## How you wire it in your R3F scene
+
+### Example usage in a `VisualizerScene.tsx`
+
+```tsx
+import React from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import { MandelbrotPreset } from "../engine/presets/fractals/MandelbrotPreset";
+import { usePresetEngine } from "../engine/presets/usePresetEngine";
+import type { AudioFeatures } from "../engine/presets/types";
+
+export function VisualizerScene(props: { audio: AudioFeatures; mode: "listen" | "create" | "perform" | "record" }) {
+  const { audio, mode } = props;
+  const { size, gl } = useThree();
+
+  const ctx = {
+    now: performance.now() / 1000,
+    dt: 0,
+    width: size.width,
+    height: size.height,
+    dpr: gl.getPixelRatio(),
+    quality: "high" as const,
+    isMobile: false,
+  };
+
+  const engine = usePresetEngine({
+    preset: MandelbrotPreset, // swap this based on selection
+    audio,
+    ctx,
+  });
+
+  useFrame((state, delta) => {
+    ctx.now = state.clock.getElapsedTime();
+    ctx.dt = delta;
+    engine.tick();
+  });
+
+  const PresetRender = engine.Render;
+
+  return (
+    <>
+      {PresetRender ? <PresetRender uniforms={engine.uniforms} state={engine.state} /> : null}
+      {/* Postprocessing bloom etc stays global */}
+    </>
+  );
+}
+```
+
+---
+
+## UI Plan confirmation (Create vs Perform)
+
+* **Create Mode**: render `<ControlPanel specs={preset.uniformSpecs} ... />`
+* **Perform Mode**: render `<PerformOverlay macroSpecs={engine.macros} ... />`
+* **Listen/Record**: hide most UI (your existing modes)
+
+This matches your philosophy perfectly.
+
+---
+
+## Next step (tell me what you want)
+
+I can generate one of these immediately (your pick):
+
+1. **Julia Morph preset** (true Julia set with `u_juliaC` + audio-driven drift)
+2. **Burning Ship** variant
+3. A **Raymarch Mandelbulb** preset with a quality guard (steps/resolution scaling)
+4. A `PresetRegistry` + search/filter + category list that plugs into your existing preset grid
+
+Which one do you want first?
