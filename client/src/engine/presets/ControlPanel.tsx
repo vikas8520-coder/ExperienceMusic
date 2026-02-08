@@ -121,6 +121,34 @@ function Vec2Control({ spec, value, onChange }: { spec: UniformSpec; value: [num
   );
 }
 
+function Vec3Control({ spec, value, onChange }: { spec: UniformSpec; value: [number, number, number]; onChange: (v: [number, number, number]) => void }) {
+  const labels = ["X", "Y", "Z"];
+  return (
+    <div className="space-y-1.5" data-testid={`control-${spec.key}`}>
+      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{spec.label}</Label>
+      <div className="grid grid-cols-3 gap-2">
+        {labels.map((lbl, i) => (
+          <div key={lbl}>
+            <span className="text-[9px] text-white/40">{lbl}</span>
+            <Slider
+              min={spec.min ?? -2}
+              max={spec.max ?? 2}
+              step={spec.step ?? 0.01}
+              value={[value[i]]}
+              onValueChange={([v]) => {
+                const next = [...value] as [number, number, number];
+                next[i] = v;
+                onChange(next);
+              }}
+              data-testid={`slider-${spec.key}-${lbl.toLowerCase()}`}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ControlForSpec({ spec, value, onChange }: { spec: UniformSpec; value: any; onChange: (v: any) => void }) {
   switch (spec.type) {
     case "float": return <FloatControl spec={spec} value={value} onChange={onChange} />;
@@ -128,6 +156,7 @@ function ControlForSpec({ spec, value, onChange }: { spec: UniformSpec; value: a
     case "bool": return <BoolControl spec={spec} value={value} onChange={onChange} />;
     case "color": return <ColorControl spec={spec} value={value} onChange={onChange} />;
     case "vec2": return <Vec2Control spec={spec} value={value} onChange={onChange} />;
+    case "vec3": return <Vec3Control spec={spec} value={value} onChange={onChange} />;
     default: return null;
   }
 }

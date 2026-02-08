@@ -51,7 +51,8 @@ import {
   Play,
   Pause,
   Volume2,
-  VolumeX
+  VolumeX,
+  Box
 } from "lucide-react";
 
 const presetIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -71,6 +72,7 @@ const presetIconMap: Record<string, React.ComponentType<{ className?: string }>>
   rainbow: Rainbow,
   mandala: Sun,
   mandelbrot: Hexagon,
+  mandelbulb3d: Box,
 };
 
 interface UIControlsProps {

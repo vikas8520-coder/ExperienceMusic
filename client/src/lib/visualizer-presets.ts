@@ -198,6 +198,7 @@ export const presets = [
   "Rainbow Spiral",
   "Red Mandala",
   "Mandelbrot Explorer",
+  "Mandelbulb 3D",
 ] as const;
 
 export type PresetName = typeof presets[number];
@@ -238,6 +239,7 @@ export const presetCategories = [
     name: "Fractals",
     presets: [
       { name: "Mandelbrot Explorer" as PresetName, icon: "mandelbrot", shortName: "Mandelbrot" },
+      { name: "Mandelbulb 3D" as PresetName, icon: "mandelbulb3d", shortName: "Mandelbulb" },
     ],
   },
 ] as const;
