@@ -1,0 +1,206 @@
+Yep — that map() budget is the whole story. To make it smooth *and* still premium, you don’t “micro-optimize” this… you **gate expensive passes by quality** and **cut the worst offenders**:
+
+* Replace normals with **tetra (4 maps)**
+* Remove curvature normal (**-6 maps**)
+* Make AO **0–2 samples while moving**, 5 idle
+* Make soft shadows **OFF while moving**, 12–16 steps idle (not 32)
+
+Below is a drop-in shader patch that does exactly that.
+
+---
+
+# 1) Add a quality uniform
+
+```glsl
+uniform float u_quality; // 0..1  (0 = moving/perform, 1 = idle/beauty)
+```
+
+---
+
+# 2) Tetra normal (4 map calls)
+
+```glsl
+vec3 getNormalTetra(vec3 p, float eps) {
+  vec3 e1 = vec3( 1.0, -1.0, -1.0);
+  vec3 e2 = vec3(-1.0, -1.0,  1.0);
+  vec3 e3 = vec3(-1.0,  1.0, -1.0);
+  vec3 e4 = vec3( 1.0,  1.0,  1.0);
+
+  float d1 = map(p + eps * e1);
+  float d2 = map(p + eps * e2);
+  float d3 = map(p + eps * e3);
+  float d4 = map(p + eps * e4);
+
+  vec3 n = e1 * d1 + e2 * d2 + e3 * d3 + e4 * d4;
+  return normalize(n);
+}
+```
+
+---
+
+# 3) AO: quality-aware sample count (0–5)
+
+Replace your AO with this:
+
+```glsl
+float calcAO_Q(vec3 p, vec3 n, float eps) {
+  // 0 samples when moving, 2 samples mid, 5 samples high
+  float q = clamp(u_quality, 0.0, 1.0);
+
+  // Early out for performance (moving)
+  if (q < 0.35) return 1.0;
+
+  int samples = (q < 0.7) ? 2 : 5;
+
+  float ao = 0.0;
+  float weight = 1.0;
+
+  // Unrolled max loop; use break for chosen sample count
+  for (int i = 1; i <= 5; i++) {
+    if (i > samples) break;
+    float dist = eps * 2.0 * float(i);
+    float d = map(p + n * dist);
+    ao += weight * (dist - d);
+    weight *= 0.5;
+  }
+
+  // Slightly soften AO intensity at mid quality to avoid popping
+  float strength = mix(2.0, 3.0, smoothstep(0.7, 1.0, q));
+  return clamp(1.0 - ao * strength, 0.0, 1.0);
+}
+```
+
+---
+
+# 4) Soft shadows: quality-aware steps + early off
+
+Replace your shadow function with this:
+
+```glsl
+float softShadow_Q(vec3 ro, vec3 rd, float mint, float maxt, float k) {
+  float q = clamp(u_quality, 0.0, 1.0);
+
+  // OFF while moving
+  if (q < 0.55) return 1.0;
+
+  // 8 steps (mid) -> 16 steps (high). 32 is overkill for Mandelbulb.
+  int maxSteps = (q < 0.85) ? 8 : 16;
+
+  float res = 1.0;
+  float t = mint;
+
+  for (int i = 0; i < 16; i++) {
+    if (i >= maxSteps) break;
+
+    float d = map(ro + rd * t);
+
+    // IQ technique
+    res = min(res, k * d / t);
+
+    // Larger steps at mid quality to save work
+    float minStep = mix(0.04, 0.02, smoothstep(0.85, 1.0, q));
+    float maxStep = mix(0.35, 0.20, smoothstep(0.85, 1.0, q));
+    t += clamp(d, minStep, maxStep);
+
+    if (res < 0.01 || t > maxt) break;
+  }
+
+  return clamp(res, 0.0, 1.0);
+}
+```
+
+**Why this works:** shadows are the #1 “silent killer” (up to 32 extra map calls). Cutting them during motion makes the experience feel instantly smoother; restoring them when idle preserves premium look.
+
+---
+
+# 5) Remove the curvature normal (replace with cheap detail)
+
+Instead of:
+
+* `getNormal()` again
+* offset along normal
+  Do this:
+
+```glsl
+float curvatureCheap(float hitD, float eps) {
+  // Boost micro-contrast right at the surface without extra map() calls
+  return clamp(1.0 - hitD / (eps * 6.0), 0.0, 1.0);
+}
+```
+
+Use it in shading:
+
+```glsl
+float curv = curvatureCheap(hitDist, eps);
+col *= 0.92 + 0.18 * curv;
+```
+
+---
+
+# 6) Tie it together in your hit shading
+
+Where you currently do normals/AO/shadow:
+
+```glsl
+vec3 n = getNormalTetra(p, eps * 2.0);
+
+float ao = calcAO_Q(p, n, eps);
+float sh = softShadow_Q(p + n * eps * 2.0, lightDir, 0.02, 12.0, 16.0);
+
+float curv = curvatureCheap(hitDist, eps);
+
+col *= ao;
+col *= mix(1.0, sh, 0.9);       // keep some light even if shadow is harsh
+col *= 0.92 + 0.18 * curv;
+```
+
+---
+
+# 7) R3F side: compute u_quality (moving vs idle)
+
+This is the behavior you want:
+
+* Moving → `u_quality` goes toward 0 quickly
+* Idle 250ms → `u_quality` eases back to 1 slowly (no popping)
+
+```ts
+// inside your preset component
+const lastMove = useRef(performance.now());
+const quality = useRef(1);
+
+useEffect(() => {
+  const controls = controlsRef.current; // OrbitControls ref
+  if (!controls) return;
+  const onChange = () => { lastMove.current = performance.now(); };
+  controls.addEventListener("change", onChange);
+  return () => controls.removeEventListener("change", onChange);
+}, []);
+
+useFrame((_, dt) => {
+  const idle = (performance.now() - lastMove.current) > 250;
+  const target = idle ? 1 : 0;
+  const k = idle ? 0.06 : 0.22;          // fast drop, slow recover
+  quality.current = THREE.MathUtils.lerp(quality.current, target, 1 - Math.exp(-k / Math.max(dt, 1e-4)));
+  mat.uniforms.u_quality.value = quality.current;
+});
+```
+
+---
+
+# Expected map() cost reduction
+
+Before (worst case):
+
+* normals 12 + AO 5 + shadow 32 = **49 maps/hit** (plus raymarch)
+
+After:
+
+* **moving:** normal 4, AO 0, shadow 0 → **4 maps/hit** (HUGE)
+* **mid:** normal 4, AO 2, shadow 8 → **14 maps/hit**
+* **idle:** normal 4, AO 5, shadow 16 → **25 maps/hit** (still premium)
+
+That’s the difference between “stuck” and “buttery.”
+
+---
+
+If you paste your shading block (where you compute `col` from `n`, `ao`, `shadow`, and curvature), I’ll rewrite that exact section so you can drop it in with minimal edits.
