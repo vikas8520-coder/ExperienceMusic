@@ -4,9 +4,8 @@ import { OrbitControls, Sphere, shaderMaterial } from "@react-three/drei";
 import * as THREE from "three";
 import { Effects } from "./Effects";
 import { PsyTunnel as PsyTunnelShader } from "./PsyTunnel";
-import { PsyPresetLayer, type PsyPresetName } from "./PsyPresetLayer";
 import { type AudioData } from "@/hooks/use-audio-analyzer";
-import { type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
+import { type ImageFilterId } from "@/lib/visualizer-presets";
 import { isFractalPreset, getFractalPreset } from "@/engine/presets/registry";
 import { FractalPresetBridge } from "@/engine/presets/FractalPresetBridge";
 import type { UniformValues } from "@/engine/presets/types";
@@ -20,7 +19,6 @@ interface AudioVisualizerProps {
     presetName: string;
     presetEnabled?: boolean;
     imageFilters?: ImageFilterId[];
-    psyOverlays?: PsyOverlayId[];
   };
   backgroundImage?: string | null;
   zoom?: number;
@@ -3720,41 +3718,6 @@ function AudioReactiveEffects({ getAudioData, settings }: { getAudioData: () => 
   );
 }
 
-function PsyPresetWrapper({ 
-  preset, 
-  getAudioData, 
-  intensity = 1.0,
-  speed = 1.0,
-  opacity = 0.9,
-  blending = THREE.AdditiveBlending 
-}: { 
-  preset: PsyPresetName; 
-  getAudioData: () => AudioData; 
-  intensity?: number;
-  speed?: number;
-  opacity?: number;
-  blending?: THREE.Blending;
-}) {
-  const audioDataRef = useRef<AudioData>({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, dominantFreq: 200, modeIndex: 1, frequencyData: new Uint8Array(0) });
-  
-  useFrame(() => {
-    audioDataRef.current = getAudioData();
-  });
-  
-  return (
-    <PsyPresetLayer
-      preset={preset}
-      bass={audioDataRef.current.bass}
-      mid={audioDataRef.current.mid}
-      high={audioDataRef.current.high}
-      intensity={intensity}
-      speed={speed}
-      opacity={opacity}
-      blending={blending}
-    />
-  );
-}
-
 function PresetTransition({ children, presetName }: { children: React.ReactNode; presetName: string }) {
   const [opacity, setOpacity] = useState(1);
   const [currentPreset, setCurrentPreset] = useState(presetName);
@@ -3794,19 +3757,6 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1, fractal
   const [hasError, setHasError] = useState(false);
   
   const activeFilters = settings.imageFilters || ["none"];
-  const activeOverlays = settings.psyOverlays || [];
-
-  const isPsyPreset = ["Blue Tunnel", "BW Vortex", "Rainbow Spiral", "Red Mandala"].includes(settings.presetName);
-  
-  const presetToPsyPresetName = (name: string): PsyPresetName => {
-    switch (name) {
-      case "Blue Tunnel": return "blueTunnel";
-      case "BW Vortex": return "bwVortex";
-      case "Rainbow Spiral": return "rainbowSpiral";
-      case "Red Mandala": return "redMandala";
-      default: return "blueTunnel";
-    }
-  };
 
   if (hasError) {
     return <FallbackVisualizer settings={settings} backgroundImage={backgroundImage} />;
@@ -3886,31 +3836,10 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1, fractal
                 return <FractalPresetBridge preset={fp} getAudioData={getAudioData} uniforms={fractalUniforms || {}} />;
               })()}
               
-              {isPsyPreset && (
-                <PsyPresetWrapper 
-                  preset={presetToPsyPresetName(settings.presetName)} 
-                  getAudioData={getAudioData}
-                  intensity={settings.intensity}
-                  speed={settings.speed}
-                  opacity={0.95}
-                />
-              )}
             </>
           )}
         </PresetTransition>
       </ZoomableScene>
-
-      {activeOverlays.map((overlayId) => (
-        <PsyPresetWrapper
-          key={`overlay-${overlayId}`}
-          preset={overlayId as PsyPresetName}
-          getAudioData={getAudioData}
-          intensity={settings.intensity}
-          speed={settings.speed}
-          opacity={0.4}
-          blending={THREE.AdditiveBlending}
-        />
-      ))}
 
       <AudioReactiveEffects getAudioData={getAudioData} settings={settings} />
     </Canvas>

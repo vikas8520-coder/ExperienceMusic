@@ -193,10 +193,6 @@ export const presets = [
   "Water Membrane Orb",
   "Chladni Geometry",
   "Resonant Field Lines",
-  "Blue Tunnel",
-  "BW Vortex",
-  "Rainbow Spiral",
-  "Red Mandala",
   "Mandelbrot Explorer",
   "Mandelbulb 3D",
 ] as const;
@@ -227,15 +223,6 @@ export const presetCategories = [
     ],
   },
   {
-    name: "Psy Shaders",
-    presets: [
-      { name: "Blue Tunnel" as PresetName, icon: "blue", shortName: "Blue" },
-      { name: "BW Vortex" as PresetName, icon: "vortex", shortName: "B/W" },
-      { name: "Rainbow Spiral" as PresetName, icon: "rainbow", shortName: "Rainbow" },
-      { name: "Red Mandala" as PresetName, icon: "mandala", shortName: "Mandala" },
-    ],
-  },
-  {
     name: "Fractals",
     presets: [
       { name: "Mandelbrot Explorer" as PresetName, icon: "mandelbrot", shortName: "Mandelbrot" },
@@ -244,14 +231,6 @@ export const presetCategories = [
   },
 ] as const;
 
-export const psyOverlays = [
-  { name: "Blue Tunnel", id: "blueTunnel" },
-  { name: "BW Vortex", id: "bwVortex" },
-  { name: "Rainbow Spiral", id: "rainbowSpiral" },
-  { name: "Red Mandala", id: "redMandala" },
-] as const;
-
-export type PsyOverlayId = typeof psyOverlays[number]["id"];
 
 export const imageFilters = [
   { name: "None", id: "none" },
