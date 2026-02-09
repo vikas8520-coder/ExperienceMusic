@@ -1,0 +1,138 @@
+You’re right on the **aspect ratio math**: if `u_resolution` is *only* used as `res.x/res.y`, then multiplying both axes by an extra DPR **cancels out** and won’t directly increase GPU work.
+
+So if the app is freezing, the “double DPR” is not the main performance killer **in your current shader**.
+
+But it’s still worth cleaning up (for future AA/dithering/post FX), and more importantly: **your Canvas is forcing DPR ≥ 2**, which *absolutely* will make Mandelbulb feel stuck even with correct aspect math.
+
+Here are the *real* reasons your Mandelbulb is choking, based on your config:
+
+---
+
+## The real bottleneck (what’s actually freezing you)
+
+### 1) Canvas DPR minimum is 2 (massive cost multiplier)
+
+Even if your shader ignores absolute resolution for math, the fragment shader still runs **per framebuffer pixel**.
+
+With `dpr={[2, min(dpr,3)]}`, you’re rendering **4× to 9× more pixels** than DPR 1.
+
+For a full-screen raymarch:
+
+* DPR 2 = ~4× pixel cost
+* DPR 3 = ~9× pixel cost
+
+That alone can turn 60fps into 5fps or a hard stall.
+
+✅ This is the #1 reason.
+
+**Fix:** allow DPR to drop to 1 (or below during motion).
+
+---
+
+### 2) Steps × iterations × trig per step is simply heavy
+
+Your defaults:
+
+* `u_maxSteps=150`
+* `u_fractalIter=12`
+* Mandelbulb DE has `pow + sin/cos + acos + atan` inside iteration loop
+
+That’s heavy even at DPR 1.
+
+Combine with DPR ≥ 2 and you get “everything stuck.”
+
+✅ This is the #2 reason.
+
+---
+
+### 3) Understepping (×0.9) increases steps
+
+`totalDist += d * 0.9` means you’re doing extra steps everywhere.
+
+✅ This is the #3 reason.
+
+---
+
+## What to do (fast path to smooth + premium)
+
+### A) Fix DPR strategy for this preset (do this first)
+
+Option 1 (simple global change):
+
+```tsx
+<Canvas dpr={[1, Math.min(window.devicePixelRatio, 2)]} />
+```
+
+Option 2 (best: preset-specific DPR cap):
+When Mandelbulb activates:
+
+```ts
+const prev = gl.getPixelRatio();
+gl.setPixelRatio(1); // or 1.25
+return () => gl.setPixelRatio(prev);
+```
+
+And if you want it extra premium:
+
+* While user is moving camera: DPR 0.75–1.0
+* When idle: DPR 1.25–1.5
+
+---
+
+### B) Start Mandelbulb with safe defaults (then let users crank it)
+
+Recommended defaults:
+
+* `u_maxSteps`: **90–110**
+* `u_fractalIter`: **9–10**
+* `u_maxDist`: 25–35
+* `u_epsilonBase`: 0.002–0.004
+
+---
+
+### C) Remove understepping
+
+Change:
+
+```glsl
+totalDist += d * 0.9;
+```
+
+to:
+
+```glsl
+totalDist += d;
+```
+
+If you need safety, do a **2–3 step refinement** only after a hit.
+
+---
+
+## Yes, clean up `u_resolution` anyway (best practice)
+
+Even if it cancels today, fix it now so you can add:
+
+* screen-space AA
+* dithering
+* pixel-accurate noise
+* temporal jitter
+* post FX masks
+
+Use:
+
+```ts
+const dpr = gl.getPixelRatio();
+m.uniforms.u_resolution.value.set(size.width * dpr, size.height * dpr);
+```
+
+---
+
+## One more “gotcha” to check
+
+If your UI/engine is updating React state every frame (instead of refs), Mandelbulb can “feel” frozen because the **main thread** is busy too.
+
+Rule: for per-frame audio smoothing, use **refs**, not `setState`.
+
+---
+
+If you want, paste your Mandelbulb raymarch loop (the `for steps` part + hit test) and I’ll suggest **two micro-optimizations** that usually give a noticeable boost without changing the look.
