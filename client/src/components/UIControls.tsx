@@ -20,10 +20,12 @@ import {
   presets,
   presetCategories,
   imageFilters, 
+  psyOverlays,
   colorModes,
   moodPresets,
   type PresetName, 
   type ImageFilterId, 
+  type PsyOverlayId,
   type ColorSettings,
   type ColorModeId,
   type MoodPresetId
@@ -76,6 +78,7 @@ interface UIControlsProps {
     presetName: PresetName;
     presetEnabled: boolean;
     imageFilters: ImageFilterId[];
+    psyOverlays?: PsyOverlayId[];
     trailsOn?: boolean;
     trailsAmount?: number;
     glowEnabled?: boolean;
@@ -693,6 +696,40 @@ function CreateTabContent({
               </div>
             </div>
 
+            <div className="h-px bg-white/10" />
+
+            {/* Psy Overlays */}
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-widest text-cyan-400 font-bold">Psy Overlays</Label>
+              <div className="flex gap-1 flex-wrap">
+                {psyOverlays.map((overlay) => {
+                  const currentOverlays = settings.psyOverlays || [];
+                  const isActive = currentOverlays.includes(overlay.id);
+                  return (
+                    <button
+                      key={overlay.id}
+                      onClick={() => {
+                        const newOverlays = isActive
+                          ? currentOverlays.filter(o => o !== overlay.id)
+                          : [...currentOverlays, overlay.id];
+                        setSettings((prev: typeof settings) => ({
+                          ...prev,
+                          psyOverlays: newOverlays
+                        }));
+                      }}
+                      className={`text-[10px] py-1.5 px-2.5 rounded-md border transition-all ${
+                        isActive
+                          ? "border-cyan-500 bg-cyan-500/20 text-cyan-300"
+                          : "border-white/10 bg-black/30 text-muted-foreground hover:bg-white/5"
+                      }`}
+                      data-testid={`overlay-toggle-${overlay.id}`}
+                    >
+                      {overlay.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <div className="h-px bg-white/10" />
 

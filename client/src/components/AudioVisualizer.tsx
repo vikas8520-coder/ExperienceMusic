@@ -5,7 +5,8 @@ import * as THREE from "three";
 import { Effects } from "./Effects";
 import { PsyTunnel as PsyTunnelShader } from "./PsyTunnel";
 import { type AudioData } from "@/hooks/use-audio-analyzer";
-import { type ImageFilterId } from "@/lib/visualizer-presets";
+import { type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
+import { PsyPresetLayer, type PsyPresetName } from "./PsyPresetLayer";
 import { isFractalPreset, getFractalPreset } from "@/engine/presets/registry";
 import { FractalPresetBridge } from "@/engine/presets/FractalPresetBridge";
 import type { UniformValues } from "@/engine/presets/types";
@@ -19,10 +20,46 @@ interface AudioVisualizerProps {
     presetName: string;
     presetEnabled?: boolean;
     imageFilters?: ImageFilterId[];
+    psyOverlays?: PsyOverlayId[];
   };
   backgroundImage?: string | null;
   zoom?: number;
   fractalUniforms?: UniformValues;
+}
+
+function PsyPresetWrapper({
+  preset,
+  getAudioData,
+  intensity = 1.0,
+  speed = 1.0,
+  opacity = 0.9,
+  blending = THREE.AdditiveBlending
+}: {
+  preset: PsyPresetName;
+  getAudioData: () => AudioData;
+  intensity?: number;
+  speed?: number;
+  opacity?: number;
+  blending?: THREE.Blending;
+}) {
+  const audioDataRef = useRef<AudioData>({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, dominantFreq: 200, modeIndex: 1, frequencyData: new Uint8Array(0) });
+
+  useFrame(() => {
+    audioDataRef.current = getAudioData();
+  });
+
+  return (
+    <PsyPresetLayer
+      preset={preset}
+      bass={audioDataRef.current.bass}
+      mid={audioDataRef.current.mid}
+      high={audioDataRef.current.high}
+      intensity={intensity}
+      speed={speed}
+      opacity={opacity}
+      blending={blending}
+    />
+  );
 }
 
 // Check WebGL support
@@ -3840,6 +3877,18 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1, fractal
           )}
         </PresetTransition>
       </ZoomableScene>
+
+      {(settings.psyOverlays || []).map((overlayId) => (
+        <PsyPresetWrapper
+          key={`overlay-${overlayId}`}
+          preset={overlayId as PsyPresetName}
+          getAudioData={getAudioData}
+          intensity={settings.intensity}
+          speed={settings.speed}
+          opacity={0.4}
+          blending={THREE.AdditiveBlending}
+        />
+      ))}
 
       <AudioReactiveEffects getAudioData={getAudioData} settings={settings} />
     </Canvas>

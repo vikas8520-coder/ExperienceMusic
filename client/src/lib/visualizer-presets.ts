@@ -245,3 +245,12 @@ export const imageFilters = [
 ] as const;
 
 export type ImageFilterId = typeof imageFilters[number]["id"];
+
+export const psyOverlays = [
+  { name: "Blue Tunnel", id: "blueTunnel" },
+  { name: "BW Vortex", id: "bwVortex" },
+  { name: "Rainbow Spiral", id: "rainbowSpiral" },
+  { name: "Red Mandala", id: "redMandala" },
+] as const;
+
+export type PsyOverlayId = typeof psyOverlays[number]["id"];
