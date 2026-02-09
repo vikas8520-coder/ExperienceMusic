@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import type { FractalPreset, PresetContext, UniformValues } from "../types";
 
 const vert = /* glsl */ `
@@ -233,7 +233,7 @@ void main() {
       break;
     }
 
-    totalDist += d * 0.9;
+    totalDist += d;
     if (totalDist > u_maxDist) break;
   }
 
@@ -273,7 +273,13 @@ function vec3FromHex(hex: string) {
 
 const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ uniforms, state }) => {
   const matRef = useRef<THREE.ShaderMaterial>(null!);
-  const { size, viewport } = useThree();
+  const { size, viewport, gl } = useThree();
+
+  useEffect(() => {
+    const prev = gl.getPixelRatio();
+    gl.setPixelRatio(Math.min(1, prev));
+    return () => { gl.setPixelRatio(prev); };
+  }, [gl]);
 
   const smoothed = useRef({
     bass: 0, mid: 0, treble: 0, beat: 0,
@@ -329,7 +335,7 @@ const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     );
 
     const t = clock.getElapsedTime();
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = gl.getPixelRatio();
 
     m.uniforms.u_time.value = t;
     m.uniforms.u_resolution.value.set(size.width * dpr, size.height * dpr);
@@ -380,8 +386,8 @@ const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     u_camRot: { value: new THREE.Matrix3() },
 
     u_resScale: { value: 0.8 },
-    u_maxSteps: { value: 150 },
-    u_fractalIter: { value: 12 },
+    u_maxSteps: { value: 100 },
+    u_fractalIter: { value: 10 },
     u_maxDist: { value: 30.0 },
     u_epsilonBase: { value: 0.002 },
 
@@ -434,7 +440,7 @@ export const MandelbulbPreset: FractalPreset = {
   uniformSpecs: [
     { key: "u_power", label: "Power", type: "float", group: "Fractal", min: 2, max: 12, step: 0.1, default: 8.0, macro: true },
     { key: "u_scale", label: "Scale", type: "float", group: "Fractal", min: 0.5, max: 3.0, step: 0.01, default: 1.0 },
-    { key: "u_fractalIter", label: "Iterations", type: "int", group: "Fractal", min: 4, max: 20, step: 1, default: 12 },
+    { key: "u_fractalIter", label: "Iterations", type: "int", group: "Fractal", min: 4, max: 20, step: 1, default: 10 },
     { key: "u_deformAmount", label: "Deform", type: "float", group: "Fractal", min: 0, max: 1, step: 0.01, default: 0.0, macro: true },
     { key: "u_offset", label: "Offset", type: "vec3", group: "Fractal", default: [0, 0, 0] },
 
@@ -463,7 +469,7 @@ export const MandelbulbPreset: FractalPreset = {
     { key: "u_beatPulse", label: "Beat Punch", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 0.8 },
 
     { key: "u_resScale", label: "Resolution", type: "float", group: "Quality", min: 0.3, max: 1.0, step: 0.05, default: 0.8 },
-    { key: "u_maxSteps", label: "Ray Steps", type: "int", group: "Quality", min: 50, max: 300, step: 10, default: 150 },
+    { key: "u_maxSteps", label: "Ray Steps", type: "int", group: "Quality", min: 50, max: 300, step: 10, default: 100 },
     { key: "u_maxDist", label: "Max Distance", type: "float", group: "Quality", min: 10, max: 60, step: 1, default: 30 },
     { key: "u_epsilonBase", label: "Detail", type: "float", group: "Quality", min: 0.0005, max: 0.01, step: 0.0005, default: 0.002 },
   ],

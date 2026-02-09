@@ -3823,7 +3823,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1, fractal
         }}
         camera={{ position: [0, 0, 15], fov: 45 }}
         style={{ width: "100%", height: "100%", pointerEvents: "none" }}
-        dpr={[2, Math.min(window.devicePixelRatio, 3)]}
+        dpr={[1, Math.min(window.devicePixelRatio, 2)]}
         events={() => ({ enabled: false, priority: 0 })}
         onCreated={({ gl }) => {
           if (!gl.getContext()) {
