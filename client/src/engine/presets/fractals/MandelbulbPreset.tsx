@@ -53,6 +53,7 @@ uniform float u_colorCycle;
 uniform float u_deformAmount;
 uniform float u_rotateSpeed;
 uniform float u_fov;
+uniform float u_quality;
 
 #define PI  3.14159265359
 #define TAU 6.28318530718
@@ -116,42 +117,59 @@ float map(vec3 p) {
   return mandelbulbDE(p, pw, u_fractalIter) / (u_scale * breathe);
 }
 
-vec3 getNormal(vec3 p, float eps) {
-  vec2 e = vec2(eps, 0.0);
-  return normalize(vec3(
-    map(p + e.xyy) - map(p - e.xyy),
-    map(p + e.yxy) - map(p - e.yxy),
-    map(p + e.yyx) - map(p - e.yyx)
-  ));
+vec3 getNormalTetra(vec3 p, float eps) {
+  vec3 e1 = vec3( 1.0, -1.0, -1.0);
+  vec3 e2 = vec3(-1.0, -1.0,  1.0);
+  vec3 e3 = vec3(-1.0,  1.0, -1.0);
+  vec3 e4 = vec3( 1.0,  1.0,  1.0);
+  float d1 = map(p + eps * e1);
+  float d2 = map(p + eps * e2);
+  float d3 = map(p + eps * e3);
+  float d4 = map(p + eps * e4);
+  return normalize(e1 * d1 + e2 * d2 + e3 * d3 + e4 * d4);
 }
 
-float calcAO(vec3 p, vec3 n, float eps) {
+float calcAO_Q(vec3 p, vec3 n, float eps) {
+  float q = clamp(u_quality, 0.0, 1.0);
+  if (q < 0.35) return 1.0;
+  int samples = (q < 0.7) ? 2 : 5;
   float ao = 0.0;
   float weight = 1.0;
   for (int i = 1; i <= 5; i++) {
+    if (i > samples) break;
     float dist = eps * 2.0 * float(i);
     float d = map(p + n * dist);
     ao += weight * (dist - d);
     weight *= 0.5;
   }
-  return 1.0 - clamp(ao * u_aoStrength, 0.0, 1.0);
+  float strength = mix(2.0, 3.0, smoothstep(0.7, 1.0, q)) * u_aoStrength;
+  return clamp(1.0 - ao * strength, 0.0, 1.0);
 }
 
-float softShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
+float softShadow_Q(vec3 ro, vec3 rd, float mint, float maxt, float k) {
+  float q = clamp(u_quality, 0.0, 1.0);
+  if (q < 0.55) return 1.0;
+  int maxSt = (q < 0.85) ? 8 : 16;
   float res = 1.0;
   float t = mint;
-  for (int i = 0; i < 32; i++) {
-    float h = map(ro + rd * t);
-    if (h < 0.001) return 0.0;
-    res = min(res, k * h / t);
-    t += clamp(h, 0.02, 0.2);
-    if (t > maxt) break;
+  for (int i = 0; i < 16; i++) {
+    if (i >= maxSt) break;
+    float d = map(ro + rd * t);
+    res = min(res, k * d / t);
+    float minStep = mix(0.04, 0.02, smoothstep(0.85, 1.0, q));
+    float maxStep = mix(0.35, 0.20, smoothstep(0.85, 1.0, q));
+    t += clamp(d, minStep, maxStep);
+    if (res < 0.01 || t > maxt) break;
   }
   return clamp(res, 0.0, 1.0);
 }
 
-vec3 shade(vec3 p, vec3 rd, float t, float eps) {
-  vec3 n = getNormal(p, eps * 2.0);
+float curvatureCheap(float hitD, float eps) {
+  return clamp(1.0 - hitD / (eps * 6.0), 0.0, 1.0);
+}
+
+vec3 shade(vec3 p, vec3 rd, float hitDist, float eps) {
+  vec3 n = getNormalTetra(p, eps * 2.0);
 
   vec3 lightDir1 = normalize(vec3(0.6, 0.8, 0.4));
   vec3 lightDir2 = normalize(vec3(-0.4, 0.3, -0.7));
@@ -161,29 +179,28 @@ vec3 shade(vec3 p, vec3 rd, float t, float eps) {
 
   float shadow1 = 1.0;
   if (u_shadowSoft > 0.01) {
-    shadow1 = softShadow(p + n * eps * 3.0, lightDir1, eps * 5.0, 2.0, 8.0 / u_shadowSoft);
+    shadow1 = softShadow_Q(p + n * eps * 2.0, lightDir1, 0.02, 12.0, 16.0);
   }
 
-  float ao = calcAO(p, n, eps);
+  float ao = calcAO_Q(p, n, eps);
 
   float rim = pow(clamp(1.0 - dot(n, -rd), 0.0, 1.0), 2.5);
-
   float spec = pow(clamp(dot(reflect(rd, n), lightDir1), 0.0, 1.0), 32.0);
 
   float height = dot(n, vec3(0.0, 1.0, 0.0)) * 0.5 + 0.5;
-  float curvature = clamp(length(getNormal(p + n * eps * 4.0, eps * 4.0) - n) * 5.0, 0.0, 1.0);
+  float curv = curvatureCheap(hitDist, eps);
 
   float cycle = u_colorCycle + u_time * u_colorSpeed * 0.02;
   float trebleFlicker = u_trebleShimmer * u_audioGain * 0.5;
 
   vec3 palCol = iqPalette(
-    height * 0.7 + curvature * 0.3 + cycle + trebleFlicker * sin(u_time * 3.7 + p.x * 5.0),
+    height * 0.7 + curv * 0.3 + cycle + trebleFlicker * sin(u_time * 3.7 + p.x * 5.0),
     vec3(0.5), vec3(0.5), vec3(1.0, 1.0, 0.8),
     vec3(0.0 + cycle, 0.33 + cycle * 0.5, 0.67 + cycle * 0.3)
   );
 
   vec3 col = mix(u_baseColor, u_hotColor, u_beatPulse * u_audioGain * 0.7);
-  col = mix(col, palCol, 0.6 + curvature * 0.3);
+  col = mix(col, palCol, 0.6 + curv * 0.3);
 
   vec3 ambient = col * 0.15;
   vec3 diffuse = col * (diff1 * 0.7 * shadow1 + diff2 * 0.2);
@@ -192,9 +209,10 @@ vec3 shade(vec3 p, vec3 rd, float t, float eps) {
 
   vec3 result = ambient + diffuse + specular + rimCol;
   result *= ao;
+  result *= 0.92 + 0.18 * curv;
 
   float glowMod = u_glowIntensity + u_beatPulse * u_audioGain * 0.6;
-  result += glowMod * u_glowColor * (rim * 0.3 + curvature * 0.15) * diff1;
+  result += glowMod * u_glowColor * (rim * 0.3 + curv * 0.15) * diff1;
 
   float gray = dot(result, vec3(0.299, 0.587, 0.114));
   result = mix(vec3(gray), result, u_saturation);
@@ -284,6 +302,7 @@ const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
   const smoothed = useRef({
     bass: 0, mid: 0, treble: 0, beat: 0,
     camTheta: 0.3, camPhi: 0.8, camDist: 3.5,
+    quality: 1.0,
   });
 
   useFrame(({ clock }) => {
@@ -377,6 +396,13 @@ const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     m.uniforms.u_deformAmount.value = uniforms.u_deformAmount;
     m.uniforms.u_rotateSpeed.value = uniforms.u_rotateSpeed;
     m.uniforms.u_fov.value = uniforms.u_fov;
+
+    const audioEnergy = Math.max(s.bass, s.mid, s.treble, s.beat) * uniforms.u_audioGain;
+    const isActive = audioEnergy > 0.05;
+    const qTarget = isActive ? 0.0 : 1.0;
+    const qRate = isActive ? 0.22 : 0.06;
+    s.quality = THREE.MathUtils.lerp(s.quality, qTarget, qRate);
+    m.uniforms.u_quality.value = s.quality;
   });
 
   const initialUniforms = useMemo(() => ({
@@ -416,6 +442,7 @@ const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     u_deformAmount: { value: 0.0 },
     u_rotateSpeed: { value: 0.3 },
     u_fov: { value: 60.0 },
+    u_quality: { value: 1.0 },
   }), []);
 
   return (
