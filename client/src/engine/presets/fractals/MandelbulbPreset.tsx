@@ -76,10 +76,10 @@ float mandelbulbDE(vec3 p, float power, int iterations) {
   float dr = 1.0;
   float r = 0.0;
 
-  for (int i = 0; i < 256; i++) {
+  for (int i = 0; i < 64; i++) {
     if (i >= iterations) break;
     r = length(z);
-    if (r > 2.0) break;
+    if (r > 1.5) break;
     if (r < 1e-6) { r = 1e-6; break; }
 
     float theta = acos(clamp(z.z / r, -1.0, 1.0));
@@ -124,48 +124,31 @@ float map(vec3 p) {
   return mandelbulbDE(p, pw, u_fractalIter) / (u_scale * breathe);
 }
 
-vec3 getNormalTetra(vec3 p, float eps) {
-  vec3 e1 = vec3( 1.0, -1.0, -1.0);
-  vec3 e2 = vec3(-1.0, -1.0,  1.0);
-  vec3 e3 = vec3(-1.0,  1.0, -1.0);
-  vec3 e4 = vec3( 1.0,  1.0,  1.0);
-  float d1 = map(p + eps * e1);
-  float d2 = map(p + eps * e2);
-  float d3 = map(p + eps * e3);
-  float d4 = map(p + eps * e4);
-  return normalize(e1 * d1 + e2 * d2 + e3 * d3 + e4 * d4);
+vec3 getNormal(vec3 p, float eps) {
+  vec2 e = vec2(eps, 0.0);
+  return normalize(vec3(
+    map(p + e.xyy) - map(p - e.xyy),
+    map(p + e.yxy) - map(p - e.yxy),
+    map(p + e.yyx) - map(p - e.yyx)
+  ));
 }
 
 float calcAO_Q(vec3 p, vec3 n, float eps) {
-  float q = clamp(u_quality, 0.0, 1.0);
-  if (q < 0.35) return 1.0;
-  int samples = (q < 0.7) ? 2 : 5;
-  float ao = 0.0;
-  float weight = 1.0;
-  for (int i = 1; i <= 5; i++) {
-    if (i > samples) break;
-    float dist = eps * 2.0 * float(i);
-    float d = map(p + n * dist);
-    ao += weight * (dist - d);
-    weight *= 0.5;
-  }
-  float strength = mix(2.0, 3.0, smoothstep(0.7, 1.0, q)) * u_aoStrength;
-  return clamp(1.0 - ao * strength, 0.0, 1.0);
+  if (u_aoStrength < 0.01) return 1.0;
+  float d1 = map(p + n * eps * 2.0);
+  float d2 = map(p + n * eps * 4.0);
+  float ao = (eps * 2.0 - d1) + 0.5 * (eps * 4.0 - d2);
+  return clamp(1.0 - ao * u_aoStrength * 2.5, 0.0, 1.0);
 }
 
 float softShadow_Q(vec3 ro, vec3 rd, float mint, float maxt, float k) {
-  float q = clamp(u_quality, 0.0, 1.0);
-  if (q < 0.55) return 1.0;
-  int maxSt = (q < 0.85) ? 8 : 16;
+  if (u_shadowSoft < 0.01) return 1.0;
   float res = 1.0;
   float t = mint;
-  for (int i = 0; i < 16; i++) {
-    if (i >= maxSt) break;
+  for (int i = 0; i < 8; i++) {
     float d = map(ro + rd * t);
     res = min(res, k * d / t);
-    float minStep = mix(0.04, 0.02, smoothstep(0.85, 1.0, q));
-    float maxStep = mix(0.35, 0.20, smoothstep(0.85, 1.0, q));
-    t += clamp(d, minStep, maxStep);
+    t += clamp(d, 0.04, 0.35);
     if (res < 0.01 || t > maxt) break;
   }
   return clamp(res, 0.0, 1.0);
@@ -176,7 +159,7 @@ float curvatureCheap(float hitD, float eps) {
 }
 
 vec3 shade(vec3 p, vec3 rd, float hitDist, float eps) {
-  vec3 n = getNormalTetra(p, eps * 2.0);
+  vec3 n = getNormal(p, eps * 2.0);
 
   vec3 lightDir1 = normalize(vec3(0.6, 0.8, 0.4));
   vec3 lightDir2 = normalize(vec3(-0.4, 0.3, -0.7));
@@ -243,16 +226,16 @@ void main() {
   vec3 col = vec3(0.0);
   float prevD = 1e10;
 
-  for (int i = 0; i < 256; i++) {
+  for (int i = 0; i < 128; i++) {
     if (i >= u_maxSteps) break;
 
     vec3 p = ro + rd * totalDist;
     d = map(p);
 
-    float eps = max(1e-5, u_epsilonBase * (0.1 + 0.05 * totalDist));
+    float eps = max(1e-4, u_epsilonBase * (0.2 + 0.08 * totalDist));
 
-    if ((i & 3) == 0) {
-      glow += 0.06 / (0.01 + d * d * 10.0);
+    if ((i & 7) == 0) {
+      glow += 0.1 / (0.01 + d * d * 10.0);
     }
 
     if (d < eps) {
@@ -261,7 +244,7 @@ void main() {
       break;
     }
 
-    float step = d * 1.2;
+    float step = d * 1.5;
     if (d > prevD) step = d;
     prevD = d;
 
@@ -284,7 +267,7 @@ void main() {
     col = mix(col, bg, fogAmt);
   }
 
-  float glowFade = clamp(glow * 0.06, 0.0, 1.0);
+  float glowFade = clamp(glow * 0.04, 0.0, 1.0);
   col += u_glowColor * glowFade * (u_glowIntensity * 0.5 + u_beatPulse * u_audioGain * 0.3);
 
   float vig = 1.0 - dot(uv * 0.4, uv * 0.4);
@@ -403,11 +386,11 @@ const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     u_camPos: { value: new THREE.Vector3(0, 0, 3.5) },
     u_camRot: { value: new THREE.Matrix3() },
 
-    u_resScale: { value: 0.8 },
-    u_maxSteps: { value: 90 },
-    u_fractalIter: { value: 9 },
+    u_resScale: { value: 0.5 },
+    u_maxSteps: { value: 60 },
+    u_fractalIter: { value: 6 },
     u_maxDist: { value: 8.0 },
-    u_epsilonBase: { value: 0.002 },
+    u_epsilonBase: { value: 0.003 },
 
     u_power: { value: 8.0 },
     u_scale: { value: 1.0 },
@@ -459,7 +442,7 @@ export const MandelbulbPreset: FractalPreset = {
   uniformSpecs: [
     { key: "u_power", label: "Power", type: "float", group: "Fractal", min: 2, max: 12, step: 0.1, default: 8.0, macro: true },
     { key: "u_scale", label: "Zoom", type: "float", group: "Fractal", min: 0.5, max: 3.0, step: 0.01, default: 1.0, macro: true },
-    { key: "u_fractalIter", label: "Iterations", type: "int", group: "Fractal", min: 4, max: 20, step: 1, default: 9 },
+    { key: "u_fractalIter", label: "Iterations", type: "int", group: "Fractal", min: 3, max: 12, step: 1, default: 6 },
     { key: "u_deformAmount", label: "Deform", type: "float", group: "Fractal", min: 0, max: 1, step: 0.01, default: 0.0, macro: true },
     { key: "u_offset", label: "Offset", type: "vec3", group: "Fractal", default: [0, 0, 0] },
 
@@ -484,10 +467,10 @@ export const MandelbulbPreset: FractalPreset = {
     { key: "u_trebleShimmer", label: "Treble Shimmer", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 0.5, macro: true },
     { key: "u_beatPulse", label: "Beat Punch", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 0.8 },
 
-    { key: "u_resScale", label: "Resolution", type: "float", group: "Quality", min: 0.3, max: 1.0, step: 0.05, default: 0.8 },
-    { key: "u_maxSteps", label: "Ray Steps", type: "int", group: "Quality", min: 30, max: 128, step: 5, default: 90 },
-    { key: "u_maxDist", label: "Max Distance", type: "float", group: "Quality", min: 4, max: 20, step: 1, default: 8 },
-    { key: "u_epsilonBase", label: "Detail", type: "float", group: "Quality", min: 0.0005, max: 0.01, step: 0.0005, default: 0.002 },
+    { key: "u_resScale", label: "Resolution", type: "float", group: "Quality", min: 0.25, max: 1.0, step: 0.05, default: 0.5 },
+    { key: "u_maxSteps", label: "Ray Steps", type: "int", group: "Quality", min: 20, max: 100, step: 5, default: 60 },
+    { key: "u_maxDist", label: "Max Distance", type: "float", group: "Quality", min: 4, max: 16, step: 1, default: 8 },
+    { key: "u_epsilonBase", label: "Detail", type: "float", group: "Quality", min: 0.001, max: 0.01, step: 0.0005, default: 0.003 },
   ],
 
   init(_ctx: PresetContext) {},
