@@ -36,6 +36,8 @@ uniform float u_glowIntensity;
 uniform float u_fogDensity;
 uniform float u_aoStrength;
 uniform float u_shadowSoft;
+uniform float u_sssStrength;
+uniform float u_iridescence;
 
 uniform float u_beatPulse;
 uniform float u_bassImpact;
@@ -53,7 +55,6 @@ uniform float u_colorCycle;
 uniform float u_deformAmount;
 uniform float u_rotateSpeed;
 uniform float u_fov;
-uniform float u_quality;
 
 #define PI  3.14159265359
 #define TAU 6.28318530718
@@ -71,15 +72,23 @@ vec3 iqPalette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
   return a + b * cos(TAU * (c * t + d));
 }
 
+vec3 hsv2rgb(vec3 c) {
+  vec3 p = abs(fract(c.xxx + vec3(1.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
+  return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+}
+
+vec4 orbitTrap;
+
 float mandelbulbDE(vec3 p, float power, int iterations) {
   vec3 z = p;
   float dr = 1.0;
   float r = 0.0;
+  orbitTrap = vec4(1e10);
 
-  for (int i = 0; i < 64; i++) {
+  for (int i = 0; i < 96; i++) {
     if (i >= iterations) break;
     r = length(z);
-    if (r > 1.5) break;
+    if (r > 2.0) break;
     if (r < 1e-6) { r = 1e-6; break; }
 
     float theta = acos(clamp(z.z / r, -1.0, 1.0));
@@ -96,6 +105,11 @@ float mandelbulbDE(vec3 p, float power, int iterations) {
       cos(theta)
     );
     z += p;
+
+    orbitTrap.x = min(orbitTrap.x, abs(z.x));
+    orbitTrap.y = min(orbitTrap.y, abs(z.y));
+    orbitTrap.z = min(orbitTrap.z, abs(z.z));
+    orbitTrap.w = min(orbitTrap.w, dot(z, z));
   }
   r = max(r, 1e-6);
   return 0.5 * log(r) * r / max(dr, 1e-6);
@@ -133,76 +147,134 @@ vec3 getNormal(vec3 p, float eps) {
   ));
 }
 
-float calcAO_Q(vec3 p, vec3 n, float eps) {
-  if (u_aoStrength < 0.01) return 1.0;
-  float d1 = map(p + n * eps * 2.0);
-  float d2 = map(p + n * eps * 4.0);
-  float ao = (eps * 2.0 - d1) + 0.5 * (eps * 4.0 - d2);
-  return clamp(1.0 - ao * u_aoStrength * 2.5, 0.0, 1.0);
+float calcAO(vec3 p, vec3 n, float eps) {
+  float occ = 0.0;
+  float scale = 1.0;
+  for (int i = 1; i <= 4; i++) {
+    float h = eps * 2.0 * float(i);
+    float d = map(p + n * h);
+    occ += (h - d) * scale;
+    scale *= 0.65;
+  }
+  return clamp(1.0 - u_aoStrength * occ, 0.0, 1.0);
 }
 
-float softShadow_Q(vec3 ro, vec3 rd, float mint, float maxt, float k) {
-  if (u_shadowSoft < 0.01) return 1.0;
+float softShadow(vec3 ro, vec3 rd, float mint, float maxt, float k) {
   float res = 1.0;
   float t = mint;
-  for (int i = 0; i < 8; i++) {
+  float ph = 1e10;
+  for (int i = 0; i < 12; i++) {
     float d = map(ro + rd * t);
-    res = min(res, k * d / t);
-    t += clamp(d, 0.04, 0.35);
-    if (res < 0.01 || t > maxt) break;
+    float y = d * d / (2.0 * ph);
+    float h = sqrt(max(0.0, d * d - y * y));
+    res = min(res, k * h / max(0.001, t - y));
+    ph = d;
+    t += clamp(d, 0.02, 0.25);
+    if (res < 0.005 || t > maxt) break;
   }
   return clamp(res, 0.0, 1.0);
 }
 
-float curvatureCheap(float hitD, float eps) {
-  return clamp(1.0 - hitD / (eps * 6.0), 0.0, 1.0);
+float subsurfaceScatter(vec3 p, vec3 lightDir, float eps) {
+  float scatter = 0.0;
+  float weight = 1.0;
+  for (int i = 1; i <= 3; i++) {
+    float h = eps * float(i) * 3.0;
+    float d = map(p + lightDir * h);
+    scatter += weight * max(0.0, h - d);
+    weight *= 0.5;
+  }
+  return scatter;
 }
 
 vec3 shade(vec3 p, vec3 rd, float hitDist, float eps) {
   vec3 n = getNormal(p, eps * 2.0);
 
-  vec3 lightDir1 = normalize(vec3(0.6, 0.8, 0.4));
-  vec3 lightDir2 = normalize(vec3(-0.4, 0.3, -0.7));
+  vec3 keyDir   = normalize(vec3(0.6, 0.8, 0.4));
+  vec3 fillDir  = normalize(vec3(-0.5, 0.3, -0.6));
+  vec3 rimDir   = normalize(vec3(0.0, -0.2, 1.0));
 
-  float diff1 = clamp(dot(n, lightDir1), 0.0, 1.0);
-  float diff2 = clamp(dot(n, lightDir2), 0.0, 1.0);
+  vec3 keyColor  = vec3(1.0, 0.95, 0.85) * 1.2;
+  vec3 fillColor = vec3(0.4, 0.55, 0.8) * 0.5;
+  vec3 rimColor  = u_glowColor * 1.5;
 
-  float shadow1 = 1.0;
-  if (u_shadowSoft > 0.01) {
-    shadow1 = softShadow_Q(p + n * eps * 2.0, lightDir1, 0.02, 12.0, 16.0);
-  }
+  float diff1 = clamp(dot(n, keyDir), 0.0, 1.0);
+  float diff2 = clamp(dot(n, fillDir), 0.0, 1.0);
+  float rimDot = clamp(dot(n, rimDir), 0.0, 1.0);
 
-  float ao = calcAO_Q(p, n, eps);
+  float shadow1 = softShadow(p + n * eps * 3.0, keyDir, 0.01, 8.0, 12.0 + u_shadowSoft * 20.0);
+  shadow1 = mix(1.0, shadow1, u_shadowSoft);
 
-  float rim = pow(clamp(1.0 - dot(n, -rd), 0.0, 1.0), 2.5);
-  float spec = pow(clamp(dot(reflect(rd, n), lightDir1), 0.0, 1.0), 32.0);
+  float ao = calcAO(p, n, eps);
 
-  float height = dot(n, vec3(0.0, 1.0, 0.0)) * 0.5 + 0.5;
-  float curv = curvatureCheap(hitDist, eps);
+  float fresnel = pow(clamp(1.0 - dot(n, -rd), 0.0, 1.0), 3.0);
+
+  vec3 halfVec = normalize(keyDir - rd);
+  float ndotH = clamp(dot(n, halfVec), 0.0, 1.0);
+  float roughness = 0.35;
+  float a2 = roughness * roughness;
+  float denom = ndotH * ndotH * (a2 - 1.0) + 1.0;
+  float ggx = a2 / (PI * denom * denom);
+  float spec = ggx * clamp(dot(n, keyDir), 0.0, 1.0);
 
   float cycle = u_colorCycle + u_time * u_colorSpeed * 0.02;
-  float trebleFlicker = u_trebleShimmer * u_audioGain * 0.5;
+  float trebleFlicker = u_trebleShimmer * u_audioGain * 0.3;
+
+  float ot = sqrt(orbitTrap.w) * 0.5;
+  float otX = clamp(orbitTrap.x * 2.0, 0.0, 1.0);
+  float otY = clamp(orbitTrap.y * 2.0, 0.0, 1.0);
+  float otZ = clamp(orbitTrap.z * 2.0, 0.0, 1.0);
 
   vec3 palCol = iqPalette(
-    height * 0.7 + curv * 0.3 + cycle + trebleFlicker * sin(u_time * 3.7 + p.x * 5.0),
-    vec3(0.5), vec3(0.5), vec3(1.0, 1.0, 0.8),
-    vec3(0.0 + cycle, 0.33 + cycle * 0.5, 0.67 + cycle * 0.3)
+    ot * 0.5 + otX * 0.2 + cycle + trebleFlicker * sin(u_time * 2.5 + p.x * 4.0),
+    vec3(0.5, 0.5, 0.5),
+    vec3(0.5, 0.5, 0.5),
+    vec3(1.0, 0.9, 0.7),
+    vec3(0.0 + cycle, 0.15 + cycle * 0.5, 0.35 + cycle * 0.3)
   );
 
-  vec3 col = mix(u_baseColor, u_hotColor, u_beatPulse * u_audioGain * 0.7);
-  col = mix(col, palCol, 0.6 + curv * 0.3);
+  vec3 palCol2 = iqPalette(
+    otY * 0.6 + otZ * 0.4 + cycle * 1.3,
+    vec3(0.5, 0.5, 0.5),
+    vec3(0.5, 0.5, 0.4),
+    vec3(1.0, 0.7, 0.4),
+    vec3(0.3 + cycle, 0.5, 0.7)
+  );
 
-  vec3 ambient = col * 0.15;
-  vec3 diffuse = col * (diff1 * 0.7 * shadow1 + diff2 * 0.2);
-  vec3 specular = vec3(0.8, 0.85, 1.0) * spec * 0.4 * shadow1;
-  vec3 rimCol = u_glowColor * rim * 0.4;
+  float height = dot(n, vec3(0.0, 1.0, 0.0)) * 0.5 + 0.5;
+  vec3 orbColor = mix(palCol, palCol2, height * 0.5 + 0.25);
 
-  vec3 result = ambient + diffuse + specular + rimCol;
+  vec3 col = mix(u_baseColor, u_hotColor, u_beatPulse * u_audioGain * 0.6);
+  col = mix(col, orbColor, 0.65 + otX * 0.2);
+
+  vec3 iridescent = hsv2rgb(vec3(fresnel * 0.6 + ot * 0.3 + cycle, 0.7, 1.0));
+  col = mix(col, iridescent, u_iridescence * fresnel * 0.5);
+
+  vec3 ambient = col * vec3(0.12, 0.13, 0.18) * ao;
+
+  vec3 keyLit = col * keyColor * diff1 * shadow1;
+
+  vec3 fillLit = col * fillColor * diff2;
+
+  vec3 rimLit = rimColor * pow(fresnel, 2.5) * 0.5;
+  rimLit += rimColor * rimDot * 0.15;
+
+  vec3 specCol = mix(vec3(0.9, 0.92, 1.0), u_glowColor, fresnel * 0.3);
+  vec3 specLit = specCol * spec * 0.5 * shadow1;
+
+  float sss = subsurfaceScatter(p, keyDir, eps);
+  vec3 sssCol = u_glowColor * 0.6 + col * 0.4;
+  vec3 sssLit = sssCol * sss * u_sssStrength * diff1 * 0.4;
+
+  vec3 result = ambient + keyLit + fillLit + rimLit + specLit + sssLit;
   result *= ao;
-  result *= 0.92 + 0.18 * curv;
 
-  float glowMod = u_glowIntensity + u_beatPulse * u_audioGain * 0.6;
-  result += glowMod * u_glowColor * (rim * 0.3 + curv * 0.15) * diff1;
+  float glowMod = u_glowIntensity + u_beatPulse * u_audioGain * 0.5;
+  result += glowMod * u_glowColor * (fresnel * 0.25 + otX * 0.1) * ao;
+
+  float bioGlow = pow(1.0 - ot, 3.0) * 0.15;
+  bioGlow += u_bassImpact * u_audioGain * pow(1.0 - otX, 2.0) * 0.1;
+  result += u_glowColor * bioGlow * u_glowIntensity;
 
   float gray = dot(result, vec3(0.299, 0.587, 0.114));
   result = mix(vec3(gray), result, u_saturation);
@@ -225,17 +297,20 @@ void main() {
   float glow = 0.0;
   vec3 col = vec3(0.0);
   float prevD = 1e10;
+  float minDist = 1e10;
 
-  for (int i = 0; i < 128; i++) {
+  for (int i = 0; i < 160; i++) {
     if (i >= u_maxSteps) break;
 
     vec3 p = ro + rd * totalDist;
     d = map(p);
 
-    float eps = max(1e-4, u_epsilonBase * (0.2 + 0.08 * totalDist));
+    float eps = max(5e-5, u_epsilonBase * (0.15 + 0.06 * totalDist));
 
-    if ((i & 7) == 0) {
-      glow += 0.1 / (0.01 + d * d * 10.0);
+    minDist = min(minDist, d);
+
+    if ((i & 3) == 0) {
+      glow += 0.08 / (0.008 + d * d * 8.0);
     }
 
     if (d < eps) {
@@ -244,7 +319,7 @@ void main() {
       break;
     }
 
-    float step = d * 1.5;
+    float step = d * 1.2;
     if (d > prevD) step = d;
     prevD = d;
 
@@ -252,30 +327,61 @@ void main() {
     if (totalDist > u_maxDist) break;
   }
 
-  vec3 bgTop = vec3(0.03, 0.02, 0.06);
-  vec3 bgBot = vec3(0.0);
+  vec3 bgTop = vec3(0.04, 0.03, 0.08);
+  vec3 bgMid = vec3(0.02, 0.015, 0.05);
+  vec3 bgBot = vec3(0.005, 0.003, 0.015);
   float bgGrad = smoothstep(-1.0, 1.0, uv.y);
-  vec3 bg = mix(bgBot, bgTop, bgGrad);
+  vec3 bg = mix(bgBot, bgMid, smoothstep(0.0, 0.5, bgGrad));
+  bg = mix(bg, bgTop, smoothstep(0.5, 1.0, bgGrad));
 
-  float beatBg = u_beatPulse * u_audioGain * 0.08;
-  bg += u_glowColor * beatBg * (0.5 + 0.5 * bgGrad);
+  float beatBg = u_beatPulse * u_audioGain * 0.06;
+  bg += u_glowColor * beatBg * (0.3 + 0.7 * bgGrad);
+
+  float starField = 0.0;
+  vec2 starUV = uv * 15.0;
+  vec2 starId = floor(starUV);
+  vec2 starF = fract(starUV) - 0.5;
+  float starHash = fract(sin(dot(starId, vec2(127.1, 311.7))) * 43758.5453);
+  if (starHash > 0.97) {
+    float starBright = (starHash - 0.97) * 33.0;
+    float starDist = length(starF);
+    starField = starBright * exp(-starDist * starDist * 40.0);
+    starField *= 0.5 + 0.5 * sin(u_time * 2.0 + starHash * 100.0);
+  }
+  bg += vec3(starField * 0.3);
 
   if (!hit) {
     col = bg;
+    float nearGlow = exp(-minDist * 4.0) * 0.15;
+    col += u_glowColor * nearGlow * u_glowIntensity;
   } else {
+    vec3 fogCol = mix(bg, u_glowColor * 0.08, 0.3);
     float fogAmt = 1.0 - exp(-u_fogDensity * totalDist * totalDist);
-    col = mix(col, bg, fogAmt);
+    col = mix(col, fogCol, fogAmt);
+
+    float depthShift = clamp(totalDist / u_maxDist, 0.0, 1.0);
+    col = mix(col, col * vec3(0.85, 0.9, 1.1), depthShift * 0.3);
   }
 
-  float glowFade = clamp(glow * 0.04, 0.0, 1.0);
-  col += u_glowColor * glowFade * (u_glowIntensity * 0.5 + u_beatPulse * u_audioGain * 0.3);
+  float glowFade = clamp(glow * 0.03, 0.0, 1.0);
+  col += u_glowColor * glowFade * (u_glowIntensity * 0.4 + u_beatPulse * u_audioGain * 0.25);
 
-  float vig = 1.0 - dot(uv * 0.4, uv * 0.4);
+  vec3 acesInput = col * 0.6;
+  vec3 a = acesInput * (acesInput + 0.0245786) - 0.000090537;
+  vec3 b = acesInput * (0.983729 * acesInput + 0.4329510) + 0.238081;
+  col = clamp(a / b, 0.0, 1.0);
+
+  col = pow(col, vec3(0.91));
+
+  float vig = 1.0 - dot(uv * 0.35, uv * 0.35);
   vig = clamp(vig, 0.0, 1.0);
-  col *= 0.6 + 0.4 * vig;
+  vig = pow(vig, 0.6);
+  col *= 0.5 + 0.5 * vig;
 
-  col = col / (1.0 + col);
-  col = pow(col, vec3(0.92));
+  vec2 grainUV = vUv * u_resolution;
+  float grain = fract(sin(dot(grainUV + u_time * 0.1, vec2(12.9898, 78.233))) * 43758.5453);
+  grain = (grain - 0.5) * 0.02;
+  col += grain;
 
   gl_FragColor = vec4(col, 1.0);
 }
@@ -308,7 +414,6 @@ const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
 
   const smoothed = useRef({
     bass: 0, mid: 0, treble: 0, beat: 0,
-    quality: 1.0,
   });
 
   useFrame(({ clock, camera }) => {
@@ -354,6 +459,8 @@ const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     m.uniforms.u_fogDensity.value = uniforms.u_fogDensity;
     m.uniforms.u_aoStrength.value = uniforms.u_aoStrength;
     m.uniforms.u_shadowSoft.value = uniforms.u_shadowSoft;
+    m.uniforms.u_sssStrength.value = uniforms.u_sssStrength;
+    m.uniforms.u_iridescence.value = uniforms.u_iridescence;
 
     m.uniforms.u_beatPulse.value = s.beat;
     m.uniforms.u_bassImpact.value = s.bass;
@@ -371,13 +478,6 @@ const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     m.uniforms.u_deformAmount.value = uniforms.u_deformAmount;
     m.uniforms.u_rotateSpeed.value = uniforms.u_rotateSpeed;
     m.uniforms.u_fov.value = uniforms.u_fov;
-
-    const audioEnergy = Math.max(s.bass, s.mid, s.treble, s.beat) * uniforms.u_audioGain;
-    const isActive = audioEnergy > 0.05;
-    const qTarget = isActive ? 0.0 : 1.0;
-    const qRate = isActive ? 0.22 : 0.06;
-    s.quality = THREE.MathUtils.lerp(s.quality, qTarget, qRate);
-    m.uniforms.u_quality.value = s.quality;
   });
 
   const initialUniforms = useMemo(() => ({
@@ -386,20 +486,22 @@ const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     u_camPos: { value: new THREE.Vector3(0, 0, 3.5) },
     u_camRot: { value: new THREE.Matrix3() },
 
-    u_resScale: { value: 0.5 },
-    u_maxSteps: { value: 60 },
-    u_fractalIter: { value: 6 },
-    u_maxDist: { value: 8.0 },
-    u_epsilonBase: { value: 0.003 },
+    u_resScale: { value: 0.75 },
+    u_maxSteps: { value: 80 },
+    u_fractalIter: { value: 10 },
+    u_maxDist: { value: 10.0 },
+    u_epsilonBase: { value: 0.002 },
 
     u_power: { value: 8.0 },
     u_scale: { value: 1.0 },
     u_offset: { value: new THREE.Vector3(0, 0, 0) },
 
-    u_glowIntensity: { value: 0.6 },
-    u_fogDensity: { value: 0.04 },
-    u_aoStrength: { value: 0.0 },
-    u_shadowSoft: { value: 0.0 },
+    u_glowIntensity: { value: 0.7 },
+    u_fogDensity: { value: 0.03 },
+    u_aoStrength: { value: 0.5 },
+    u_shadowSoft: { value: 0.3 },
+    u_sssStrength: { value: 0.6 },
+    u_iridescence: { value: 0.4 },
 
     u_beatPulse: { value: 0 },
     u_bassImpact: { value: 0 },
@@ -408,16 +510,15 @@ const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     u_audioGain: { value: 1.0 },
 
     u_colorSpeed: { value: 0.3 },
-    u_saturation: { value: 1.2 },
-    u_baseColor: { value: new THREE.Vector3(0.05, 0.15, 0.4) },
-    u_hotColor: { value: new THREE.Vector3(1.0, 0.4, 0.1) },
-    u_glowColor: { value: new THREE.Vector3(0.25, 0.5, 1.0) },
+    u_saturation: { value: 1.3 },
+    u_baseColor: { value: new THREE.Vector3(0.08, 0.12, 0.35) },
+    u_hotColor: { value: new THREE.Vector3(1.0, 0.35, 0.08) },
+    u_glowColor: { value: new THREE.Vector3(0.3, 0.5, 1.0) },
     u_colorCycle: { value: 0 },
 
     u_deformAmount: { value: 0.0 },
     u_rotateSpeed: { value: 0.3 },
     u_fov: { value: 60.0 },
-    u_quality: { value: 1.0 },
   }), []);
 
   return (
@@ -442,24 +543,26 @@ export const MandelbulbPreset: FractalPreset = {
   uniformSpecs: [
     { key: "u_power", label: "Power", type: "float", group: "Fractal", min: 2, max: 12, step: 0.1, default: 8.0, macro: true },
     { key: "u_scale", label: "Zoom", type: "float", group: "Fractal", min: 0.5, max: 3.0, step: 0.01, default: 1.0, macro: true },
-    { key: "u_fractalIter", label: "Iterations", type: "int", group: "Fractal", min: 3, max: 12, step: 1, default: 6 },
+    { key: "u_fractalIter", label: "Iterations", type: "int", group: "Fractal", min: 3, max: 16, step: 1, default: 10 },
     { key: "u_deformAmount", label: "Deform", type: "float", group: "Fractal", min: 0, max: 1, step: 0.01, default: 0.0, macro: true },
     { key: "u_offset", label: "Offset", type: "vec3", group: "Fractal", default: [0, 0, 0] },
 
     { key: "u_rotateSpeed", label: "Rotate Speed", type: "float", group: "Motion", min: 0, max: 2, step: 0.01, default: 0.3, macro: true },
     { key: "u_fov", label: "FOV", type: "float", group: "Motion", min: 30, max: 120, step: 1, default: 60 },
 
-    { key: "u_baseColor", label: "Base Color", type: "color", group: "Color", default: "#0d2666" },
-    { key: "u_hotColor", label: "Beat Color", type: "color", group: "Color", default: "#ff6619" },
-    { key: "u_glowColor", label: "Glow Color", type: "color", group: "Color", default: "#4080ff" },
+    { key: "u_baseColor", label: "Base Color", type: "color", group: "Color", default: "#142259" },
+    { key: "u_hotColor", label: "Beat Color", type: "color", group: "Color", default: "#ff5914" },
+    { key: "u_glowColor", label: "Glow Color", type: "color", group: "Color", default: "#4d80ff" },
     { key: "u_colorCycle", label: "Color Cycle", type: "float", group: "Color", min: 0, max: 1, step: 0.001, default: 0, macro: true },
     { key: "u_colorSpeed", label: "Auto Cycle", type: "float", group: "Color", min: 0, max: 2, step: 0.01, default: 0.3 },
-    { key: "u_saturation", label: "Saturation", type: "float", group: "Color", min: 0, max: 2, step: 0.01, default: 1.2 },
+    { key: "u_saturation", label: "Saturation", type: "float", group: "Color", min: 0, max: 2, step: 0.01, default: 1.3 },
+    { key: "u_iridescence", label: "Iridescence", type: "float", group: "Color", min: 0, max: 1, step: 0.01, default: 0.4, macro: true },
 
-    { key: "u_glowIntensity", label: "Glow", type: "float", group: "Effects", min: 0, max: 2, step: 0.01, default: 0.6, macro: true },
-    { key: "u_fogDensity", label: "Fog", type: "float", group: "Effects", min: 0, max: 0.2, step: 0.001, default: 0.04 },
-    { key: "u_aoStrength", label: "AO Strength", type: "float", group: "Effects", min: 0, max: 4, step: 0.1, default: 0.0 },
-    { key: "u_shadowSoft", label: "Shadows", type: "float", group: "Effects", min: 0, max: 1, step: 0.01, default: 0.0 },
+    { key: "u_glowIntensity", label: "Glow", type: "float", group: "Effects", min: 0, max: 2, step: 0.01, default: 0.7, macro: true },
+    { key: "u_fogDensity", label: "Fog", type: "float", group: "Effects", min: 0, max: 0.15, step: 0.001, default: 0.03 },
+    { key: "u_aoStrength", label: "AO Strength", type: "float", group: "Effects", min: 0, max: 3, step: 0.1, default: 0.5 },
+    { key: "u_shadowSoft", label: "Shadows", type: "float", group: "Effects", min: 0, max: 1, step: 0.01, default: 0.3, macro: true },
+    { key: "u_sssStrength", label: "Subsurface", type: "float", group: "Effects", min: 0, max: 2, step: 0.01, default: 0.6, macro: true },
 
     { key: "u_audioGain", label: "Audio Gain", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 1.0, macro: true },
     { key: "u_bassImpact", label: "Bass Impact", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 0.8, macro: true },
@@ -467,10 +570,10 @@ export const MandelbulbPreset: FractalPreset = {
     { key: "u_trebleShimmer", label: "Treble Shimmer", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 0.5, macro: true },
     { key: "u_beatPulse", label: "Beat Punch", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 0.8 },
 
-    { key: "u_resScale", label: "Resolution", type: "float", group: "Quality", min: 0.25, max: 1.0, step: 0.05, default: 0.5 },
-    { key: "u_maxSteps", label: "Ray Steps", type: "int", group: "Quality", min: 20, max: 100, step: 5, default: 60 },
-    { key: "u_maxDist", label: "Max Distance", type: "float", group: "Quality", min: 4, max: 16, step: 1, default: 8 },
-    { key: "u_epsilonBase", label: "Detail", type: "float", group: "Quality", min: 0.001, max: 0.01, step: 0.0005, default: 0.003 },
+    { key: "u_resScale", label: "Resolution", type: "float", group: "Quality", min: 0.25, max: 1.0, step: 0.05, default: 0.75 },
+    { key: "u_maxSteps", label: "Ray Steps", type: "int", group: "Quality", min: 30, max: 160, step: 5, default: 80 },
+    { key: "u_maxDist", label: "Max Distance", type: "float", group: "Quality", min: 4, max: 20, step: 1, default: 10 },
+    { key: "u_epsilonBase", label: "Detail", type: "float", group: "Quality", min: 0.0005, max: 0.005, step: 0.0005, default: 0.002 },
   ],
 
   init(_ctx: PresetContext) {},
