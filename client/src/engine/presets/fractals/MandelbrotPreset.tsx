@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import type { FractalPreset, PresetContext, UniformValues } from "../types";
 
 const vert = /* glsl */ `
@@ -79,7 +79,7 @@ struct FractalResult {
   float distEst;
 };
 
-FractalResult computeFractal(vec2 z0, vec2 c, float power, int maxIter, float time, float warp) {
+FractalResult computeFractal(vec2 z0, vec2 c, float power, int maxIter, float time, float warp, float trapMix) {
   FractalResult res;
   res.smoothIter = 0.0;
   res.minTrapDist = 1e10;
@@ -96,20 +96,23 @@ FractalResult computeFractal(vec2 z0, vec2 c, float power, int maxIter, float ti
   float warpT = warp * 0.12;
   vec2 warpOff = warpT * vec2(sin(time * 0.37), cos(time * 0.53));
 
-  for (int i = 0; i < 2000; i++) {
+  bool doTraps = trapMix > 0.01;
+
+  for (int i = 0; i < 512; i++) {
     if (i >= maxIter) break;
 
     float r2 = dot(z, z);
-    float r = sqrt(r2);
 
     if (r2 > 256.0) {
       res.escaped = true;
+      float r = sqrt(r2);
       res.smoothIter = float(i) - log2(log2(r2)) + 4.0;
       res.stripAngle = atan(z.y, z.x);
       res.distEst = 0.5 * log(r2) * r / dz;
       break;
     }
 
+    float r = sqrt(r2);
     dz = 2.0 * r * dz + 1.0;
 
     float x2 = z.x * z.x;
@@ -130,13 +133,15 @@ FractalResult computeFractal(vec2 z0, vec2 c, float power, int maxIter, float ti
 
     z = zNew + c + warpOff * sin(float(i) * 0.1);
 
-    float trap1 = trapCircle(z, 0.5 + 0.3 * sin(time * 0.2));
-    float trap2 = trapCross(z);
-    float trap3 = trapLine(z, time * 0.15);
-    float trapDist = min(trap1, min(trap2 * 1.5, trap3 * 2.0));
-    res.minTrapDist = min(res.minTrapDist, trapDist);
+    if (doTraps) {
+      float trap1 = trapCircle(z, 0.5 + 0.3 * sin(time * 0.2));
+      float trap2 = trapCross(z);
+      float trap3 = trapLine(z, time * 0.15);
+      float trapDist = min(trap1, min(trap2 * 1.5, trap3 * 2.0));
+      res.minTrapDist = min(res.minTrapDist, trapDist);
+    }
 
-    res.orbitSum += exp(-dot(z, z) * 0.5);
+    res.orbitSum += exp(-r2 * 0.5);
     res.lastZ = z;
     res.finalMag = r;
     res.smoothIter = float(i);
@@ -260,7 +265,7 @@ vec3 renderPixel(vec2 fragCoord, vec2 res, float time,
 
   float warp = warpAmount + kick * 0.5;
 
-  FractalResult fr = computeFractal(startZ, iterC, power, maxIter, time + kick * 0.5, warp);
+  FractalResult fr = computeFractal(startZ, iterC, power, maxIter, time + kick * 0.5, warp, orbitTrap);
 
   float cycle = colorCycle + time * colorSpeed * 0.03 + kick * 0.08;
 
@@ -339,7 +344,13 @@ function vec3FromHex(hex: string) {
 
 const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ uniforms }) => {
   const matRef = useRef<THREE.ShaderMaterial>(null!);
-  const { size, viewport } = useThree();
+  const { size, viewport, gl } = useThree();
+
+  useEffect(() => {
+    const prev = gl.getPixelRatio();
+    gl.setPixelRatio(Math.min(1, prev));
+    return () => { gl.setPixelRatio(prev); };
+  }, [gl]);
 
   const smoothedAudio = useRef({
     bass: 0, mid: 0, treble: 0, beat: 0,
@@ -357,8 +368,9 @@ const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     sa.treble = Math.max(sa.treble * decayRate, sa.treble + (uniforms.u_trebleShimmer - sa.treble) * lerpRate);
     sa.beat = sa.beat * 0.88 + uniforms.u_beatPunch * 0.12;
 
+    const dpr = gl.getPixelRatio();
     m.uniforms.u_time.value = clock.getElapsedTime();
-    m.uniforms.u_resolution.value.set(size.width * (window.devicePixelRatio || 1), size.height * (window.devicePixelRatio || 1));
+    m.uniforms.u_resolution.value.set(size.width * dpr, size.height * dpr);
 
     m.uniforms.u_center.value.set(uniforms.u_center[0], uniforms.u_center[1]);
     m.uniforms.u_zoom.value = uniforms.u_zoom;
@@ -396,7 +408,7 @@ const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     u_center: { value: new THREE.Vector2(-0.5, 0) },
     u_zoom: { value: 1.8 },
     u_rotation: { value: 0 },
-    u_iterations: { value: 300 },
+    u_iterations: { value: 128 },
     u_power: { value: 2 },
     u_audioGain: { value: 1 },
     u_bassImpact: { value: 0 },
@@ -443,7 +455,7 @@ export const MandelbrotPreset: FractalPreset = {
     { key: "u_center", label: "Center", type: "vec2", group: "Fractal", default: [-0.5, 0] },
     { key: "u_zoom", label: "Zoom", type: "float", group: "Fractal", min: 0.5, max: 50, step: 0.01, default: 1.8, macro: true },
     { key: "u_rotation", label: "Rotation", type: "float", group: "Fractal", min: -3.14, max: 3.14, step: 0.001, default: 0 },
-    { key: "u_iterations", label: "Iterations", type: "int", group: "Fractal", min: 50, max: 1000, step: 1, default: 300 },
+    { key: "u_iterations", label: "Iterations", type: "int", group: "Fractal", min: 50, max: 512, step: 1, default: 128 },
     { key: "u_power", label: "Power", type: "float", group: "Fractal", min: 2, max: 6, step: 0.01, default: 2.0 },
     { key: "u_edgeDetail", label: "Edge Detail", type: "float", group: "Fractal", min: 0, max: 1, step: 0.01, default: 0.5 },
     { key: "u_warpAmount", label: "Warp", type: "float", group: "Fractal", min: 0, max: 1, step: 0.01, default: 0.0 },

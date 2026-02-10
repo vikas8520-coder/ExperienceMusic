@@ -241,8 +241,9 @@ void main() {
   bool hit = false;
   float glow = 0.0;
   vec3 col = vec3(0.0);
+  float prevD = 1e10;
 
-  for (int i = 0; i < 512; i++) {
+  for (int i = 0; i < 256; i++) {
     if (i >= u_maxSteps) break;
 
     vec3 p = ro + rd * totalDist;
@@ -250,7 +251,9 @@ void main() {
 
     float eps = max(1e-5, u_epsilonBase * (0.1 + 0.05 * totalDist));
 
-    glow += 0.015 / (0.01 + d * d * 10.0);
+    if ((i & 3) == 0) {
+      glow += 0.06 / (0.01 + d * d * 10.0);
+    }
 
     if (d < eps) {
       hit = true;
@@ -258,7 +261,11 @@ void main() {
       break;
     }
 
-    totalDist += d;
+    float step = d * 1.2;
+    if (d > prevD) step = d;
+    prevD = d;
+
+    totalDist += step;
     if (totalDist > u_maxDist) break;
   }
 
@@ -399,7 +406,7 @@ const MandelbulbRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     u_resScale: { value: 0.8 },
     u_maxSteps: { value: 90 },
     u_fractalIter: { value: 9 },
-    u_maxDist: { value: 30.0 },
+    u_maxDist: { value: 8.0 },
     u_epsilonBase: { value: 0.002 },
 
     u_power: { value: 8.0 },
@@ -478,8 +485,8 @@ export const MandelbulbPreset: FractalPreset = {
     { key: "u_beatPulse", label: "Beat Punch", type: "float", group: "Audio", min: 0, max: 2, step: 0.01, default: 0.8 },
 
     { key: "u_resScale", label: "Resolution", type: "float", group: "Quality", min: 0.3, max: 1.0, step: 0.05, default: 0.8 },
-    { key: "u_maxSteps", label: "Ray Steps", type: "int", group: "Quality", min: 50, max: 300, step: 10, default: 90 },
-    { key: "u_maxDist", label: "Max Distance", type: "float", group: "Quality", min: 10, max: 60, step: 1, default: 30 },
+    { key: "u_maxSteps", label: "Ray Steps", type: "int", group: "Quality", min: 30, max: 128, step: 5, default: 90 },
+    { key: "u_maxDist", label: "Max Distance", type: "float", group: "Quality", min: 4, max: 20, step: 1, default: 8 },
     { key: "u_epsilonBase", label: "Detail", type: "float", group: "Quality", min: 0.0005, max: 0.01, step: 0.0005, default: 0.002 },
   ],
 

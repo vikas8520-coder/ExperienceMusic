@@ -4025,7 +4025,9 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1, fractal
         />
       ))}
 
-      <AudioReactiveEffects getAudioData={getAudioData} settings={settings} />
+      {!isFractalPreset(settings.presetName) && (
+        <AudioReactiveEffects getAudioData={getAudioData} settings={settings} />
+      )}
     </Canvas>
     </div>
   );
