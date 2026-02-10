@@ -194,7 +194,7 @@ export const presets = [
   "Chladni Geometry",
   "Resonant Field Lines",
   "Mandelbrot Explorer",
-  "Mandelbulb 3D",
+  "Julia Orbit Trap",
 ] as const;
 
 export type PresetName = typeof presets[number];
@@ -226,7 +226,7 @@ export const presetCategories = [
     name: "Fractals",
     presets: [
       { name: "Mandelbrot Explorer" as PresetName, icon: "mandelbrot", shortName: "Mandelbrot" },
-      { name: "Mandelbulb 3D" as PresetName, icon: "mandelbulb3d", shortName: "Mandelbulb" },
+      { name: "Julia Orbit Trap" as PresetName, icon: "juliaorbittrap", shortName: "Orbit Trap" },
     ],
   },
 ] as const;

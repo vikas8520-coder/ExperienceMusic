@@ -64,7 +64,7 @@ const presetIconMap: Record<string, React.ComponentType<{ className?: string }>>
   geometry: Triangle,
   field: Magnet,
   mandelbrot: Hexagon,
-  mandelbulb3d: Box,
+  juliaorbittrap: Hexagon,
 };
 
 interface UIControlsProps {

@@ -1,10 +1,10 @@
 import { MandelbrotPreset } from "./fractals/MandelbrotPreset";
-import { MandelbulbPreset } from "./fractals/MandelbulbPreset";
+import { JuliaOrbitTrapPreset } from "./fractals/JuliaOrbitTrapPreset";
 import type { FractalPreset } from "./types";
 
 export const fractalPresets: Record<string, FractalPreset> = {
   "Mandelbrot Explorer": MandelbrotPreset,
-  "Mandelbulb 3D": MandelbulbPreset,
+  "Julia Orbit Trap": JuliaOrbitTrapPreset,
 };
 
 export function isFractalPreset(presetName: string): boolean {
