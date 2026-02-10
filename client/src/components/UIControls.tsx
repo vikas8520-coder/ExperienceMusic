@@ -972,9 +972,9 @@ function PerformTabContent({
   ];
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none" style={{ top: '52px', bottom: '52px' }}>
-      <div className="space-y-4 max-w-lg w-full">
-        <div className="grid grid-cols-2 gap-3 md:gap-4 p-4 pointer-events-auto w-full" data-ui-root="true">
+    <div className="fixed inset-0 z-30 flex items-start justify-center pointer-events-none overflow-y-auto" style={{ top: '52px', bottom: '52px' }} data-ui-root="true">
+      <div className="space-y-4 max-w-lg w-full py-4 pointer-events-auto">
+        <div className="grid grid-cols-2 gap-3 md:gap-4 px-4 w-full" data-ui-root="true">
           {cards.map((card) => (
             <div
               key={card.testId}
@@ -999,7 +999,7 @@ function PerformTabContent({
         </div>
 
         {fractalMacros && fractalMacros.length > 0 && fractalUniforms && onFractalUniformChange && (
-          <div className="pointer-events-auto">
+          <div>
             <FractalPerformOverlay macros={fractalMacros} uniforms={fractalUniforms} setUniform={onFractalUniformChange} />
           </div>
         )}
