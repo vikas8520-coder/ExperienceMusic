@@ -538,6 +538,14 @@ function CreateTabContent({
         <div className="w-full md:w-[280px] shrink-0 glass-panel rounded-xl settings-panel overflow-y-auto pointer-events-auto" data-ui-root="true" style={{ maxHeight: 'calc(100vh - 130px)' }}>
           <div className="p-4 space-y-4">
             <h2 className="text-sm font-bold font-display uppercase tracking-widest text-white" data-testid="heading-presets">Presets</h2>
+            <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+              <Label className="text-xs uppercase tracking-widest text-muted-foreground">Preset Output</Label>
+              <Switch
+                checked={settings.presetEnabled !== false}
+                onCheckedChange={(checked) => updateSetting("presetEnabled", checked)}
+                data-testid="toggle-preset-enabled"
+              />
+            </div>
 
             {presetCategories.map((category) => (
               <div key={category.name} className="space-y-2">
@@ -549,7 +557,7 @@ function CreateTabContent({
                     return (
                       <button
                         key={preset.name}
-                        onClick={() => setSettings((prev: typeof settings) => ({ ...prev, presetName: preset.name }))}
+                        onClick={() => setSettings((prev: typeof settings) => ({ ...prev, presetName: preset.name, presetEnabled: true }))}
                         className={`flex flex-col items-center justify-center rounded-lg transition-all aspect-square ${
                           isActive
                             ? "bg-white/15 ring-1 ring-primary/70 text-white shadow-[0_0_8px_rgba(var(--primary),0.2)]"
