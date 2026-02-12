@@ -342,7 +342,7 @@ function vec3FromHex(hex: string) {
   return new THREE.Vector3(c.r, c.g, c.b);
 }
 
-const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ uniforms }) => {
+const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ uniforms, state }) => {
   const matRef = useRef<THREE.ShaderMaterial>(null!);
   const { size, viewport, gl } = useThree();
 
@@ -373,7 +373,11 @@ const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     m.uniforms.u_resolution.value.set(size.width * dpr, size.height * dpr);
 
     m.uniforms.u_center.value.set(uniforms.u_center[0], uniforms.u_center[1]);
-    m.uniforms.u_zoom.value = uniforms.u_zoom;
+    const zoomPulseEnabled = uniforms.u_zoomPulseEnabled !== false;
+    const zoomPulseStrength = typeof uniforms.u_zoomPulseStrength === "number" ? uniforms.u_zoomPulseStrength : 0.12;
+    const zoomPulseEnv = typeof state.zoomPulseEnv === "number" ? state.zoomPulseEnv : 0;
+    const zoomPulse = zoomPulseEnabled ? Math.exp(zoomPulseStrength * zoomPulseEnv) : 1;
+    m.uniforms.u_zoom.value = Math.max(1e-6, uniforms.u_zoom * zoomPulse);
     m.uniforms.u_rotation.value = uniforms.u_rotation;
     m.uniforms.u_iterations.value = uniforms.u_iterations;
     m.uniforms.u_power.value = uniforms.u_power;
@@ -453,7 +457,10 @@ export const MandelbrotPreset: FractalPreset = {
 
   uniformSpecs: [
     { key: "u_center", label: "Center", type: "vec2", group: "Fractal", default: [-0.5, 0] },
-    { key: "u_zoom", label: "Zoom", type: "float", group: "Fractal", min: 0.5, max: 50, step: 0.01, default: 1.8, macro: true },
+    { key: "u_zoom", label: "Fractal zoom", type: "float", group: "Fractal", min: 0.5, max: 50, step: 0.01, default: 1.8, macro: true },
+    { key: "u_zoomPulseEnabled", label: "Zoom Pulse", type: "bool", group: "Fractal", default: false },
+    { key: "u_zoomPulseStrength", label: "Pulse Amount", type: "float", group: "Fractal", min: 0, max: 0.35, step: 0.005, default: 0.12,
+      visibleIf: (u: UniformValues) => !!u.u_zoomPulseEnabled },
     { key: "u_rotation", label: "Rotation", type: "float", group: "Fractal", min: -3.14, max: 3.14, step: 0.001, default: 0 },
     { key: "u_iterations", label: "Iterations", type: "int", group: "Fractal", min: 50, max: 512, step: 1, default: 128 },
     { key: "u_power", label: "Power", type: "float", group: "Fractal", min: 2, max: 6, step: 0.01, default: 2.0 },
@@ -485,7 +492,13 @@ export const MandelbrotPreset: FractalPreset = {
   ],
 
   init(_ctx: PresetContext) {},
-  update() {},
+  update({ ctx, audio, state }) {
+    const raw = Math.max(0, Math.min(1, audio.rms * 0.6 + audio.bass * 0.25 + audio.beat * 0.15));
+    const prev = typeof state.zoomPulseEnv === "number" ? state.zoomPulseEnv : 0;
+    const rate = raw > prev ? 12 : 5;
+    const alpha = 1 - Math.exp(-rate * Math.max(ctx.dt, 1 / 120));
+    state.zoomPulseEnv = prev + (raw - prev) * alpha;
+  },
   dispose() {},
 
   Render: MandelbrotRender,

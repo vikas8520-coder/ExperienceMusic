@@ -1,7 +1,8 @@
 import { useRef, useMemo, useState, useEffect } from "react";
-import { Canvas, useFrame, extend } from "@react-three/fiber";
+import { Canvas, useFrame, useThree, extend } from "@react-three/fiber";
 import { OrbitControls, Sphere, shaderMaterial } from "@react-three/drei";
 import * as THREE from "three";
+import { Mesh, Vector3 } from "three";
 import { Effects } from "./Effects";
 import { PsyTunnel as PsyTunnelShader } from "./PsyTunnel";
 import { type AudioData } from "@/hooks/use-audio-analyzer";
@@ -484,7 +485,6 @@ const ParticleGlowMaterial = shaderMaterial(
 
 extend({ ParticleGlowMaterial });
 
-// Energy core shader for glowing center orb
 const EarthShader = {
   uniforms: {
     uTime: { value: 0 },
@@ -685,18 +685,65 @@ const AtmosphereShader = {
 };
 
 function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
+  const gl = useThree((state) => state.gl);
   const groupRef = useRef<THREE.Group>(null);
   const corePointsRef = useRef<THREE.Points>(null);
   const glowPointsRef = useRef<THREE.Points>(null);
   const trailPointsRef = useRef<THREE.Points>(null);
-  const energyCoreRef = useRef<THREE.Mesh>(null);
-  const energyCoreMaterialRef = useRef<THREE.ShaderMaterial>(null);
+  const earthRef = useRef<Mesh>(null!);
+  const camDir = useMemo(() => new Vector3(), []);
+  const center = useMemo(() => new Vector3(0, 0, 0), []);
+  const earthMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
+  const earthShaderMaterialRef = useRef<THREE.ShaderMaterial>(null);
   const atmosRef = useRef<THREE.Mesh>(null);
-  const atmosMaterialRef = useRef<THREE.ShaderMaterial>(null);
   
   const smoothedAudioRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, energy: 0 });
+  const orbitAngleRef = useRef(0);
+  const [earthTextures, setEarthTextures] = useState<{
+    map: THREE.Texture | null;
+    normalMap: THREE.Texture | null;
+    roughnessMap: THREE.Texture | null;
+  }>({ map: null, normalMap: null, roughnessMap: null });
   const tempColor = useMemo(() => new THREE.Color(), []);
   const tempColor2 = useMemo(() => new THREE.Color(), []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loader = new THREE.TextureLoader();
+    const anisotropy = Math.min(16, gl.capabilities.getMaxAnisotropy());
+
+    const loadOptionalTexture = (path: string, srgb = false) =>
+      new Promise<THREE.Texture | null>((resolve) => {
+        loader.load(
+          path,
+          (texture) => {
+            texture.anisotropy = anisotropy;
+            if (srgb) texture.colorSpace = THREE.SRGBColorSpace;
+            resolve(texture);
+          },
+          undefined,
+          () => resolve(null),
+        );
+      });
+
+    Promise.all([
+      loadOptionalTexture("/textures/earth_4k.jpg", true),
+      loadOptionalTexture("/textures/earth_normal.jpg"),
+      loadOptionalTexture("/textures/earth_roughness.jpg"),
+    ]).then(([map, normalMap, roughnessMap]) => {
+      if (!mounted) {
+        map?.dispose();
+        normalMap?.dispose();
+        roughnessMap?.dispose();
+        return;
+      }
+      setEarthTextures({ map, normalMap, roughnessMap });
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [gl]);
   
   // Premium: Multi-layer particle system
   const coreCount = 4000;    // Bright core particles
@@ -992,18 +1039,38 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
       colAttr.needsUpdate = true;
     }
 
-    // Smooth group rotation
-    groupRef.current.rotation.y += 0.001 * settings.speed * (1 + smooth.mid * 0.3);
+    // Keep orbit rhythm unified between particles and Earth core.
+    const orbitStep = 0.001 * settings.speed * (1 + smooth.mid * 0.3);
+    orbitAngleRef.current += orbitStep;
+    groupRef.current.rotation.y = orbitAngleRef.current;
     groupRef.current.rotation.x = smooth.sub * 0.1 * Math.sin(time * 0.15);
     groupRef.current.rotation.z = smooth.high * 0.03 * Math.cos(time * 0.2);
 
-    if (energyCoreRef.current && energyCoreMaterialRef.current) {
+    if (earthRef.current) {
+      const orbitSpeed = 0.35;
+      const orbitRadius = 1.6;
+      const depthAmount = 1.1;
+      const bobAmount = 0.08;
+      const spinSpeed = 0.7;
+      const a = time * orbitSpeed;
+      const x = center.x + (-Math.cos(a) * orbitRadius);
+      const y = center.y + Math.sin(a * 0.6) * bobAmount;
+      const depth = Math.sin(a) * depthAmount;
+      state.camera.getWorldDirection(camDir);
       const coreScale = 1 + smooth.bass * 0.08 + smooth.kick * 0.12;
-      energyCoreRef.current.scale.setScalar(coreScale);
-      energyCoreRef.current.rotation.y += 0.003 * settings.speed;
-      energyCoreRef.current.rotation.x = 0.41;
-      
-      const u = energyCoreMaterialRef.current.uniforms;
+      earthRef.current.scale.setScalar(coreScale);
+      earthRef.current.position.set(x, y, center.z);
+      earthRef.current.position.addScaledVector(camDir, depth);
+      earthRef.current.rotation.y = time * spinSpeed;
+      earthRef.current.rotation.z = 0.15;
+    }
+
+    if (earthTextures.map && earthMaterialRef.current) {
+      earthMaterialRef.current.emissive.set(settings.colorPalette[0] || "#3366aa");
+      earthMaterialRef.current.emissiveIntensity = 0.08 + smooth.energy * 0.18 + smooth.kick * 0.12;
+    }
+    if (!earthTextures.map && earthShaderMaterialRef.current) {
+      const u = earthShaderMaterialRef.current.uniforms;
       u.uTime.value = time;
       u.uBass.value = smooth.bass;
       u.uEnergy.value = smooth.energy;
@@ -1012,41 +1079,53 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
       u.uColor2.value.set(settings.colorPalette[1] || "#6600ff");
     }
 
-    if (atmosRef.current && atmosMaterialRef.current) {
+    if (atmosRef.current) {
       const atmosScale = 1 + smooth.bass * 0.08 + smooth.kick * 0.12;
       atmosRef.current.scale.setScalar(atmosScale);
-      atmosRef.current.rotation.y = energyCoreRef.current?.rotation.y ?? 0;
-      atmosRef.current.rotation.x = 0.41;
-      
-      const au = atmosMaterialRef.current.uniforms;
-      au.uBass.value = smooth.bass;
-      au.uEnergy.value = smooth.energy;
-      tempColor.set(settings.colorPalette[0] || "#4488ff");
-      au.uColor1.value.copy(tempColor);
+      if (earthRef.current) {
+        atmosRef.current.position.copy(earthRef.current.position);
+        atmosRef.current.rotation.y = earthRef.current.rotation.y;
+        atmosRef.current.rotation.z = earthRef.current.rotation.z;
+      }
     }
   });
 
   return (
     <group ref={groupRef}>
       {/* Earth at center */}
-      <mesh ref={energyCoreRef}>
-        <sphereGeometry args={[2.5, 48, 48]} />
-        <shaderMaterial
-          ref={energyCoreMaterialRef}
-          {...EarthShader}
-          transparent
-          depthWrite={true}
-          side={THREE.FrontSide}
-        />
+      <mesh ref={earthRef}>
+        <sphereGeometry args={[1, 128, 128]} />
+        {earthTextures.map ? (
+          <meshStandardMaterial
+            ref={earthMaterialRef}
+            map={earthTextures.map}
+            normalMap={earthTextures.normalMap ?? undefined}
+            roughnessMap={earthTextures.roughnessMap ?? undefined}
+            normalScale={earthTextures.normalMap ? [0.6, 0.6] : undefined}
+            color="#ffffff"
+            metalness={0.03}
+            roughness={earthTextures.roughnessMap ? 1.0 : 0.85}
+            emissive={settings.colorPalette[0] || "#3366aa"}
+            emissiveIntensity={0.12}
+          />
+        ) : (
+          <shaderMaterial
+            ref={earthShaderMaterialRef}
+            {...EarthShader}
+            transparent
+            depthWrite={true}
+            side={THREE.FrontSide}
+          />
+        )}
       </mesh>
       
       {/* Atmosphere glow */}
-      <mesh ref={atmosRef}>
-        <sphereGeometry args={[2.75, 48, 48]} />
-        <shaderMaterial
-          ref={atmosMaterialRef}
-          {...AtmosphereShader}
+      <mesh ref={atmosRef} scale={1.1}>
+        <sphereGeometry args={[1, 128, 128]} />
+        <meshBasicMaterial
+          color="#a855f7"
           transparent
+          opacity={0.2}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
           side={THREE.BackSide}

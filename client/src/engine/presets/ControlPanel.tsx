@@ -1,6 +1,7 @@
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { FractalCenterPad } from "@/components/FractalCenterPad";
 import type { UniformSpec, UniformValues } from "./types";
 
 interface ControlPanelProps {
@@ -89,7 +90,45 @@ function BoolControl({ spec, value, onChange }: { spec: UniformSpec; value: bool
   );
 }
 
-function Vec2Control({ spec, value, onChange }: { spec: UniformSpec; value: [number, number]; onChange: (v: [number, number]) => void }) {
+function Vec2Control({
+  spec,
+  value,
+  onChange,
+  zoom,
+  onZoomChange,
+  minZoom,
+  maxZoom,
+}: {
+  spec: UniformSpec;
+  value: [number, number];
+  onChange: (v: [number, number]) => void;
+  zoom?: number;
+  onZoomChange?: (v: number) => void;
+  minZoom?: number;
+  maxZoom?: number;
+}) {
+  if (spec.key === "u_center") {
+    const resetValue = Array.isArray(spec.default) && spec.default.length === 2
+      ? [spec.default[0] as number, spec.default[1] as number] as [number, number]
+      : [0, 0] as [number, number];
+
+    return (
+      <div className="space-y-1.5" data-testid={`control-${spec.key}`}>
+        <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{spec.label}</Label>
+        <FractalCenterPad
+          value={{ x: value[0], y: value[1] }}
+          range={spec.max ?? 2}
+          zoom={zoom ?? 1}
+          onZoomChange={(next) => onZoomChange?.(next)}
+          onChange={({ x, y }) => onChange([x, y])}
+          onReset={() => onChange(resetValue)}
+          minZoom={minZoom}
+          maxZoom={maxZoom}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-1.5" data-testid={`control-${spec.key}`}>
       <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{spec.label}</Label>
@@ -149,13 +188,40 @@ function Vec3Control({ spec, value, onChange }: { spec: UniformSpec; value: [num
   );
 }
 
-function ControlForSpec({ spec, value, onChange }: { spec: UniformSpec; value: any; onChange: (v: any) => void }) {
+function ControlForSpec({
+  spec,
+  value,
+  onChange,
+  zoom,
+  onZoomChange,
+  minZoom,
+  maxZoom,
+}: {
+  spec: UniformSpec;
+  value: any;
+  onChange: (v: any) => void;
+  zoom?: number;
+  onZoomChange?: (v: number) => void;
+  minZoom?: number;
+  maxZoom?: number;
+}) {
   switch (spec.type) {
     case "float": return <FloatControl spec={spec} value={value} onChange={onChange} />;
     case "int": return <IntControl spec={spec} value={value} onChange={onChange} />;
     case "bool": return <BoolControl spec={spec} value={value} onChange={onChange} />;
     case "color": return <ColorControl spec={spec} value={value} onChange={onChange} />;
-    case "vec2": return <Vec2Control spec={spec} value={value} onChange={onChange} />;
+    case "vec2":
+      return (
+        <Vec2Control
+          spec={spec}
+          value={value}
+          onChange={onChange}
+          zoom={zoom}
+          onZoomChange={onZoomChange}
+          minZoom={minZoom}
+          maxZoom={maxZoom}
+        />
+      );
     case "vec3": return <Vec3Control spec={spec} value={value} onChange={onChange} />;
     default: return null;
   }
@@ -163,6 +229,8 @@ function ControlForSpec({ spec, value, onChange }: { spec: UniformSpec; value: a
 
 export function ControlPanel({ specs, uniforms, setUniform }: ControlPanelProps) {
   const groups = groupSpecs(specs);
+  const zoomSpec = specs.find((s) => s.key === "u_zoom" && s.type === "float");
+  const zoomValue = typeof uniforms.u_zoom === "number" ? (uniforms.u_zoom as number) : undefined;
 
   const handleChange = (spec: UniformSpec, rawValue: any) => {
     const value = spec.transform ? spec.transform(rawValue) : rawValue;
@@ -187,6 +255,10 @@ export function ControlPanel({ specs, uniforms, setUniform }: ControlPanelProps)
                   spec={spec}
                   value={uniforms[spec.key]}
                   onChange={(v) => handleChange(spec, v)}
+                  zoom={zoomValue}
+                  onZoomChange={(v) => setUniform("u_zoom", v)}
+                  minZoom={zoomSpec?.min}
+                  maxZoom={zoomSpec?.max}
                 />
               ))}
             </div>

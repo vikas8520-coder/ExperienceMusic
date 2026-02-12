@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, type MouseEvent, type TouchEvent, type WheelEvent } from "react";
 import { AnimatePresence } from "framer-motion";
 import { AudioVisualizer } from "@/components/AudioVisualizer";
 import { UIControls, type ThumbnailAnalysis } from "@/components/UIControls";
@@ -51,7 +51,14 @@ export default function Home() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [visualizationZoom, setVisualizationZoom] = useState(1);
   const [activeTab, setActiveTab] = useState<"listen" | "create" | "perform" | "record">("listen");
+  const [uiAutoHidden, setUiAutoHidden] = useState(false);
   const lastTapRef = useRef(0);
+  const hideTimerRef = useRef<number | null>(null);
+  const pinchRef = useRef<{ startDist: number; startZoom: number; mode: "fractal" | "scene"; min: number; max: number } | null>(null);
+  const zoomAnimRef = useRef<{ mode: "fractal" | "scene"; target: number; min: number; max: number } | null>(null);
+  const zoomRafRef = useRef<number | null>(null);
+  const fractalZoomRef = useRef(1);
+  const sceneZoomRef = useRef(1);
   
   const [savedTracks, setSavedTracks] = useState<SavedTrack[]>(() => {
     try {
@@ -129,6 +136,16 @@ export default function Home() {
     setFractalUniforms(prev => ({ ...prev, [key]: value }));
   }, []);
 
+  useEffect(() => {
+    sceneZoomRef.current = visualizationZoom;
+  }, [visualizationZoom]);
+
+  useEffect(() => {
+    if (typeof fractalUniforms.u_zoom === "number") {
+      fractalZoomRef.current = fractalUniforms.u_zoom;
+    }
+  }, [fractalUniforms.u_zoom]);
+
   // Update color palette when color settings or time changes
   useEffect(() => {
     const newPalette = generateColorPalette(colorSettings, colorTime);
@@ -163,11 +180,37 @@ export default function Home() {
     setShowSoundCloud(false);
   }, []);
 
-  const handleCanvasClick = useCallback(() => {
+  const handleCanvasClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
     if (isUIOpen) {
       closeAllUI();
+      return;
     }
-  }, [isUIOpen, closeAllUI]);
+
+    if (!isFractalPreset(settings.presetName)) return;
+
+    const center = Array.isArray(fractalUniforms.u_center) ? fractalUniforms.u_center as [number, number] : [0, 0];
+    const zoom = typeof fractalUniforms.u_zoom === "number" ? fractalUniforms.u_zoom : 1;
+    const rotation = typeof fractalUniforms.u_rotation === "number" ? fractalUniforms.u_rotation : 0;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+
+    let uvx = px * 2 - 1;
+    let uvy = -(py * 2 - 1);
+    uvx *= rect.width / rect.height;
+
+    const c = Math.cos(rotation);
+    const s = Math.sin(rotation);
+    const rx = c * uvx - s * uvy;
+    const ry = s * uvx + c * uvy;
+
+    const nextCenter: [number, number] = [
+      center[0] + rx / Math.max(zoom, 1e-6),
+      center[1] + ry / Math.max(zoom, 1e-6),
+    ];
+    setFractalUniform("u_center", nextCenter);
+  }, [isUIOpen, closeAllUI, settings.presetName, fractalUniforms, setFractalUniform]);
 
   const handleCanvasDoubleClick = useCallback(() => {
     toggleFullscreen();
@@ -187,55 +230,182 @@ export default function Home() {
     }
   }, [isUIOpen, closeAllUI, toggleFullscreen]);
 
+  const markUiActivity = useCallback(() => {
+    setUiAutoHidden(false);
+    if (hideTimerRef.current !== null) {
+      window.clearTimeout(hideTimerRef.current);
+    }
+    hideTimerRef.current = window.setTimeout(() => {
+      setUiAutoHidden(true);
+    }, 1800);
+  }, []);
+
+  const startZoomAnimation = useCallback(() => {
+    if (zoomRafRef.current !== null) return;
+    const tick = () => {
+      const z = zoomAnimRef.current;
+      if (!z) {
+        zoomRafRef.current = null;
+        return;
+      }
+
+      const current = z.mode === "fractal" ? fractalZoomRef.current : sceneZoomRef.current;
+      const next = current + (z.target - current) * 0.08;
+      const clamped = Math.max(z.min, Math.min(z.max, next));
+
+      if (z.mode === "fractal") {
+        fractalZoomRef.current = clamped;
+        setFractalUniform("u_zoom", clamped);
+      } else {
+        sceneZoomRef.current = clamped;
+        setVisualizationZoom(clamped);
+      }
+
+      if (Math.abs(z.target - clamped) < 1e-4) {
+        zoomAnimRef.current = null;
+        zoomRafRef.current = null;
+        return;
+      }
+
+      zoomRafRef.current = window.requestAnimationFrame(tick);
+    };
+    zoomRafRef.current = window.requestAnimationFrame(tick);
+  }, [setFractalUniform]);
+
   useEffect(() => {
-    let lastTouchY = 0;
-    let isZooming = false;
-    
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        const target = e.target as HTMLElement;
-        const isOnCanvas = target.tagName === 'CANVAS' || target.closest('canvas');
-        const isOnUI = target.closest('.glass-panel') || target.closest('button') || target.closest('input');
-        
-        if (isOnCanvas && !isOnUI) {
-          isZooming = true;
-          const touch1 = e.touches[0];
-          const touch2 = e.touches[1];
-          lastTouchY = (touch1.clientY + touch2.clientY) / 2;
-        }
-      }
-    };
-    
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2 && isZooming) {
-        const touch1 = e.touches[0];
-        const touch2 = e.touches[1];
-        const currentY = (touch1.clientY + touch2.clientY) / 2;
-        const deltaY = lastTouchY - currentY;
-        
-        setVisualizationZoom(prev => {
-          const newZoom = prev + deltaY * 0.008;
-          return Math.max(0.5, Math.min(3, newZoom));
-        });
-        
-        lastTouchY = currentY;
-      }
-    };
-    
-    const handleTouchEnd = () => {
-      isZooming = false;
-    };
-    
-    document.addEventListener("touchstart", handleTouchStart, { passive: true });
-    document.addEventListener("touchmove", handleTouchMove, { passive: true });
-    document.addEventListener("touchend", handleTouchEnd, { passive: true });
-    
     return () => {
-      document.removeEventListener("touchstart", handleTouchStart);
-      document.removeEventListener("touchmove", handleTouchMove);
-      document.removeEventListener("touchend", handleTouchEnd);
+      if (zoomRafRef.current !== null) {
+        window.cancelAnimationFrame(zoomRafRef.current);
+      }
     };
   }, []);
+
+  const applyScreenZoom = useCallback((factor: number) => {
+    if (!isFinite(factor) || factor <= 0) return;
+
+    if (isFractalPreset(settings.presetName)) {
+      const spec = fractalSpecs.find((s) => s.key === "u_zoom" && s.type === "float");
+      const min = spec?.min ?? 0.05;
+      const max = spec?.max ?? 50;
+      const base = zoomAnimRef.current?.mode === "fractal" ? zoomAnimRef.current.target : fractalZoomRef.current;
+      zoomAnimRef.current = {
+        mode: "fractal",
+        min,
+        max,
+        target: Math.max(min, Math.min(max, base * factor)),
+      };
+      startZoomAnimation();
+      return;
+    }
+
+    const min = 0.5;
+    const max = 3;
+    const base = zoomAnimRef.current?.mode === "scene" ? zoomAnimRef.current.target : sceneZoomRef.current;
+    zoomAnimRef.current = {
+      mode: "scene",
+      min,
+      max,
+      target: Math.max(min, Math.min(max, base * factor)),
+    };
+    startZoomAnimation();
+  }, [settings.presetName, fractalSpecs, startZoomAnimation]);
+
+  const handleScreenWheelZoom = useCallback((e: WheelEvent<HTMLDivElement>) => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    markUiActivity();
+
+    const modeScale = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 120 : 1;
+    const delta = e.deltaY * modeScale;
+    const speed = isFractalPreset(settings.presetName) ? 0.0081 : 0.0057;
+    const factor = Math.exp(-delta * speed);
+    applyScreenZoom(factor);
+  }, [applyScreenZoom, settings.presetName, markUiActivity]);
+
+  const getTouchDist = (t1: { clientX: number; clientY: number }, t2: { clientX: number; clientY: number }) => {
+    const dx = t1.clientX - t2.clientX;
+    const dy = t1.clientY - t2.clientY;
+    return Math.hypot(dx, dy);
+  };
+
+  const handleScreenTouchStart = useCallback((e: TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length !== 2) return;
+    e.preventDefault();
+    markUiActivity();
+
+    const startDist = getTouchDist(e.touches[0], e.touches[1]);
+    if (startDist <= 0) return;
+
+    if (isFractalPreset(settings.presetName)) {
+      const spec = fractalSpecs.find((s) => s.key === "u_zoom" && s.type === "float");
+      pinchRef.current = {
+        startDist,
+        startZoom: typeof fractalUniforms.u_zoom === "number" ? fractalUniforms.u_zoom : 1,
+        mode: "fractal",
+        min: spec?.min ?? 0.05,
+        max: spec?.max ?? 50,
+      };
+      return;
+    }
+
+    pinchRef.current = {
+      startDist,
+      startZoom: visualizationZoom,
+      mode: "scene",
+      min: 0.5,
+      max: 3,
+    };
+  }, [settings.presetName, fractalSpecs, fractalUniforms.u_zoom, visualizationZoom, markUiActivity]);
+
+  const handleScreenTouchMove = useCallback((e: TouchEvent<HTMLDivElement>) => {
+    const pinch = pinchRef.current;
+    if (!pinch || e.touches.length !== 2) return;
+    e.preventDefault();
+    markUiActivity();
+
+    const dist = getTouchDist(e.touches[0], e.touches[1]);
+    if (dist <= 0) return;
+    const ratio = dist / pinch.startDist;
+    const next = Math.max(pinch.min, Math.min(pinch.max, pinch.startZoom * ratio));
+
+    zoomAnimRef.current = {
+      mode: pinch.mode,
+      min: pinch.min,
+      max: pinch.max,
+      target: next,
+    };
+    startZoomAnimation();
+  }, [markUiActivity, startZoomAnimation]);
+
+  const handleScreenTouchEnd = useCallback((e: TouchEvent<HTMLDivElement>) => {
+    if (pinchRef.current) {
+      if (e.touches.length < 2) pinchRef.current = null;
+      return;
+    }
+    handleCanvasTouchEnd();
+  }, [handleCanvasTouchEnd]);
+
+  useEffect(() => {
+    markUiActivity();
+    const onActivity = () => markUiActivity();
+    window.addEventListener("mousemove", onActivity, { passive: true });
+    window.addEventListener("mousedown", onActivity, { passive: true });
+    window.addEventListener("wheel", onActivity, { passive: true });
+    window.addEventListener("keydown", onActivity);
+    window.addEventListener("touchstart", onActivity, { passive: true });
+
+    return () => {
+      if (hideTimerRef.current !== null) {
+        window.clearTimeout(hideTimerRef.current);
+      }
+      window.removeEventListener("mousemove", onActivity);
+      window.removeEventListener("mousedown", onActivity);
+      window.removeEventListener("wheel", onActivity);
+      window.removeEventListener("keydown", onActivity);
+      window.removeEventListener("touchstart", onActivity);
+    };
+  }, [markUiActivity]);
 
   const { getAudioData, destNode } = useAudioAnalyzer(audioRef.current, audioFile);
 
@@ -693,6 +863,7 @@ export default function Home() {
     <div 
       className="w-full h-screen relative bg-background overflow-hidden selection:bg-primary/30"
       data-testid="app-root"
+      onMouseMove={markUiActivity}
     >
       
       {/* Background Thumbnail Layer */}
@@ -721,70 +892,76 @@ export default function Home() {
         className="absolute inset-0 z-10"
         onClick={handleCanvasClick}
         onDoubleClick={handleCanvasDoubleClick}
-        onTouchEnd={handleCanvasTouchEnd}
-        style={{ pointerEvents: 'auto' }}
+        onWheel={handleScreenWheelZoom}
+        onTouchStart={handleScreenTouchStart}
+        onTouchMove={handleScreenTouchMove}
+        onTouchEnd={handleScreenTouchEnd}
+        onTouchCancel={handleScreenTouchEnd}
+        style={{ pointerEvents: 'auto', touchAction: "none" }}
         data-testid="canvas-click-catcher"
       />
 
-      {/* UI Overlay */}
-      <UIControls 
-        isPlaying={isPlaying}
-        onPlayPause={togglePlay}
-        onFileUpload={handleFileUpload}
-        settings={settings}
-        setSettings={setSettings}
-        colorSettings={colorSettings}
-        setColorSettings={setColorSettings}
-        isRecording={isRecording}
-        onToggleRecording={toggleRecording}
-        recordingQuality={recordingQuality}
-        onRecordingQualityChange={setRecordingQuality}
-        onSavePreset={handleSavePreset}
-        onThumbnailAnalysis={handleThumbnailAnalysis}
-        onThumbnailUpload={handleThumbnailUpload}
-        thumbnailUrl={thumbnailUrl}
-        onSaveToLibrary={handleSaveToLibrary}
-        onToggleLibrary={() => setShowLibrary(!showLibrary)}
-        onToggleSoundCloud={() => setShowSoundCloud(!showSoundCloud)}
-        activeTab={activeTab}
-        onActiveTabChange={setActiveTab}
-        trackName={audioFileName}
-        isFullscreen={isFullscreen}
-        onToggleFullscreen={toggleFullscreen}
-        zoom={visualizationZoom}
-        onZoomChange={setVisualizationZoom}
-        currentTime={currentTime}
-        duration={duration}
-        onSeek={handleSeek}
-        volume={volume}
-        onVolumeChange={handleVolumeChange}
-        onPreviousTrack={handlePreviousTrack}
-        onNextTrack={handleNextTrack}
-        hasLibraryTracks={savedTracks.length > 0}
-        fractalSpecs={fractalSpecs}
-        fractalMacros={fractalMacros}
-        fractalUniforms={fractalUniforms}
-        onFractalUniformChange={setFractalUniform}
-      />
-      
-      {/* Track Library Panel */}
-      <AnimatePresence>
-        {showLibrary && (
-          <TrackLibrary 
-            tracks={savedTracks}
-            onLoadTrack={handleLoadTrack}
-            onDeleteTrack={handleDeleteTrack}
-            onClose={() => setShowLibrary(false)}
-          />
-        )}
-      </AnimatePresence>
-      
-      {/* SoundCloud Panel */}
-      <SoundCloudPanel
-        isOpen={showSoundCloud}
-        onClose={() => setShowSoundCloud(false)}
-        onPlayTrack={handleSoundCloudTrack}
-      />
+      <div className={uiAutoHidden ? "opacity-0 pointer-events-none transition-opacity duration-300" : "opacity-100 transition-opacity duration-300"}>
+        {/* UI Overlay */}
+        <UIControls 
+          isPlaying={isPlaying}
+          onPlayPause={togglePlay}
+          onFileUpload={handleFileUpload}
+          settings={settings}
+          setSettings={setSettings}
+          colorSettings={colorSettings}
+          setColorSettings={setColorSettings}
+          isRecording={isRecording}
+          onToggleRecording={toggleRecording}
+          recordingQuality={recordingQuality}
+          onRecordingQualityChange={setRecordingQuality}
+          onSavePreset={handleSavePreset}
+          onThumbnailAnalysis={handleThumbnailAnalysis}
+          onThumbnailUpload={handleThumbnailUpload}
+          thumbnailUrl={thumbnailUrl}
+          onSaveToLibrary={handleSaveToLibrary}
+          onToggleLibrary={() => setShowLibrary(!showLibrary)}
+          onToggleSoundCloud={() => setShowSoundCloud(!showSoundCloud)}
+          activeTab={activeTab}
+          onActiveTabChange={setActiveTab}
+          trackName={audioFileName}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={toggleFullscreen}
+          zoom={visualizationZoom}
+          onZoomChange={setVisualizationZoom}
+          currentTime={currentTime}
+          duration={duration}
+          onSeek={handleSeek}
+          volume={volume}
+          onVolumeChange={handleVolumeChange}
+          onPreviousTrack={handlePreviousTrack}
+          onNextTrack={handleNextTrack}
+          hasLibraryTracks={savedTracks.length > 0}
+          fractalSpecs={fractalSpecs}
+          fractalMacros={fractalMacros}
+          fractalUniforms={fractalUniforms}
+          onFractalUniformChange={setFractalUniform}
+        />
+        
+        {/* Track Library Panel */}
+        <AnimatePresence>
+          {showLibrary && (
+            <TrackLibrary 
+              tracks={savedTracks}
+              onLoadTrack={handleLoadTrack}
+              onDeleteTrack={handleDeleteTrack}
+              onClose={() => setShowLibrary(false)}
+            />
+          )}
+        </AnimatePresence>
+        
+        {/* SoundCloud Panel */}
+        <SoundCloudPanel
+          isOpen={showSoundCloud}
+          onClose={() => setShowSoundCloud(false)}
+          onPlayTrack={handleSoundCloudTrack}
+        />
+      </div>
       
     </div>
   );

@@ -967,7 +967,7 @@ function PerformTabContent({
       testId: "perform-glow",
     },
     {
-      label: "Zoom",
+      label: "Scene Zoom",
       value: zoom !== undefined ? Math.round(zoom * 100) : 100,
       color: "text-amber-400",
       min: 50,
@@ -1057,8 +1057,8 @@ function RecordTabContent({
           </div>
         </div>
 
-        {/* Record Button */}
-        <div className="flex justify-center">
+        {/* Record + Fullscreen */}
+        <div className="flex items-center justify-center gap-3">
           <button
             onClick={onToggleRecording}
             className={`w-16 h-16 md:w-20 md:h-20 rounded-full flex items-center justify-center transition-all ${
@@ -1070,20 +1070,6 @@ function RecordTabContent({
           >
             <Disc className={`w-6 h-6 md:w-8 md:h-8 text-destructive ${isRecording ? 'animate-spin' : ''}`} />
           </button>
-        </div>
-        <p className="text-center text-xs text-muted-foreground">{isRecording ? "Recording... tap to stop" : "Tap to start recording"}</p>
-
-        {/* Save + Fullscreen */}
-        <div className="flex gap-3">
-          <Button
-            variant="outline"
-            className="flex-1"
-            onClick={onSaveToLibrary}
-            data-testid="button-save-library"
-          >
-            <FolderPlus className="mr-2 h-4 w-4" />
-            Save
-          </Button>
           <Button
             variant="outline"
             size="icon"
@@ -1091,6 +1077,20 @@ function RecordTabContent({
             data-testid="button-fullscreen"
           >
             {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+          </Button>
+        </div>
+        <p className="text-center text-xs text-muted-foreground">{isRecording ? "Recording... tap to stop" : "Tap to start recording"}</p>
+
+        {/* Save */}
+        <div className="flex">
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={onSaveToLibrary}
+            data-testid="button-save-library"
+          >
+            <FolderPlus className="mr-2 h-4 w-4" />
+            Save
           </Button>
         </div>
       </div>
