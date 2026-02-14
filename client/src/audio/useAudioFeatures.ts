@@ -17,18 +17,59 @@ export function useAudioFeatures() {
   const ctxRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   const workletUrl = useMemo(() => new URL("./feature-worklet.ts", import.meta.url), []);
 
+  const teardownPipeline = useCallback(async () => {
+    if (rafRef.current !== null) {
+      window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+
+    if (nodeRef.current) {
+      nodeRef.current.port.onmessage = null;
+      nodeRef.current.disconnect();
+      nodeRef.current = null;
+    }
+
+    analyserRef.current?.disconnect();
+    analyserRef.current = null;
+
+    sourceRef.current?.disconnect();
+    sourceRef.current = null;
+
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+
+    if (ctxRef.current) {
+      try {
+        await ctxRef.current.close();
+      } catch {}
+      ctxRef.current = null;
+    }
+  }, []);
+
   const start = useCallback(async () => {
     if (status === "running" || status === "starting") return;
+    let localCtx: AudioContext | null = null;
+    let localStream: MediaStream | null = null;
+    let localNode: AudioWorkletNode | null = null;
+    let localAnalyser: AnalyserNode | null = null;
+    let localSource: MediaStreamAudioSourceNode | null = null;
+    let localRaf: number | null = null;
+
     try {
+      await teardownPipeline();
       setStatus("starting");
       setError(null);
 
       if (!window.isSecureContext) {
-        throw new Error("Microphone requires a secure context (https or localhost).");
+        throw new Error(
+          `Microphone is blocked on insecure pages (${window.location.origin}). Use https:// (or localhost on this device).`
+        );
       }
 
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -40,10 +81,10 @@ export function useAudioFeatures() {
         throw new Error("Web Audio API is not available in this browser.");
       }
 
-      const ctx = new Ctx({ latencyHint: "interactive" });
-      await ctx.resume();
+      localCtx = new Ctx({ latencyHint: "interactive" });
+      await localCtx.resume();
 
-      const stream = await navigator.mediaDevices.getUserMedia({
+      localStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -52,77 +93,135 @@ export function useAudioFeatures() {
         video: false,
       });
 
-      await ctx.audioWorklet.addModule(workletUrl.href);
+      localSource = localCtx.createMediaStreamSource(localStream);
 
-      const source = ctx.createMediaStreamSource(stream);
-      if (typeof AudioWorkletNode === "undefined") {
-        throw new Error("AudioWorklet is not supported in this browser.");
+      let usingWorklet = false;
+      if (typeof AudioWorkletNode !== "undefined" && localCtx.audioWorklet?.addModule) {
+        try {
+          await localCtx.audioWorklet.addModule(workletUrl.href);
+          localNode = new AudioWorkletNode(localCtx, "feature-worklet", {
+            numberOfInputs: 1,
+            numberOfOutputs: 0,
+            channelCount: 1,
+          });
+
+          localNode.parameters.get("smoothing")?.setValueAtTime(0.85, localCtx.currentTime);
+          localNode.parameters.get("gain")?.setValueAtTime(1.0, localCtx.currentTime);
+          localNode.port.onmessage = (ev: MessageEvent<AudioFeatures>) => {
+            setFeatures(ev.data);
+          };
+          localSource.connect(localNode);
+          usingWorklet = true;
+        } catch (workletError) {
+          console.warn("AudioWorklet unavailable, falling back to AnalyserNode.", workletError);
+        }
       }
 
-      const node = new AudioWorkletNode(ctx, "feature-worklet", {
-        numberOfInputs: 1,
-        numberOfOutputs: 0,
-        channelCount: 1,
-      });
+      if (!usingWorklet) {
+        localAnalyser = localCtx.createAnalyser();
+        localAnalyser.fftSize = 1024;
+        localAnalyser.smoothingTimeConstant = 0.8;
+        localSource.connect(localAnalyser);
 
-      node.parameters.get("smoothing")?.setValueAtTime(0.85, ctx.currentTime);
-      node.parameters.get("gain")?.setValueAtTime(1.0, ctx.currentTime);
+        const timeData = new Float32Array(localAnalyser.fftSize);
+        const freqData = new Uint8Array(localAnalyser.frequencyBinCount);
+        const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+        const smoothing = 0.85;
+        let rmsSm = 0;
+        let centroidSm = 0;
+        let onsetSm = 0;
+        let prevRms = 0;
 
-      node.port.onmessage = (ev: MessageEvent<AudioFeatures>) => {
-        setFeatures(ev.data);
-      };
+        const tick = () => {
+          if (!analyserRef.current || !ctxRef.current) return;
 
-      source.connect(node);
+          localAnalyser?.getFloatTimeDomainData(timeData);
+          let sumSq = 0;
+          for (let i = 0; i < timeData.length; i++) {
+            const x = timeData[i];
+            sumSq += x * x;
+          }
+          const rms = Math.sqrt(sumSq / timeData.length);
 
-      sourceRef.current = source;
-      nodeRef.current = node;
-      streamRef.current = stream;
-      ctxRef.current = ctx;
+          localAnalyser?.getByteFrequencyData(freqData);
+          let magSum = 0;
+          let weighted = 0;
+          for (let i = 0; i < freqData.length; i++) {
+            const m = freqData[i] / 255;
+            magSum += m;
+            weighted += i * m;
+          }
+          const centroid = magSum > 1e-9 ? (weighted / magSum) / freqData.length : 0;
+          const onset = clamp01(Math.max(0, rms - prevRms) * 8);
+          prevRms = rms;
+
+          rmsSm = smoothing * rmsSm + (1 - smoothing) * rms;
+          centroidSm = smoothing * centroidSm + (1 - smoothing) * centroid;
+          onsetSm = smoothing * onsetSm + (1 - smoothing) * onset;
+
+          setFeatures({
+            rms: rmsSm,
+            centroid: centroidSm,
+            onset: onsetSm,
+            t: ctxRef.current.currentTime,
+          });
+
+          localRaf = window.requestAnimationFrame(tick);
+          rafRef.current = localRaf;
+        };
+
+        localRaf = window.requestAnimationFrame(tick);
+        rafRef.current = localRaf;
+      }
+
+      sourceRef.current = localSource;
+      nodeRef.current = localNode;
+      analyserRef.current = localAnalyser;
+      streamRef.current = localStream;
+      ctxRef.current = localCtx;
       setStatus("running");
     } catch (e: any) {
-      // Ensure partially initialized resources do not leak on failed start.
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-      sourceRef.current?.disconnect();
-      sourceRef.current = null;
-      nodeRef.current?.disconnect();
-      nodeRef.current = null;
-      if (ctxRef.current) {
-        try {
-          await ctxRef.current.close();
-        } catch {}
-        ctxRef.current = null;
+      if (localRaf !== null) {
+        window.cancelAnimationFrame(localRaf);
       }
+      try {
+        localNode?.port && (localNode.port.onmessage = null);
+      } catch {}
+      try {
+        localNode?.disconnect();
+      } catch {}
+      try {
+        localAnalyser?.disconnect();
+      } catch {}
+      try {
+        localSource?.disconnect();
+      } catch {}
+      try {
+        localStream?.getTracks().forEach((t) => t.stop());
+      } catch {}
+      if (localCtx) {
+        try {
+          await localCtx.close();
+        } catch {}
+      }
+      await teardownPipeline();
 
       const message = e?.message ?? "Failed to start microphone reactivity";
       setStatus("error");
       setError(message);
       throw new Error(message);
     }
-  }, [status, workletUrl.href]);
+  }, [status, teardownPipeline, workletUrl.href]);
 
   const stop = useCallback(async () => {
     try {
-      if (nodeRef.current) {
-        nodeRef.current.port.onmessage = null;
-        nodeRef.current.disconnect();
-        nodeRef.current = null;
-      }
-      sourceRef.current?.disconnect();
-      sourceRef.current = null;
-
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-
-      if (ctxRef.current) {
-        await ctxRef.current.close();
-        ctxRef.current = null;
-      }
+      await teardownPipeline();
     } finally {
       setStatus("idle");
+      setError(null);
       setFeatures({ rms: 0, centroid: 0, onset: 0, t: 0 });
     }
-  }, []);
+  }, [teardownPipeline]);
 
   useEffect(() => {
     return () => {
