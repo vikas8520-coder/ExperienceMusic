@@ -8,6 +8,7 @@ import { writeFile, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import * as musicMetadata from "music-metadata";
+import { pool } from "./db";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -18,7 +19,18 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  app.use(express.json({ limit: '50mb' }));
+  app.use(express.json({ limit: '100mb' }));
+
+  // Quick DB health check for environment verification.
+  app.get("/api/health/db", async (_req, res) => {
+    try {
+      const result = await pool.query("select now() as now");
+      return res.json({ ok: true, now: result.rows[0]?.now ?? null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return res.status(500).json({ ok: false, error: message });
+    }
+  });
 
   // Track endpoints
   app.get(api.tracks.list.path, async (req, res) => {

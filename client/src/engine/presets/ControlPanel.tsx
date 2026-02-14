@@ -20,16 +20,34 @@ function groupSpecs(specs: UniformSpec[]): Record<string, UniformSpec[]> {
   return groups;
 }
 
-function FloatControl({ spec, value, onChange }: { spec: UniformSpec; value: number; onChange: (v: number) => void }) {
-  const pct = spec.max !== undefined && spec.min !== undefined
-    ? Math.round(((value - spec.min) / (spec.max - spec.min)) * 100)
-    : 0;
-
+function FloatControl({
+  spec,
+  value,
+  onChange,
+  onReset,
+}: {
+  spec: UniformSpec;
+  value: number;
+  onChange: (v: number) => void;
+  onReset?: () => void;
+}) {
   return (
     <div className="space-y-1.5" data-testid={`control-${spec.key}`}>
       <div className="flex items-center justify-between gap-2">
         <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{spec.label}</Label>
-        <span className="text-xs font-mono text-white/60">{value.toFixed(2)}</span>
+        <div className="flex items-center gap-2">
+          {onReset && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="rounded border border-white/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-white/70 hover:bg-white/10"
+              data-testid={`button-reset-${spec.key}`}
+            >
+              Reset
+            </button>
+          )}
+          <span className="text-xs font-mono text-white/60">{value.toFixed(2)}</span>
+        </div>
       </div>
       <Slider
         min={spec.min ?? 0}
@@ -206,7 +224,15 @@ function ControlForSpec({
   maxZoom?: number;
 }) {
   switch (spec.type) {
-    case "float": return <FloatControl spec={spec} value={value} onChange={onChange} />;
+    case "float":
+      return (
+        <FloatControl
+          spec={spec}
+          value={value}
+          onChange={onChange}
+          onReset={spec.key === "u_rotation" ? () => onChange((spec.default as number) ?? 0) : undefined}
+        />
+      );
     case "int": return <IntControl spec={spec} value={value} onChange={onChange} />;
     case "bool": return <BoolControl spec={spec} value={value} onChange={onChange} />;
     case "color": return <ColorControl spec={spec} value={value} onChange={onChange} />;
@@ -230,11 +256,26 @@ function ControlForSpec({
 export function ControlPanel({ specs, uniforms, setUniform }: ControlPanelProps) {
   const groups = groupSpecs(specs);
   const zoomSpec = specs.find((s) => s.key === "u_zoom" && s.type === "float");
-  const zoomValue = typeof uniforms.u_zoom === "number" ? (uniforms.u_zoom as number) : undefined;
+  const infiniteZoom = !!uniforms.u_infiniteZoom;
+  const zoomExpValue = typeof uniforms.u_zoomExp === "number" ? (uniforms.u_zoomExp as number) : 0;
+  const linearZoomValue = typeof uniforms.u_zoom === "number" ? (uniforms.u_zoom as number) : 1;
+  const zoomValue = infiniteZoom ? Math.pow(2, zoomExpValue) : linearZoomValue;
+  const minZoom = infiniteZoom ? 1e-12 : zoomSpec?.min;
+  const maxZoom = infiniteZoom ? 50 : zoomSpec?.max;
 
   const handleChange = (spec: UniformSpec, rawValue: any) => {
     const value = spec.transform ? spec.transform(rawValue) : rawValue;
     setUniform(spec.key, value);
+    if (spec.key === "u_infiniteZoom") {
+      const nextInfinite = !!value;
+      if (nextInfinite) {
+        const z = typeof uniforms.u_zoom === "number" ? (uniforms.u_zoom as number) : 1;
+        setUniform("u_zoomExp", Math.log2(Math.max(1e-12, z)));
+      } else {
+        const exp = typeof uniforms.u_zoomExp === "number" ? (uniforms.u_zoomExp as number) : 0;
+        setUniform("u_zoom", Math.max(1e-6, Math.pow(2, exp)));
+      }
+    }
   };
 
   return (
@@ -256,9 +297,16 @@ export function ControlPanel({ specs, uniforms, setUniform }: ControlPanelProps)
                   value={uniforms[spec.key]}
                   onChange={(v) => handleChange(spec, v)}
                   zoom={zoomValue}
-                  onZoomChange={(v) => setUniform("u_zoom", v)}
-                  minZoom={zoomSpec?.min}
-                  maxZoom={zoomSpec?.max}
+                  onZoomChange={(v) => {
+                    if (infiniteZoom) {
+                      const nextExp = Math.log2(Math.max(1e-12, v));
+                      setUniform("u_zoomExp", nextExp);
+                      return;
+                    }
+                    setUniform("u_zoom", v);
+                  }}
+                  minZoom={minZoom}
+                  maxZoom={maxZoom}
                 />
               ))}
             </div>

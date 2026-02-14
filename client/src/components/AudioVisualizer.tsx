@@ -5,7 +5,9 @@ import * as THREE from "three";
 import { Mesh, Vector3 } from "three";
 import { Effects } from "./Effects";
 import { PsyTunnel as PsyTunnelShader } from "./PsyTunnel";
+import { PremiumField } from "./PremiumField";
 import { type AudioData } from "@/hooks/use-audio-analyzer";
+import { usePresetTransition } from "@/hooks/use-preset-transition";
 import { type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
 import { PsyPresetLayer, type PsyPresetName } from "./PsyPresetLayer";
 import { isFractalPreset, getFractalPreset } from "@/engine/presets/registry";
@@ -26,6 +28,8 @@ interface AudioVisualizerProps {
   backgroundImage?: string | null;
   zoom?: number;
   fractalUniforms?: UniformValues;
+  renderProfile?: "mobile60" | "desktopCinematic" | "exportQuality";
+  adaptiveQualityTier?: 0 | 1 | 2;
 }
 
 function PsyPresetWrapper({
@@ -3969,45 +3973,121 @@ function AudioReactiveEffects({ getAudioData, settings }: { getAudioData: () => 
   );
 }
 
-function PresetTransition({ children, presetName }: { children: React.ReactNode; presetName: string }) {
-  const [opacity, setOpacity] = useState(1);
-  const [currentPreset, setCurrentPreset] = useState(presetName);
-  const [displayedChildren, setDisplayedChildren] = useState(children);
-  
+function OpacityGroup({ opacity, children }: { opacity: number; children: React.ReactNode }) {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame(() => {
+    const g = groupRef.current;
+    if (!g) return;
+    g.traverse((obj) => {
+      const anyObj = obj as any;
+      const mat = anyObj.material;
+      if (!mat) return;
+      const materials = Array.isArray(mat) ? mat : [mat];
+      for (const m of materials) {
+        if (typeof m.opacity !== "number") continue;
+        if (m.userData.__baseOpacity === undefined) {
+          m.userData.__baseOpacity = m.opacity;
+        }
+        const base = m.userData.__baseOpacity as number;
+        m.transparent = true;
+        m.opacity = Math.max(0, Math.min(1, base * opacity));
+      }
+    });
+  });
+
+  return <group ref={groupRef}>{children}</group>;
+}
+
+function PresetTransition({
+  presetName,
+  renderPreset,
+  transitionDuration = 0.3,
+}: {
+  presetName: string;
+  renderPreset: (presetName: string, blend: { intensity: number; morph: number }) => React.ReactNode;
+  transitionDuration?: number;
+}) {
+  const [fromPreset, setFromPreset] = useState(presetName);
+  const [toPreset, setToPreset] = useState(presetName);
+
   useEffect(() => {
-    if (presetName !== currentPreset) {
-      setOpacity(0);
-      const timer = setTimeout(() => {
-        setCurrentPreset(presetName);
-        setDisplayedChildren(children);
-        setOpacity(1);
-      }, 200);
-      return () => clearTimeout(timer);
-    } else {
-      setDisplayedChildren(children);
-    }
-  }, [presetName, children, currentPreset]);
-  
+    if (presetName === toPreset) return;
+    setFromPreset(toPreset);
+    setToPreset(presetName);
+  }, [presetName, toPreset]);
+
+  const t = usePresetTransition({
+    currentPreset: fromPreset,
+    nextPreset: toPreset,
+    transitionDuration,
+    intensityFrom: 0.85,
+    intensityTo: 1.0,
+    morphFrom: 0.0,
+    morphTo: 1.0,
+  });
+
+  if (!t.isTransitioning || t.activeA === t.activeB) {
+    return <group>{renderPreset(t.activeA, { intensity: t.intensity, morph: t.morph })}</group>;
+  }
+
   return (
     <group>
-      <mesh position={[0, 0, 50]} renderOrder={9999}>
-        <planeGeometry args={[200, 200]} />
-        <meshBasicMaterial 
-          color="#050508" 
-          transparent 
-          opacity={1 - opacity} 
-          depthTest={false}
-        />
-      </mesh>
-      {displayedChildren}
+      <OpacityGroup opacity={1 - t.mix}>
+        {renderPreset(t.activeA, { intensity: t.intensity, morph: 1 - t.morph })}
+      </OpacityGroup>
+      <OpacityGroup opacity={t.mix}>
+        {renderPreset(t.activeB, { intensity: t.intensity, morph: t.morph })}
+      </OpacityGroup>
     </group>
   );
 }
 
-function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1, fractalUniforms }: AudioVisualizerProps) {
+function ThreeScene({
+  getAudioData,
+  settings,
+  backgroundImage,
+  zoom = 1,
+  fractalUniforms,
+  renderProfile = "desktopCinematic",
+  adaptiveQualityTier = 1,
+}: AudioVisualizerProps) {
   const [hasError, setHasError] = useState(false);
+  const effectiveFractalUniforms = useMemo(() => {
+    if (!fractalUniforms) return fractalUniforms;
+    const next = { ...fractalUniforms };
+    const tierToAA = [1, 2, 3] as const;
+    next.u_aaLevel = tierToAA[adaptiveQualityTier];
+    return next;
+  }, [fractalUniforms, adaptiveQualityTier]);
   
   const activeFilters = settings.imageFilters || ["none"];
+  const renderPreset = (presetName: string, blend: { intensity: number; morph: number }) => {
+    if (settings.presetEnabled === false) return null;
+
+    const blendedSettings = { ...settings, intensity: settings.intensity * blend.intensity };
+
+    if (presetName === "Energy Rings") return <EnergyRings getAudioData={getAudioData} settings={blendedSettings} />;
+    if (presetName === "Psy Tunnel") return <PsyTunnel getAudioData={getAudioData} settings={blendedSettings} />;
+    if (presetName === "Particle Field") return <ParticleField getAudioData={getAudioData} settings={blendedSettings} />;
+    if (presetName === "Waveform Sphere") return <WaveformSphere getAudioData={getAudioData} settings={blendedSettings} />;
+    if (presetName === "Audio Bars") return <AudioBars getAudioData={getAudioData} settings={blendedSettings} />;
+    if (presetName === "Geometric Kaleidoscope") return <GeometricKaleidoscope getAudioData={getAudioData} settings={blendedSettings} />;
+    if (presetName === "Cosmic Web") return <CosmicWeb getAudioData={getAudioData} settings={blendedSettings} />;
+    if (presetName === "Cymatic Sand Plate") return <CymaticSandPlate getAudioData={getAudioData} settings={blendedSettings} />;
+    if (presetName === "Water Membrane Orb") return <WaterMembraneOrb getAudioData={getAudioData} settings={blendedSettings} />;
+    if (presetName === "Chladni Geometry") return <ChladniGeometry getAudioData={getAudioData} settings={blendedSettings} />;
+    if (presetName === "Resonant Field Lines") return <ResonantFieldLines getAudioData={getAudioData} settings={blendedSettings} />;
+    if (presetName === "Premium Field") return <PremiumField getAudioData={getAudioData} settings={blendedSettings} />;
+
+    if (isFractalPreset(presetName)) {
+      const fp = getFractalPreset(presetName);
+      if (!fp) return null;
+      return <FractalPresetBridge preset={fp} getAudioData={getAudioData} uniforms={effectiveFractalUniforms || {}} />;
+    }
+
+    return null;
+  };
 
   if (hasError) {
     return <FallbackVisualizer settings={settings} backgroundImage={backgroundImage} />;
@@ -4028,7 +4108,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1, fractal
     >
       <Canvas
         gl={{ 
-          antialias: true, 
+          antialias: renderProfile !== "mobile60",
           toneMapping: THREE.ACESFilmicToneMapping,
           powerPreference: "high-performance",
           alpha: false,
@@ -4037,7 +4117,14 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1, fractal
         }}
         camera={{ position: [0, 0, 15], fov: 45 }}
         style={{ width: "100%", height: "100%", pointerEvents: "none" }}
-        dpr={[1, Math.min(window.devicePixelRatio, 2)]}
+        dpr={[
+          1,
+          renderProfile === "mobile60"
+            ? Math.min(window.devicePixelRatio, adaptiveQualityTier === 0 ? 1.0 : 1.15)
+            : renderProfile === "exportQuality"
+              ? Math.min(window.devicePixelRatio, 2)
+              : Math.min(window.devicePixelRatio, adaptiveQualityTier === 2 ? 2 : 1.6),
+        ]}
         events={() => ({ enabled: false, priority: 0 })}
         onCreated={({ gl }) => {
           if (!gl.getContext()) {
@@ -4045,7 +4132,7 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1, fractal
           }
           // Option 5: Ensure proper sRGB output for linear workflow
           gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.toneMappingExposure = 1.0;
+          gl.toneMappingExposure = renderProfile === "exportQuality" ? 1.06 : renderProfile === "desktopCinematic" ? 1.03 : 1.0;
         }}
       >
         <color attach="background" args={['#050508']} />
@@ -4066,30 +4153,11 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1, fractal
       <pointLight position={[-10, -10, -10]} intensity={0.5} color="#ff00ff" />
       
       <ZoomableScene zoom={zoom}>
-        <PresetTransition presetName={settings.presetName}>
-          {settings.presetEnabled !== false && (
-            <>
-              {settings.presetName === "Energy Rings" && <EnergyRings getAudioData={getAudioData} settings={settings} />}
-              {settings.presetName === "Psy Tunnel" && <PsyTunnel getAudioData={getAudioData} settings={settings} />}
-              {settings.presetName === "Particle Field" && <ParticleField getAudioData={getAudioData} settings={settings} />}
-              {settings.presetName === "Waveform Sphere" && <WaveformSphere getAudioData={getAudioData} settings={settings} />}
-              {settings.presetName === "Audio Bars" && <AudioBars getAudioData={getAudioData} settings={settings} />}
-              {settings.presetName === "Geometric Kaleidoscope" && <GeometricKaleidoscope getAudioData={getAudioData} settings={settings} />}
-              {settings.presetName === "Cosmic Web" && <CosmicWeb getAudioData={getAudioData} settings={settings} />}
-              {settings.presetName === "Cymatic Sand Plate" && <CymaticSandPlate getAudioData={getAudioData} settings={settings} />}
-              {settings.presetName === "Water Membrane Orb" && <WaterMembraneOrb getAudioData={getAudioData} settings={settings} />}
-              {settings.presetName === "Chladni Geometry" && <ChladniGeometry getAudioData={getAudioData} settings={settings} />}
-              {settings.presetName === "Resonant Field Lines" && <ResonantFieldLines getAudioData={getAudioData} settings={settings} />}
-
-              {isFractalPreset(settings.presetName) && (() => {
-                const fp = getFractalPreset(settings.presetName);
-                if (!fp) return null;
-                return <FractalPresetBridge preset={fp} getAudioData={getAudioData} uniforms={fractalUniforms || {}} />;
-              })()}
-              
-            </>
-          )}
-        </PresetTransition>
+        <PresetTransition
+          presetName={settings.presetName}
+          transitionDuration={0.3}
+          renderPreset={renderPreset}
+        />
       </ZoomableScene>
 
       {(settings.psyOverlays || []).map((overlayId) => (
@@ -4112,12 +4180,30 @@ function ThreeScene({ getAudioData, settings, backgroundImage, zoom = 1, fractal
   );
 }
 
-export function AudioVisualizer({ getAudioData, settings, backgroundImage, zoom = 1, fractalUniforms }: AudioVisualizerProps) {
+export function AudioVisualizer({
+  getAudioData,
+  settings,
+  backgroundImage,
+  zoom = 1,
+  fractalUniforms,
+  renderProfile = "desktopCinematic",
+  adaptiveQualityTier = 1,
+}: AudioVisualizerProps) {
   const [webglSupported] = useState(() => isWebGLAvailable());
 
   if (!webglSupported) {
     return <FallbackVisualizer settings={settings} backgroundImage={backgroundImage} />;
   }
 
-  return <ThreeScene getAudioData={getAudioData} settings={settings} backgroundImage={backgroundImage} zoom={zoom} fractalUniforms={fractalUniforms} />;
+  return (
+    <ThreeScene
+      getAudioData={getAudioData}
+      settings={settings}
+      backgroundImage={backgroundImage}
+      zoom={zoom}
+      fractalUniforms={fractalUniforms}
+      renderProfile={renderProfile}
+      adaptiveQualityTier={adaptiveQualityTier}
+    />
+  );
 }

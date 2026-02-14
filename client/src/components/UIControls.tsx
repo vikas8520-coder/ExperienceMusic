@@ -11,7 +11,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Upload, Save, Disc as DiscIcon, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn, Cloud, Pin, PinOff, Plus, Minus, SkipBack, SkipForward, Music } from "lucide-react";
+import { Upload, Save, Disc as DiscIcon, ImagePlus, Sparkles, Loader2, Library, FolderPlus, ChevronUp, ChevronDown, Settings, Maximize, Minimize, ZoomIn, Cloud, Pin, PinOff, Plus, Minus, SkipBack, SkipForward, Music, Mic, MicOff } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ControlPanel as FractalControlPanel } from "@/engine/presets/ControlPanel";
 import { PerformOverlay as FractalPerformOverlay } from "@/engine/presets/PerformOverlay";
@@ -117,6 +117,8 @@ interface UIControlsProps {
   onFractalUniformChange?: (key: string, value: any) => void;
   activeTab?: "listen" | "create" | "perform" | "record";
   onActiveTabChange?: (tab: "listen" | "create" | "perform" | "record") => void;
+  micStatus?: "idle" | "starting" | "running" | "error";
+  onToggleMicReactivity?: () => void;
 }
 
 export interface ThumbnailAnalysis {
@@ -173,6 +175,8 @@ export function UIControls({
   onFractalUniformChange,
   activeTab: controlledTab,
   onActiveTabChange,
+  micStatus = "idle",
+  onToggleMicReactivity,
 }: UIControlsProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ThumbnailAnalysis | null>(null);
@@ -221,7 +225,8 @@ export function UIControls({
                 body: JSON.stringify({ imageBase64: base64 })
               });
               
-              if (analysisResponse.ok) {
+              const contentType = analysisResponse.headers.get("content-type") ?? "";
+              if (analysisResponse.ok && contentType.includes("application/json")) {
                 const data: ThumbnailAnalysis = await analysisResponse.json();
                 setAnalysis(data);
                 onThumbnailAnalysis?.(data);
@@ -253,10 +258,14 @@ export function UIControls({
 
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const base64 = (event.target?.result as string).split(',')[1];
-      const previewUrl = URL.createObjectURL(file);
-      setLocalThumbnailUrl(previewUrl);
-      onThumbnailUpload?.(previewUrl);
+      const dataUrl = event.target?.result;
+      if (typeof dataUrl !== "string") return;
+      const base64 = dataUrl.split(',')[1];
+      if (!base64) return;
+
+      // Keep a stable URL (data URL) so background + saved library state remain usable.
+      setLocalThumbnailUrl(dataUrl);
+      onThumbnailUpload?.(dataUrl);
       setIsAnalyzing(true);
 
       try {
@@ -266,7 +275,8 @@ export function UIControls({
           body: JSON.stringify({ imageBase64: base64 })
         });
 
-        if (response.ok) {
+        const contentType = response.headers.get("content-type") ?? "";
+        if (response.ok && contentType.includes("application/json")) {
           const data: ThumbnailAnalysis = await response.json();
           setAnalysis(data);
           onThumbnailAnalysis?.(data);
@@ -348,6 +358,47 @@ export function UIControls({
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={onToggleFullscreen}
+              className="flex items-center gap-1 md:gap-1.5 px-2.5 md:px-4 py-1.5 md:py-2 rounded-full text-[11px] md:text-xs font-medium transition-all text-white/50 hover:text-white/80"
+              data-testid="button-fullscreen-topnav"
+              title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            >
+              {isFullscreen ? (
+                <Minimize className="w-3.5 h-3.5 md:w-4 md:h-4" />
+              ) : (
+                <Maximize className="w-3.5 h-3.5 md:w-4 md:h-4" />
+              )}
+              <span className="hidden sm:inline">Fullscreen</span>
+            </button>
+            <button
+              type="button"
+              onClick={onToggleMicReactivity}
+              className="flex items-center gap-1 md:gap-1.5 px-2.5 md:px-4 py-1.5 md:py-2 rounded-full text-[11px] md:text-xs font-medium transition-all text-white/50 hover:text-white/80"
+              data-testid="button-mic-topnav"
+              title={
+                micStatus === "running" || micStatus === "starting"
+                  ? "Disable mic reactivity"
+                  : micStatus === "error"
+                    ? "Retry microphone setup"
+                    : "Enable mic reactivity"
+              }
+              disabled={!onToggleMicReactivity}
+            >
+              {micStatus === "running" || micStatus === "starting" ? (
+                <MicOff className="w-3.5 h-3.5 md:w-4 md:h-4" />
+              ) : (
+                <Mic className="w-3.5 h-3.5 md:w-4 md:h-4" />
+              )}
+              <span className="hidden sm:inline">
+                {micStatus === "running" || micStatus === "starting"
+                  ? "Stop Mic"
+                  : micStatus === "error"
+                    ? "Retry Mic"
+                    : "Enable Mic"}
+              </span>
+            </button>
           </div>
 
           <div className="w-16 md:w-24 shrink-0" />

@@ -34,9 +34,12 @@ const allowlist = [
 
 async function buildAll() {
   await rm("dist", { recursive: true, force: true });
+  const viteMode =
+    process.env.VITE_MODE ??
+    (process.env.APP_ENV === "test" ? "test" : "production");
 
-  console.log("building client...");
-  await viteBuild();
+  console.log(`building client (mode=${viteMode})...`);
+  await viteBuild({ mode: viteMode });
 
   console.log("building server...");
   const pkg = JSON.parse(await readFile("package.json", "utf-8"));

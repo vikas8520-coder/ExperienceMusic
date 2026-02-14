@@ -9,6 +9,12 @@ import { nanoid } from "nanoid";
 const viteLogger = createLogger();
 
 export async function setupVite(server: Server, app: Express) {
+  const viteMode =
+    process.env.VITE_MODE ??
+    process.env.APP_ENV ??
+    process.env.NODE_ENV ??
+    "development";
+
   const serverOptions = {
     middlewareMode: true,
     hmr: { server, path: "/vite-hmr" },
@@ -18,6 +24,7 @@ export async function setupVite(server: Server, app: Express) {
   const vite = await createViteServer({
     ...viteConfig,
     configFile: false,
+    mode: viteMode,
     customLogger: {
       ...viteLogger,
       error: (msg, options) => {

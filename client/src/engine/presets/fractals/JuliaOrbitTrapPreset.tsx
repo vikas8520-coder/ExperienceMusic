@@ -21,6 +21,8 @@ uniform float u_time;
 
 uniform vec2  u_center;
 uniform float u_zoom;
+uniform float u_zoomExp;
+uniform bool  u_infiniteZoom;
 uniform float u_rotation;
 uniform int   u_iterations;
 
@@ -335,13 +337,14 @@ vec3 renderPixel(vec2 fragCoord, vec2 res, float time,
 
 void main() {
   vec2 fragCoord = vUv * u_resolution;
+  float zoom = u_infiniteZoom ? exp2(u_zoomExp) : u_zoom;
 
   int aa = int(u_aaLevel);
 
   vec3 col;
   if (aa <= 1) {
     col = renderPixel(fragCoord, u_resolution, u_time,
-                      u_center, u_zoom, u_rotation, u_iterations,
+                      u_center, zoom, u_rotation, u_iterations,
                       u_audioGain, u_bassImpact, u_midMorph, u_trebleShimmer,
                       u_beatPunch, u_juliaMorph, u_juliaC,
                       u_trapRadius, u_trapLineAngle, u_trapMix,
@@ -357,7 +360,7 @@ void main() {
         if (i >= aa) break;
         vec2 off = (vec2(float(i), float(j)) + 0.5) / faa - 0.5;
         col += renderPixel(fragCoord + off, u_resolution, u_time,
-                           u_center, u_zoom, u_rotation, u_iterations,
+                           u_center, zoom, u_rotation, u_iterations,
                            u_audioGain, u_bassImpact, u_midMorph, u_trebleShimmer,
                            u_beatPunch, u_juliaMorph, u_juliaC,
                            u_trapRadius, u_trapLineAngle, u_trapMix,
@@ -386,6 +389,13 @@ function vec3FromHex(hex: string) {
 const JuliaOrbitTrapRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ uniforms, state }) => {
   const matRef = useRef<THREE.ShaderMaterial>(null!);
   const { size, viewport, gl } = useThree();
+  const autoZoomExpRef = useRef<number | null>(null);
+  const autoZoomDirRef = useRef<1 | -1>(1);
+  const autoZoomMinExpRef = useRef<number | null>(null);
+  const autoZoomMaxExpRef = useRef<number | null>(null);
+  const centerRef = useRef(new THREE.Vector2(-0.5, 0));
+  const targetCenterRef = useRef(new THREE.Vector2(-0.5, 0));
+  const staticTimeRef = useRef(0);
 
   useEffect(() => {
     const prev = gl.getPixelRatio();
@@ -397,28 +407,81 @@ const JuliaOrbitTrapRender: React.FC<{ uniforms: UniformValues; state: any }> = 
     bass: 0, mid: 0, treble: 0, beat: 0,
   });
 
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const m = matRef.current;
     if (!m) return;
+
+    const infiniteZoom = !!uniforms.u_infiniteZoom;
 
     const sa = smoothedAudio.current;
     const lr = 0.08;
     const decay = 0.93;
-    sa.bass = Math.max(sa.bass * decay, sa.bass + (uniforms.u_bassImpact - sa.bass) * lr);
+    sa.bass = infiniteZoom
+      ? sa.bass * 0.9
+      : Math.max(sa.bass * decay, sa.bass + (uniforms.u_bassImpact - sa.bass) * lr);
     sa.mid = Math.max(sa.mid * decay, sa.mid + (uniforms.u_midMorph - sa.mid) * lr);
     sa.treble = Math.max(sa.treble * decay, sa.treble + (uniforms.u_trebleShimmer - sa.treble) * lr);
-    sa.beat = sa.beat * 0.88 + uniforms.u_beatPunch * 0.12;
+    sa.beat = infiniteZoom ? sa.beat * 0.88 : sa.beat * 0.88 + uniforms.u_beatPunch * 0.12;
 
     const dpr = gl.getPixelRatio();
-    m.uniforms.u_time.value = clock.getElapsedTime();
+    if (infiniteZoom) {
+      const mm = Math.max(0, uniforms.u_midMorph ?? 0);
+      const ts = Math.max(0, uniforms.u_trebleShimmer ?? 0);
+      const jm = Math.max(0, uniforms.u_juliaMorph ?? 0);
+      const motionDrive = Math.max(0.02, mm * 0.35 + ts * 0.35 + jm * 0.3);
+      staticTimeRef.current += Math.min(delta, 0.05) * motionDrive;
+      m.uniforms.u_time.value = staticTimeRef.current;
+    } else {
+      staticTimeRef.current = clock.getElapsedTime();
+      m.uniforms.u_time.value = staticTimeRef.current;
+    }
     m.uniforms.u_resolution.value.set(size.width * dpr, size.height * dpr);
 
-    m.uniforms.u_center.value.set(uniforms.u_center[0], uniforms.u_center[1]);
+    if (Array.isArray(uniforms.u_zoomTarget) && uniforms.u_zoomTarget.length === 2) {
+      targetCenterRef.current.set(uniforms.u_zoomTarget[0], uniforms.u_zoomTarget[1]);
+    } else {
+      targetCenterRef.current.set(uniforms.u_center[0], uniforms.u_center[1]);
+    }
+    if (!infiniteZoom) {
+      centerRef.current.set(uniforms.u_center[0], uniforms.u_center[1]);
+    } else {
+      const centerLerp = 1 - Math.exp(-8 * Math.min(delta, 0.05));
+      centerRef.current.lerp(targetCenterRef.current, centerLerp);
+    }
+    m.uniforms.u_center.value.set(centerRef.current.x, centerRef.current.y);
     const zoomPulseEnabled = uniforms.u_zoomPulseEnabled !== false;
     const zoomPulseStrength = typeof uniforms.u_zoomPulseStrength === "number" ? uniforms.u_zoomPulseStrength : 0.12;
     const zoomPulseEnv = typeof state.zoomPulseEnv === "number" ? state.zoomPulseEnv : 0;
     const zoomPulse = zoomPulseEnabled ? Math.exp(zoomPulseStrength * zoomPulseEnv) : 1;
-    m.uniforms.u_zoom.value = Math.max(1e-6, uniforms.u_zoom * zoomPulse);
+    if (!infiniteZoom) {
+      autoZoomExpRef.current = null;
+      autoZoomDirRef.current = 1;
+      autoZoomMinExpRef.current = null;
+      autoZoomMaxExpRef.current = null;
+    } else {
+      if (autoZoomExpRef.current === null) {
+        const z = typeof uniforms.u_zoomExp === "number" ? uniforms.u_zoomExp : Math.log2(Math.max(1e-12, uniforms.u_zoom ?? 1.2));
+        autoZoomExpRef.current = z;
+        autoZoomMinExpRef.current = z;
+        autoZoomMaxExpRef.current = Math.min(60, z + 10);
+      }
+      const minExp = autoZoomMinExpRef.current ?? 0;
+      const maxExp = autoZoomMaxExpRef.current ?? Math.min(60, minExp + 10);
+      autoZoomExpRef.current += Math.min(delta, 0.05) * 0.38 * autoZoomDirRef.current;
+      if (autoZoomExpRef.current >= maxExp) {
+        autoZoomExpRef.current = maxExp;
+        autoZoomDirRef.current = -1;
+      } else if (autoZoomExpRef.current <= minExp) {
+        autoZoomExpRef.current = minExp;
+        autoZoomDirRef.current = 1;
+      }
+    }
+    const exp = infiniteZoom ? (autoZoomExpRef.current ?? (uniforms.u_zoomExp ?? 0)) : Math.log2(Math.max(1e-12, uniforms.u_zoom ?? 1.2));
+    const baseZoom = Math.max(1e-12, Math.pow(2, exp));
+    const effectiveZoom = Math.max(1e-12, baseZoom * zoomPulse);
+    m.uniforms.u_zoom.value = Math.max(1e-6, effectiveZoom);
+    m.uniforms.u_zoomExp.value = Math.log2(effectiveZoom);
+    m.uniforms.u_infiniteZoom.value = infiniteZoom;
     m.uniforms.u_rotation.value = uniforms.u_rotation;
     m.uniforms.u_iterations.value = uniforms.u_iterations;
 
@@ -452,6 +515,8 @@ const JuliaOrbitTrapRender: React.FC<{ uniforms: UniformValues; state: any }> = 
     u_time: { value: 0 },
     u_center: { value: new THREE.Vector2(-0.5, 0) },
     u_zoom: { value: 1.2 },
+    u_zoomExp: { value: Math.log2(1.2) },
+    u_infiniteZoom: { value: false },
     u_rotation: { value: 0 },
     u_iterations: { value: 200 },
     u_juliaMorph: { value: 0.85 },
@@ -497,6 +562,9 @@ export const JuliaOrbitTrapPreset: FractalPreset = {
   uniformSpecs: [
     { key: "u_center", label: "Center", type: "vec2", group: "Fractal", default: [-0.5, 0] },
     { key: "u_zoom", label: "Fractal zoom", type: "float", group: "Fractal", min: 0.3, max: 80, step: 0.01, default: 1.2, macro: true },
+    { key: "u_infiniteZoom", label: "Infinite Zoom", type: "bool", group: "Fractal Zoom", default: false },
+    { key: "u_zoomExp", label: "Zoom Depth", type: "float", group: "Fractal Zoom", min: -80, max: 10, step: 0.01, default: 0,
+      visibleIf: (u: UniformValues) => !!u.u_infiniteZoom },
     { key: "u_zoomPulseEnabled", label: "Zoom Pulse", type: "bool", group: "Fractal", default: false },
     { key: "u_zoomPulseStrength", label: "Pulse Amount", type: "float", group: "Fractal", min: 0, max: 0.35, step: 0.005, default: 0.12,
       visibleIf: (u: UniformValues) => !!u.u_zoomPulseEnabled },

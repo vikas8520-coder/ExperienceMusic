@@ -1,0 +1,17 @@
+// android/app/src/main/java/com/yourapp/audio/AudioAnalyzerAndroidPackage.kt
+package com.yourapp.audio
+
+import com.facebook.react.ReactPackage
+import com.facebook.react.bridge.NativeModule
+import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.uimanager.ViewManager
+
+class AudioAnalyzerAndroidPackage : ReactPackage {
+  override fun createNativeModules(reactContext: ReactApplicationContext): MutableList<NativeModule> {
+    return mutableListOf(AudioAnalyzerAndroidModule(reactContext))
+  }
+
+  override fun createViewManagers(reactContext: ReactApplicationContext): MutableList<ViewManager<*, *>> {
+    return mutableListOf()
+  }
+}

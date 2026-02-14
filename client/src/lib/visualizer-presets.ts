@@ -193,6 +193,7 @@ export const presets = [
   "Water Membrane Orb",
   "Chladni Geometry",
   "Resonant Field Lines",
+  "Premium Field",
   "Mandelbrot Explorer",
   "Julia Orbit Trap",
 ] as const;
@@ -220,6 +221,7 @@ export const presetCategories = [
       { name: "Water Membrane Orb" as PresetName, icon: "water", shortName: "Water" },
       { name: "Chladni Geometry" as PresetName, icon: "geometry", shortName: "Chladni" },
       { name: "Resonant Field Lines" as PresetName, icon: "field", shortName: "Field" },
+      { name: "Premium Field" as PresetName, icon: "field", shortName: "Premium" },
     ],
   },
   {
