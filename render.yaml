@@ -3,7 +3,7 @@ services:
     name: experience-music
     env: node
     rootDir: .
-    plan: starter
+    plan: free
     autoDeploy: true
     buildCommand: npm ci && NODE_ENV=production APP_ENV=production VITE_MODE=production node --import tsx script/build.ts
     startCommand: NODE_ENV=production APP_ENV=production node dist/index.cjs
