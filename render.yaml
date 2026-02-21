@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: experience-music
+    env: node
+    rootDir: .
+    plan: starter
+    autoDeploy: true
+    buildCommand: npm ci && NODE_ENV=production APP_ENV=production VITE_MODE=production node --import tsx script/build.ts
+    startCommand: NODE_ENV=production APP_ENV=production node dist/index.cjs
+    healthCheckPath: /api/health/db
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ENV
+        value: production
+      - key: VITE_MODE
+        value: production
+      - key: VITE_APP_ENV
+        value: production
+      - key: VITE_ENABLE_DEBUG_OVERLAY
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: AI_INTEGRATIONS_OPENAI_API_KEY
+        sync: false
+      - key: AI_INTEGRATIONS_OPENAI_BASE_URL
+        sync: false
+      - key: SOUNDCLOUD_CLIENT_ID
+        sync: false
+      - key: SOUNDCLOUD_CLIENT_SECRET
+        sync: false
