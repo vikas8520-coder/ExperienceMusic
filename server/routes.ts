@@ -10,10 +10,14 @@ import path from "path";
 import * as musicMetadata from "music-metadata";
 import { pool } from "./db";
 
-const openai = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+const openaiApiKey =
+  process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
+const openai = openaiApiKey
+  ? new OpenAI({
+      apiKey: openaiApiKey,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    })
+  : null;
 
 export async function registerRoutes(
   httpServer: Server,
@@ -66,6 +70,10 @@ export async function registerRoutes(
       
       if (!imageBase64) {
         return res.status(400).json({ message: 'Image data required' });
+      }
+
+      if (!openai) {
+        return res.status(503).json({ message: "AI integration is not configured" });
       }
 
       const response = await openai.chat.completions.create({
@@ -166,6 +174,10 @@ Respond in JSON format:
 
       if (!imageBase64) {
         return res.status(400).json({ message: 'Image data required' });
+      }
+
+      if (!openai) {
+        return res.status(503).json({ message: "AI integration is not configured" });
       }
 
       const track = await storage.getTrack(trackId);
