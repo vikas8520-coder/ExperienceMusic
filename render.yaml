@@ -5,12 +5,10 @@ services:
     rootDir: .
     plan: free
     autoDeploy: true
-    buildCommand: npm ci && NODE_ENV=production APP_ENV=production VITE_MODE=production node --import tsx script/build.ts
+    buildCommand: npm ci --include=dev && NODE_ENV=production APP_ENV=production VITE_MODE=production node --import tsx script/build.ts
     startCommand: NODE_ENV=production APP_ENV=production node dist/index.cjs
     healthCheckPath: /api/health/db
     envVars:
-      - key: NODE_ENV
-        value: production
       - key: APP_ENV
         value: production
       - key: VITE_MODE
