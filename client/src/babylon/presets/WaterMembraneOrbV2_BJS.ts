@@ -508,12 +508,12 @@ void main(){
     {
       vertexSource: useWGSL ? membraneVertWGSL : membraneVertGLSL,
       fragmentSource: useWGSL ? membraneFragWGSL : membraneFragGLSL,
-      shaderLanguage,
     } as any,
     {
       attributes: ["position", "normal"],
       uniforms: ["worldViewProjection", "world", "time", "bass", "mid", "high", "rms", "beat", "intensity"],
       needAlphaBlending: true,
+      shaderLanguage,
     },
   );
   membraneMat.alphaMode = BABYLON.Constants.ALPHA_COMBINE;
@@ -631,12 +631,12 @@ void main(){
     {
       vertexSource: useWGSL ? causticsVertWGSL : causticsVertGLSL,
       fragmentSource: useWGSL ? causticsFragWGSL : causticsFragGLSL,
-      shaderLanguage,
     } as any,
     {
       attributes: ["position", "normal", "uv"],
       uniforms: ["worldViewProjection", "time", "bass", "mid", "high", "rms", "beat"],
       needAlphaBlending: true,
+      shaderLanguage,
     },
   );
   causticsMat.alphaMode = BABYLON.Constants.ALPHA_COMBINE;

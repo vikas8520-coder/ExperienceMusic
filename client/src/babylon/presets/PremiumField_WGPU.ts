@@ -107,11 +107,11 @@ fn main(input: FragmentInput) -> @location(0) vec4<f32> {
   return vec4<f32>(color, alpha * input.fieldMask);
 }
 `,
-      shaderLanguage: (BABYLON as any).ShaderLanguage?.WGSL,
     },
     {
       attributes: ["position", "normal", "uv"],
       uniforms: ["uTime", "uBass", "uMid", "uHigh", "uRms", "uMorph", "uBeatPulse"],
+      shaderLanguage: (BABYLON as any).ShaderLanguage?.WGSL,
     },
   );
 

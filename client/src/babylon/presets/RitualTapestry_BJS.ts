@@ -358,11 +358,11 @@ void main(){
     {
       vertexSource: useWGSL ? vertWGSL : vertGLSL,
       fragmentSource: useWGSL ? fragWGSL : fragGLSL,
-      shaderLanguage,
     } as any,
     {
       attributes: ["position", "normal", "uv"],
       uniforms: ["worldViewProjection", "time", "bass", "mid", "high", "rms", "beat", "intensity"],
+      shaderLanguage,
     },
   );
   tapestry.material = tapestryMat;

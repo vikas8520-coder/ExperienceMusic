@@ -686,7 +686,6 @@ void main(){
       {
         vertexSource: useWGSL ? vertWGSL : vertGLSL,
         fragmentSource: useWGSL ? fragWGSL : fragGLSL,
-        shaderLanguage,
       } as any,
       {
         attributes: ["position", "normal", "uv"],
@@ -703,6 +702,7 @@ void main(){
           "shock",
           "uVariant",
         ],
+        shaderLanguage,
       },
     );
   }
