@@ -131,7 +131,7 @@ struct U {
   worldViewProjection: mat4x4<f32>,
   time:f32, bass:f32, mid:f32, high:f32, rms:f32, beat:f32,
   intensity:f32, ink:f32, shock:f32,
-  variant:f32
+  uVariant:f32
 };
 @group(0) @binding(0) var<uniform> u: U;
 
@@ -150,7 +150,7 @@ fn main(input: In) -> Out {
   const vertGLSL = /* glsl */ `
 precision highp float;
 uniform mat4 worldViewProjection;
-uniform float time,bass,mid,high,rms,beat,intensity,ink,shock,variant;
+uniform float time,bass,mid,high,rms,beat,intensity,ink,shock,uVariant;
 attribute vec3 position;
 attribute vec2 uv;
 varying vec2 vUv;
@@ -173,7 +173,7 @@ struct U {
   worldViewProjection: mat4x4<f32>,
   time:f32, bass:f32, mid:f32, high:f32, rms:f32, beat:f32,
   intensity:f32, ink:f32, shock:f32,
-  variant:f32
+  uVariant:f32
 };
 @group(0) @binding(0) var<uniform> u: U;
 
@@ -327,7 +327,7 @@ fn main(@location(0) uv0: vec2<f32>) -> @location(0) vec4<f32> {
   let mid=sat(u.mid);
 
   // variants: 0=center, 1=left, 2=right
-  let v = u.variant;
+  let v = u.uVariant;
   // UV remap per variant so sides are different tapestries
   var uvA = uv0;
   if (v > 0.5 && v < 1.5) { // left
@@ -467,7 +467,7 @@ fn main(@location(0) uv0: vec2<f32>) -> @location(0) vec4<f32> {
 
   const fragGLSL = /* glsl */ `
 precision highp float;
-uniform float time,bass,mid,high,rms,beat,intensity,ink,shock,variant;
+uniform float time,bass,mid,high,rms,beat,intensity,ink,shock,uVariant;
 varying vec2 vUv;
 
 float sat(float x){ return clamp(x,0.0,1.0); }
@@ -580,7 +580,7 @@ void main(){
   float env=sat(rms*0.60 + bass*0.55 + beat*0.55);
   float hi=sat(high*0.95 + mid*0.35);
 
-  float v = variant;
+  float v = uVariant;
   vec2 uv0=vUv;
 
   vec2 uvA=uv0;
@@ -701,7 +701,7 @@ void main(){
           "intensity",
           "ink",
           "shock",
-          "variant",
+          "uVariant",
         ],
       },
     );
@@ -785,7 +785,7 @@ void main(){
     mat.setFloat("intensity", intensity);
     mat.setFloat("shock", shock);
     mat.setFloat("ink", ink);
-    mat.setFloat("variant", variant);
+    mat.setFloat("uVariant", variant);
   }
 
   return {

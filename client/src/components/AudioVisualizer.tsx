@@ -1,26 +1,39 @@
-import { useRef, useMemo, useState, useEffect } from "react";
+import { useRef, useMemo, useState, useEffect, useCallback } from "react";
 import { Canvas, useFrame, useThree, extend } from "@react-three/fiber";
 import { OrbitControls, Sphere, shaderMaterial } from "@react-three/drei";
 import * as THREE from "three";
+import { WebGPURenderer } from "three/webgpu";
 import { Mesh, Vector3 } from "three";
 import { Effects } from "./Effects";
 import { PsyTunnel as PsyTunnelShader } from "./PsyTunnel";
 import { PremiumField } from "./PremiumField";
+import BabylonVisualizer from "./BabylonVisualizer";
 import { type AudioData } from "@/hooks/use-audio-analyzer";
 import { usePresetTransition } from "@/hooks/use-preset-transition";
-import { type ImageFilterId, type PsyOverlayId } from "@/lib/visualizer-presets";
+import { type ImageFilterId, type PsyOverlayId, type PresetEvolutionConfig } from "@/lib/visualizer-presets";
 import { PsyPresetLayer, type PsyPresetName } from "./PsyPresetLayer";
+import { DropFX } from "@/components/visuals/DropFX";
 import { isFractalPreset, getFractalPreset } from "@/engine/presets/registry";
 import { FractalPresetBridge } from "@/engine/presets/FractalPresetBridge";
 import type { UniformValues } from "@/engine/presets/types";
+import { createEvolutionState, evolveParams, getEvolutionSignals } from "@/engine/evolution/evolutionEngine";
+import type { AudioFrame, EvolutionSignals } from "@/engine/evolution/types";
+import { hasBabylonPreset } from "@/babylon/registry";
 
 interface AudioVisualizerProps {
   getAudioData: () => AudioData;
   settings: {
     intensity: number;
     speed: number;
+    fieldRotation?: number;
+    aiEvolutionStrength?: number;
+    aiEvolutionMode?: "subtle" | "musical" | "aggressive";
+    aiReactivityBias?: "structure" | "motion" | "color" | "audio";
+    aiEvolutionSpeed?: number;
+    aiDropBoost?: boolean;
     colorPalette: string[];
     presetName: string;
+    evolutionEnabled?: boolean;
     presetEnabled?: boolean;
     imageFilters?: ImageFilterId[];
     psyOverlays?: PsyOverlayId[];
@@ -30,7 +43,14 @@ interface AudioVisualizerProps {
   fractalUniforms?: UniformValues;
   renderProfile?: "mobile60" | "desktopCinematic" | "exportQuality";
   adaptiveQualityTier?: 0 | 1 | 2;
+  playbackTimeSec?: number;
+  evolutionEnabled?: boolean;
+  evolutionSpec?: PresetEvolutionConfig | null;
 }
+
+type ThreeSceneProps = AudioVisualizerProps & {
+  useWebGPU: boolean;
+};
 
 function PsyPresetWrapper({
   preset,
@@ -67,9 +87,56 @@ function PsyPresetWrapper({
   );
 }
 
-// Check WebGL support
-function isWebGLAvailable(): boolean {
+export const hasWebGPU = (): boolean =>
+  typeof navigator !== "undefined" && "gpu" in navigator;
+
+const WEBGPU_EXPERIMENT_ENABLED = import.meta.env.VITE_ENABLE_WEBGPU === "1";
+const BABYLON_EXPERIMENT_ENABLED = import.meta.env.VITE_ENABLE_BABYLON !== "0";
+// Add only presets that are verified WebGPU-safe.
+const WEBGPU_PRESET_NAMES = new Set<string>([]);
+const BABYLON_PRESET_TO_THREE_FALLBACK: Record<string, string> = {
+  "Energy Rings (Babylon)": "Energy Rings",
+  "Psy Tunnel (Babylon)": "Psy Tunnel",
+  "Psy Extra (Babylon)": "Psy Extra",
+  "Particle Field (Babylon)": "Particle Field",
+  "Waveform Sphere (Babylon)": "Waveform Sphere",
+  "Audio Bars (Babylon)": "Audio Bars",
+  "Geometric Kaleidoscope (Babylon)": "Geometric Kaleidoscope",
+  "Cosmic Web (Babylon)": "Cosmic Web",
+  "Cymatic Sand Plate (Babylon)": "Cymatic Sand Plate",
+  "Water Membrane Orb (Babylon)": "Water Membrane Orb",
+  "Ritual Tapestry (Babylon)": "Psy Extra",
+  "Ritual Tapestry V3 (Babylon)": "Psy Extra",
+};
+
+function resolveThreePresetName(presetName: string): string {
+  return BABYLON_PRESET_TO_THREE_FALLBACK[presetName] ?? presetName;
+}
+
+function presetRequiresWebGL(presetName: string): boolean {
+  if (!isFractalPreset(presetName)) {
+    return !WEBGPU_PRESET_NAMES.has(presetName);
+  }
+
+  const fp = getFractalPreset(presetName);
+  if (!fp) return true;
+
+  const backend = (fp as { backend?: "webgl" | "webgpu" }).backend;
+  if (backend === "webgl") return true;
+  if (backend === "webgpu") return false;
+
+  // Existing fractal presets use GLSL ShaderMaterial ("shader2d") and should stay on WebGL.
+  if (fp.kind === "shader2d") return true;
+
+  return !WEBGPU_PRESET_NAMES.has(presetName);
+}
+
+// Check renderer compatibility support (WebGPU or WebGL fallback)
+function hasCompatibleRenderer(): boolean {
   try {
+    if (hasWebGPU()) {
+      return true;
+    }
     const canvas = document.createElement('canvas');
     const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
     return !!gl;
@@ -90,6 +157,10 @@ function smoothAR(prev: number, next: number, dt: number, attack: number = 18, r
 function smoothExp(prev: number, next: number, dt: number, speed: number = 10): number {
   const a = 1 - Math.exp(-speed * dt);
   return prev + (next - prev) * a;
+}
+
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
 }
 
 // Fallback visualizer when WebGL is unavailable
@@ -359,9 +430,7 @@ function EnergyRings({ getAudioData, settings }: { getAudioData: () => AudioData
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
-            count={trailCount}
-            array={trailData.positions}
-            itemSize={3}
+            args={[trailData.positions, 3]}
             usage={THREE.DynamicDrawUsage}
           />
         </bufferGeometry>
@@ -403,6 +472,20 @@ function PsyTunnel({ getAudioData, settings }: { getAudioData: () => AudioData, 
       intensity={settings.intensity}
       speed={settings.speed}
       opacity={0.85}
+      variant="tunnel"
+    />
+  );
+}
+
+// === PRESET 2B: Psy Extra (more aggressive Psy profile) ===
+function PsyExtra({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
+  return (
+    <PsyTunnelShader
+      getAudioData={getAudioData}
+      intensity={settings.intensity * 1.2}
+      speed={settings.speed * 1.18}
+      opacity={0.95}
+      variant="extra"
     />
   );
 }
@@ -714,7 +797,13 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
   useEffect(() => {
     let mounted = true;
     const loader = new THREE.TextureLoader();
-    const anisotropy = Math.min(16, gl.capabilities.getMaxAnisotropy());
+    const rendererCapabilities = (gl as { capabilities?: { getMaxAnisotropy?: () => number } } | undefined)?.capabilities;
+    const anisotropy = Math.min(
+      16,
+      typeof rendererCapabilities?.getMaxAnisotropy === "function"
+        ? rendererCapabilities.getMaxAnisotropy()
+        : 1,
+    );
 
     const loadOptionalTexture = (path: string, srgb = false) =>
       new Promise<THREE.Texture | null>((resolve) => {
@@ -1139,10 +1228,10 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
       {/* Glow layer - larger, softer particles (rendered first, behind) */}
       <points ref={glowPointsRef}>
         <bufferGeometry>
-          <bufferAttribute attach="attributes-position" count={glowCount} array={glowPositions} itemSize={3} usage={THREE.DynamicDrawUsage} />
-          <bufferAttribute attach="attributes-color" count={glowCount} array={glowColors} itemSize={3} usage={THREE.DynamicDrawUsage} />
-          <bufferAttribute attach="attributes-aSize" count={glowCount} array={glowSizes} itemSize={1} />
-          <bufferAttribute attach="attributes-aPhase" count={glowCount} array={glowPhases} itemSize={1} />
+          <bufferAttribute attach="attributes-position" args={[glowPositions, 3]} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-color" args={[glowColors, 3]} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-aSize" args={[glowSizes, 1]} />
+          <bufferAttribute attach="attributes-aPhase" args={[glowPhases, 1]} />
         </bufferGeometry>
         {/* @ts-ignore */}
         <particleGlowMaterial transparent depthWrite={false} depthTest={false} blending={THREE.AdditiveBlending} />
@@ -1151,10 +1240,10 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
       {/* Trail layer - fine dust particles */}
       <points ref={trailPointsRef}>
         <bufferGeometry>
-          <bufferAttribute attach="attributes-position" count={trailCount} array={trailPositions} itemSize={3} usage={THREE.DynamicDrawUsage} />
-          <bufferAttribute attach="attributes-color" count={trailCount} array={trailColors} itemSize={3} usage={THREE.DynamicDrawUsage} />
-          <bufferAttribute attach="attributes-aSize" count={trailCount} array={trailSizes} itemSize={1} />
-          <bufferAttribute attach="attributes-aPhase" count={trailCount} array={trailPhases} itemSize={1} />
+          <bufferAttribute attach="attributes-position" args={[trailPositions, 3]} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-color" args={[trailColors, 3]} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-aSize" args={[trailSizes, 1]} />
+          <bufferAttribute attach="attributes-aPhase" args={[trailPhases, 1]} />
         </bufferGeometry>
         {/* @ts-ignore */}
         <particleGlowMaterial transparent depthWrite={false} depthTest={false} blending={THREE.AdditiveBlending} />
@@ -1163,10 +1252,10 @@ function ParticleField({ getAudioData, settings }: { getAudioData: () => AudioDa
       {/* Core layer - bright, dense particles (rendered last, on top) */}
       <points ref={corePointsRef}>
         <bufferGeometry>
-          <bufferAttribute attach="attributes-position" count={coreCount} array={corePositions} itemSize={3} usage={THREE.DynamicDrawUsage} />
-          <bufferAttribute attach="attributes-color" count={coreCount} array={coreColors} itemSize={3} usage={THREE.DynamicDrawUsage} />
-          <bufferAttribute attach="attributes-aSize" count={coreCount} array={coreSizes} itemSize={1} />
-          <bufferAttribute attach="attributes-aPhase" count={coreCount} array={corePhases} itemSize={1} />
+          <bufferAttribute attach="attributes-position" args={[corePositions, 3]} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-color" args={[coreColors, 3]} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-aSize" args={[coreSizes, 1]} />
+          <bufferAttribute attach="attributes-aPhase" args={[corePhases, 1]} />
         </bufferGeometry>
         {/* @ts-ignore */}
         <particleGlowMaterial transparent depthWrite={false} depthTest={false} blending={THREE.AdditiveBlending} />
@@ -2065,9 +2154,7 @@ function CosmicWeb({ getAudioData, settings }: { getAudioData: () => AudioData, 
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
-            count={cloudCount}
-            array={cloudPositions}
-            itemSize={3}
+            args={[cloudPositions, 3]}
             usage={THREE.DynamicDrawUsage}
           />
         </bufferGeometry>
@@ -2086,9 +2173,7 @@ function CosmicWeb({ getAudioData, settings }: { getAudioData: () => AudioData, 
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
-            count={nodeCount}
-            array={nodePositions}
-            itemSize={3}
+            args={[nodePositions, 3]}
             usage={THREE.DynamicDrawUsage}
           />
         </bufferGeometry>
@@ -2106,9 +2191,7 @@ function CosmicWeb({ getAudioData, settings }: { getAudioData: () => AudioData, 
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
-            count={pulseCount}
-            array={pulsePositions}
-            itemSize={3}
+            args={[pulsePositions, 3]}
             usage={THREE.DynamicDrawUsage}
           />
         </bufferGeometry>
@@ -2127,16 +2210,12 @@ function CosmicWeb({ getAudioData, settings }: { getAudioData: () => AudioData, 
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
-            count={nodeCount * nodeCount * 2}
-            array={linePositions}
-            itemSize={3}
+            args={[linePositions, 3]}
             usage={THREE.DynamicDrawUsage}
           />
           <bufferAttribute
             attach="attributes-color"
-            count={nodeCount * nodeCount * 2}
-            array={lineColors}
-            itemSize={3}
+            args={[lineColors, 3]}
             usage={THREE.DynamicDrawUsage}
           />
         </bufferGeometry>
@@ -2388,16 +2467,12 @@ function CymaticSandPlate({ getAudioData, settings }: { getAudioData: () => Audi
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
-            count={particleCount}
-            array={positions}
-            itemSize={3}
+            args={[positions, 3]}
             usage={THREE.DynamicDrawUsage}
           />
           <bufferAttribute
             attach="attributes-color"
-            count={particleCount}
-            array={colors}
-            itemSize={3}
+            args={[colors, 3]}
             usage={THREE.DynamicDrawUsage}
           />
         </bufferGeometry>
@@ -2421,256 +2496,736 @@ function WaterMembraneOrb({ getAudioData, settings }: { getAudioData: () => Audi
   const outerMeshRef = useRef<THREE.Mesh>(null);
   const innerMeshRef = useRef<THREE.Mesh>(null);
   const coreMeshRef = useRef<THREE.Mesh>(null);
-  const outerOriginalPositions = useRef<Float32Array | null>(null);
+  const outerTrailsRef = useRef<THREE.LineSegments>(null);
+  const innerTrailsRef = useRef<THREE.LineSegments>(null);
   const innerOriginalPositions = useRef<Float32Array | null>(null);
-  const smoothedAudio = useRef({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0 });
+  const beatLatchRef = useRef(false);
+  const smoothRef = useRef({
+    sub: 0,
+    bass: 0,
+    mid: 0,
+    high: 0,
+    energy: 0,
+    kick: 0,
+    beat: 0,
+    kickSpike: 0,
+    evoWarp: 0.2,
+    evoShine: 0.24,
+    evoMotion: 0.22,
+  });
+  const orbitRef = useRef({
+    dragging: false,
+    lastX: 0,
+    lastY: 0,
+    yaw: 0,
+    pitch: 0,
+    roll: 0,
+    targetYaw: 0,
+    targetPitch: 0,
+    targetRoll: 0,
+  });
 
-  // Custom water shader for the outer membrane
-  const waterShader = useMemo(() => ({
-    uniforms: {
-      uTime: { value: 0 },
-      uColor1: { value: new THREE.Color("#00ccff") },
-      uColor2: { value: new THREE.Color("#0066ff") },
-      uColor3: { value: new THREE.Color("#ffffff") },
-      uBass: { value: 0 },
-      uMid: { value: 0 },
-      uHigh: { value: 0 },
-      uEnergy: { value: 0 },
-    },
-    vertexShader: `
-      varying vec3 vNormal;
-      varying vec3 vPosition;
-      varying vec2 vUv;
-      
-      void main() {
-        vNormal = normalize(normalMatrix * normal);
-        vPosition = position;
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float uTime;
-      uniform vec3 uColor1;
-      uniform vec3 uColor2;
-      uniform vec3 uColor3;
-      uniform float uBass;
-      uniform float uMid;
-      uniform float uHigh;
-      uniform float uEnergy;
-      
-      varying vec3 vNormal;
-      varying vec3 vPosition;
-      varying vec2 vUv;
-      
-      // Fresnel effect for edge glow
-      float fresnel(vec3 normal, vec3 viewDir, float power) {
-        return pow(1.0 - abs(dot(normal, viewDir)), power);
-      }
-      
-      // Caustic pattern
-      float caustic(vec2 uv, float time) {
-        vec2 p = uv * 8.0;
-        float c = 0.0;
-        for(int i = 0; i < 3; i++) {
-          float fi = float(i);
-          p += vec2(sin(p.y + time * (0.5 + fi * 0.2)), cos(p.x + time * (0.3 + fi * 0.15)));
-          c += 1.0 / length(fract(p) - 0.5);
+  useEffect(() => {
+    const isDragSurface = (target: EventTarget | null): boolean => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      if (el.tagName === "CANVAS") return true;
+      if (el.closest("[data-testid='canvas-click-catcher']")) return true;
+      return false;
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      if (!isDragSurface(e.target)) return;
+      const o = orbitRef.current;
+      o.dragging = true;
+      o.lastX = e.clientX;
+      o.lastY = e.clientY;
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      const o = orbitRef.current;
+      if (!o.dragging) return;
+      const dx = e.clientX - o.lastX;
+      const dy = e.clientY - o.lastY;
+      o.lastX = e.clientX;
+      o.lastY = e.clientY;
+
+      const sensitivity = 0.006;
+      o.targetYaw += dx * sensitivity;
+      o.targetPitch = THREE.MathUtils.clamp(o.targetPitch + dy * sensitivity, -1.2, 1.2);
+    };
+
+    const stopDrag = () => {
+      orbitRef.current.dragging = false;
+    };
+
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopDrag);
+    window.addEventListener("pointercancel", stopDrag);
+
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopDrag);
+      window.removeEventListener("pointercancel", stopDrag);
+    };
+  }, []);
+
+  const trailData = useMemo(() => {
+    const outerCount = 320;
+    const innerCount = 220;
+    const outerPositions = new Float32Array(outerCount * 2 * 3);
+    const innerPositions = new Float32Array(innerCount * 2 * 3);
+    const outerSeeds = new Float32Array(outerCount * 6);
+    const innerSeeds = new Float32Array(innerCount * 8);
+
+    for (let i = 0; i < outerCount; i++) {
+      outerSeeds[i * 6] = Math.random() * Math.PI * 2; // phase
+      outerSeeds[i * 6 + 1] = (Math.random() * 2 - 1) * 1.2; // lat offset
+      outerSeeds[i * 6 + 2] = Math.random() * Math.PI * 2; // lon offset
+      outerSeeds[i * 6 + 3] = 0.6 + Math.random() * 1.6; // speed
+      outerSeeds[i * 6 + 4] = 3.3 + Math.random() * 0.95; // radius (outside shell)
+      outerSeeds[i * 6 + 5] = Math.random() * Math.PI * 2; // jitter phase
+    }
+
+    for (let i = 0; i < innerCount; i++) {
+      innerSeeds[i * 8] = Math.random() * Math.PI * 2; // phase
+      innerSeeds[i * 8 + 1] = 0.8 + Math.random() * 1.9; // a
+      innerSeeds[i * 8 + 2] = 0.7 + Math.random() * 1.8; // b
+      innerSeeds[i * 8 + 3] = 0.9 + Math.random() * 2.2; // c
+      innerSeeds[i * 8 + 4] = 0.55 + Math.random() * 1.15; // rx
+      innerSeeds[i * 8 + 5] = 0.5 + Math.random() * 1.05; // ry
+      innerSeeds[i * 8 + 6] = 0.6 + Math.random() * 1.2; // rz
+      innerSeeds[i * 8 + 7] = 0.65 + Math.random() * 1.7; // speed
+    }
+
+    return {
+      outerCount,
+      innerCount,
+      outerPositions,
+      innerPositions,
+      outerSeeds,
+      innerSeeds,
+    };
+  }, []);
+
+  const waterShader = useMemo(
+    () => ({
+      uniforms: {
+        uTime: { value: 0 },
+        uBass: { value: 0 },
+        uMid: { value: 0 },
+        uHigh: { value: 0 },
+        uEnergy: { value: 0 },
+        uBeat: { value: 0 },
+        uKickSpike: { value: 0 },
+        uReflectivity: { value: 0.62 },
+        uIridescence: { value: 0.45 },
+        uEvoWarp: { value: 0.24 },
+        uEvoShine: { value: 0.28 },
+        uEvoMotion: { value: 0.22 },
+        uColorA: { value: new THREE.Color("#00c6ff") },
+        uColorB: { value: new THREE.Color("#0068ff") },
+        uColorC: { value: new THREE.Color("#7be7ff") },
+        uColorD: { value: new THREE.Color("#ffffff") },
+      },
+      vertexShader: `
+        uniform float uTime;
+        uniform float uBass;
+        uniform float uMid;
+        uniform float uHigh;
+        uniform float uEnergy;
+        uniform float uBeat;
+        uniform float uKickSpike;
+        uniform float uEvoWarp;
+        uniform float uEvoMotion;
+
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        varying vec3 vNormalW;
+        varying vec3 vLocalPos;
+
+        void main() {
+          vUv = uv;
+          vec3 n = normalize(normal);
+          vec3 p = position;
+
+          float waveA = sin((p.x + p.z) * 3.1 + uTime * (1.22 + uEvoMotion * 0.72));
+          float waveB = cos((p.y - p.x) * 3.9 - uTime * (1.35 + uEvoMotion * 0.82));
+          float waveC = sin((p.x * 2.2 - p.z * 2.7) + uTime * (2.05 + uEvoMotion * 1.05));
+          float radial = sin(length(p.xz) * (7.2 + uEvoWarp * 2.8) - uTime * 2.2 + uBass * 6.8);
+          float kickPulse = sin(length(p.xyz) * 15.0 - uTime * 9.4) * uKickSpike * 0.095;
+          float shimmer = sin((p.x * 8.0 + p.y * 6.5 + p.z * 8.5) + uTime * 4.8) * (0.008 + uHigh * 0.018);
+
+          float audioDrive = 0.3 + uBass * 0.9 + uMid * 0.62 + uHigh * 0.32 + uEnergy * 0.48 + uBeat * 0.45 + uKickSpike * 0.6;
+          float evolutionDrive = 0.28 + uEvoWarp * 0.9 + uEvoMotion * 0.6;
+          float kickDrive = 1.0 + uKickSpike * 1.25;
+          float displacement = ((waveA * 0.082 + waveB * 0.076 + waveC * 0.058 + radial * 0.072) * audioDrive * evolutionDrive * kickDrive) + shimmer + kickPulse;
+
+          p += n * displacement;
+          vLocalPos = p;
+
+          vec4 worldPos = modelMatrix * vec4(p, 1.0);
+          vWorldPos = worldPos.xyz;
+          vNormalW = normalize(mat3(modelMatrix) * normal);
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
         }
-        return c / 3.0;
-      }
-      
-      void main() {
-        vec3 viewDir = normalize(cameraPosition - vPosition);
-        
-        // Fresnel rim lighting
-        float rim = fresnel(vNormal, viewDir, 2.5);
-        
-        // Caustic shimmer driven by highs
-        float causticPattern = caustic(vUv, uTime * 2.0) * uHigh * 0.4;
-        
-        // Base color gradient based on position
-        float gradient = (vPosition.y + 3.0) / 6.0;
-        vec3 baseColor = mix(uColor1, uColor2, gradient);
-        
-        // Add energy-reactive iridescence
-        float iridescence = sin(vPosition.x * 5.0 + uTime) * sin(vPosition.z * 5.0 - uTime) * 0.5 + 0.5;
-        baseColor = mix(baseColor, uColor3, iridescence * uEnergy * 0.3);
-        
-        // Combine effects
-        vec3 finalColor = baseColor;
-        finalColor += uColor3 * rim * (0.4 + uBass * 0.6); // Rim glow
-        finalColor += uColor3 * causticPattern; // Caustic highlights
-        finalColor += baseColor * uMid * 0.3; // Mid boost
-        
-        // Transparency based on fresnel
-        float alpha = 0.5 + rim * 0.4 + uEnergy * 0.1;
-        
-        gl_FragColor = vec4(finalColor, alpha);
-      }
-    `,
-  }), []);
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform float uBass;
+        uniform float uMid;
+        uniform float uHigh;
+        uniform float uEnergy;
+        uniform float uBeat;
+        uniform float uKickSpike;
+        uniform float uReflectivity;
+        uniform float uIridescence;
+        uniform float uEvoWarp;
+        uniform float uEvoShine;
+        uniform float uEvoMotion;
+        uniform vec3 uColorA;
+        uniform vec3 uColorB;
+        uniform vec3 uColorC;
+        uniform vec3 uColorD;
+
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        varying vec3 vNormalW;
+        varying vec3 vLocalPos;
+
+        float causticSoft(vec2 uv, float t) {
+          float w1 = sin((uv.x * 5.2 + uv.y * 3.6) + t * (1.2 + uEvoMotion * 0.45));
+          float w2 = cos((uv.y * 4.8 - uv.x * 2.9) - t * (1.35 + uEvoMotion * 0.4));
+          float w3 = sin((uv.x + uv.y) * 3.2 + t * 0.9);
+          return 0.5 + 0.5 * (w1 * 0.4 + w2 * 0.35 + w3 * 0.25);
+        }
+
+        // Original 2D water preset caustic model.
+        float causticClassic(vec2 uv, float time) {
+          vec2 p = uv * 8.0;
+          float c = 0.0;
+          for (int i = 0; i < 3; i++) {
+            float fi = float(i);
+            p += vec2(
+              sin(p.y + time * (0.5 + fi * 0.2)),
+              cos(p.x + time * (0.3 + fi * 0.15))
+            );
+            c += 1.0 / max(0.04, length(fract(p) - 0.5));
+          }
+          return c / 3.0;
+        }
+
+        float legacyTexture2D(vec2 uv, float t) {
+          vec2 p = uv * 2.0 - 1.0;
+          float r = length(p);
+          float a = atan(p.y, p.x);
+
+          // Signature 2D water contour rings.
+          float rings = smoothstep(
+            0.84,
+            1.0,
+            abs(sin(r * 52.0 - t * (2.0 + uEvoMotion * 0.8) + sin(a * 6.0 + t * 0.45) * 2.0))
+          );
+
+          // Flowing membrane veins.
+          float veins = smoothstep(
+            0.8,
+            1.0,
+            abs(
+              sin((p.x * 16.0 + p.y * 11.0) + t * (1.3 + uEvoWarp * 0.6)) *
+              cos((p.x * 11.0 - p.y * 14.0) - t * (1.1 + uEvoMotion * 0.5))
+            )
+          );
+
+          // Droplet-like roaming line islands.
+          float drops = smoothstep(
+            0.84,
+            1.0,
+            abs(sin((a * 14.0) + t * (1.45 + uEvoMotion * 0.7) + sin(r * 18.0 + t)))
+          );
+
+          float edgeMask = 1.0 - smoothstep(0.92, 1.2, r);
+          return (rings * 0.56 + veins * 0.31 + drops * 0.36) * edgeMask;
+        }
+
+        vec3 environment(vec3 r) {
+          float y = clamp(r.y * 0.5 + 0.5, 0.0, 1.0);
+          vec3 top = mix(uColorB, uColorC, 0.45) * 1.2;
+          vec3 horizon = mix(uColorA, uColorD, 0.5) * 0.92;
+          vec3 bottom = mix(uColorA * 0.22, uColorB * 0.16, 0.5);
+          vec3 e = mix(bottom, horizon, smoothstep(0.0, 0.52, y));
+          return mix(e, top, smoothstep(0.52, 1.0, y));
+        }
+
+        void main() {
+          vec3 N = normalize(vNormalW);
+          vec3 V = normalize(cameraPosition - vWorldPos);
+          vec3 R = reflect(-V, N);
+          float fres = pow(1.0 - max(dot(N, V), 0.0), 2.25);
+
+          float depthGrad = clamp(0.5 + 0.5 * dot(N, vec3(0.0, 1.0, 0.0)), 0.0, 1.0);
+          float flowA = 0.5 + 0.5 * sin(vUv.x * 6.5 + uTime * (0.95 + uEvoMotion * 0.62) + sin(vUv.y * 4.2 - uTime * 0.6));
+          float flowB = 0.5 + 0.5 * cos(vUv.y * 5.6 - uTime * (0.85 + uEvoMotion * 0.54) + sin(vUv.x * 3.6 + uTime * 0.4));
+          float flow = mix(flowA, flowB, 0.48);
+          float caust = causticSoft(vUv + vec2(uTime * 0.02, -uTime * 0.018), uTime);
+
+          vec3 base = mix(uColorA, uColorB, depthGrad);
+          base = mix(base, uColorC, flow * (0.32 + uMid * 0.5 + uEvoShine * 0.34));
+
+          float iri = sin((vWorldPos.x + vWorldPos.z) * (1.8 + uEvoWarp * 0.9) + uTime * (1.6 + uEvoMotion * 0.7)) * 0.5 + 0.5;
+          vec3 iridescent = mix(uColorD, uColorC, iri) * (0.12 + 0.34 * uIridescence * (uHigh + uBeat * 0.7 + uEvoShine * 0.6));
+
+          vec3 env = environment(R);
+          vec3 reflection = env * (0.16 + 0.52 * uReflectivity + 0.34 * fres + uEvoShine * 0.2);
+          float clearCoat = pow(
+            max(dot(N, normalize(V + normalize(vec3(-0.3, 0.78, 0.5)))), 0.0),
+            160.0
+          ) * (0.04 + uEvoShine * 0.12 + uKickSpike * 0.14);
+          float pearlPhase = 0.5 + 0.5 * sin((R.x * 9.0 + R.y * 12.0 - R.z * 7.0) + uTime * 0.8);
+          vec3 pearlTint = mix(uColorC, uColorD, pearlPhase) * (0.03 + uEvoShine * 0.08 + uHigh * 0.06);
+
+          float specA = pow(max(dot(R, normalize(vec3(-0.35, 0.8, 0.42))), 0.0), 52.0) *
+            (0.24 + uHigh * 0.56 + uEnergy * 0.42 + uBeat * 0.24 + uKickSpike * 0.52 + uEvoShine * 0.26);
+          float specB = pow(max(dot(R, normalize(vec3(0.62, 0.24, -0.74))), 0.0), 82.0) *
+            (0.12 + uBass * 0.45 + uHigh * 0.42 + uBeat * 0.3 + uKickSpike * 0.68);
+
+          vec3 color = base * (0.72 + 0.62 * uEnergy + uEvoShine * 0.22);
+          color += mix(uColorB, uColorC, 0.5) * caust * (0.2 + 0.34 * uHigh + uEvoWarp * 0.26);
+          color += iridescent;
+          float legacyTex = legacyTexture2D(vUv + vec2(uTime * 0.01, -uTime * 0.006), uTime);
+          float legacyMask = smoothstep(0.5, 0.94, legacyTex);
+          vec3 legacyLineColor = mix(uColorD, uColorB, 0.42 + 0.34 * sin(uTime * 0.35 + uEvoShine * 1.7));
+          legacyLineColor = mix(legacyLineColor, vec3(1.0, 0.97, 1.0), 0.14 + uHigh * 0.08);
+          color += legacyLineColor * legacyMask * (0.9 + uMid * 0.6 + uHigh * 0.42 + uKickSpike * 0.5);
+          color += vec3(1.0, 0.98, 1.0) * legacyMask * (0.31 + uHigh * 0.16);
+          color = mix(color, color * 0.7 + reflection, clamp(0.2 + fres * 0.32, 0.0, 0.82));
+          color += vec3(1.0, 0.97, 1.0) * (specA + specB);
+          color += vec3(1.0, 0.98, 1.0) * clearCoat;
+          color += pearlTint;
+          color += mix(uColorD, uColorC, 0.5) * (uKickSpike * 0.28);
+
+          // Strongly blend back the old 2D Water look on top of the 3D shell.
+          float legacyRim = pow(1.0 - abs(dot(N, V)), 2.5);
+          float legacyClassic = causticClassic(vUv, uTime * 2.0) * (0.32 + uHigh * 0.75 + uKickSpike * 0.25);
+          float legacyGradient = clamp((vLocalPos.y + 3.0) / 6.0, 0.0, 1.0);
+          vec3 legacyBase = mix(uColorA, uColorB, legacyGradient);
+          float legacyIri = sin(vLocalPos.x * 5.0 + uTime) * sin(vLocalPos.z * 5.0 - uTime) * 0.5 + 0.5;
+          legacyBase = mix(legacyBase, uColorD, legacyIri * (0.24 + uEnergy * 0.45));
+          vec3 legacy2D = legacyBase;
+          legacy2D += uColorD * legacyRim * (0.45 + uBass * 0.85);
+          legacy2D += uColorD * legacyClassic * 1.15;
+          legacy2D += legacyBase * uMid * 0.45;
+          legacy2D += legacyLineColor * legacyMask * (0.44 + uHigh * 0.28);
+          float legacyMix = clamp(0.9 + uEvoMotion * 0.05 + uBeat * 0.04, 0.86, 0.96);
+          color = mix(color, legacy2D, legacyMix);
+
+          color = clamp(color, vec3(0.0), vec3(8.0));
+
+          float alpha = clamp(0.52 + legacyRim * 0.3 + uEnergy * 0.15 + uBass * 0.1 + uBeat * 0.07 + legacyMask * 0.18, 0.48, 0.99);
+          color = pow(max(color, vec3(0.0)), vec3(0.95));
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+    }),
+    [],
+  );
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
-    const audio = getAudioData();
-    const time = state.clock.getElapsedTime() * settings.speed;
-    
-    // Option 4: Attack/release smoothing for musical response
+
+    const audioRaw = getAudioData();
     const dt = Math.min(delta, 0.1);
-    smoothedAudio.current.sub = smoothAR(smoothedAudio.current.sub, audio.sub, dt, 12, 5);
-    smoothedAudio.current.bass = smoothAR(smoothedAudio.current.bass, audio.bass, dt, 14, 6);
-    smoothedAudio.current.mid = smoothAR(smoothedAudio.current.mid, audio.mid, dt, 16, 8);
-    smoothedAudio.current.high = smoothAR(smoothedAudio.current.high, audio.high, dt, 20, 10);
-    smoothedAudio.current.energy = smoothExp(smoothedAudio.current.energy, audio.energy, dt, 8);
-    
-    const { sub, bass, mid, high, energy } = smoothedAudio.current;
-    const modeIndex = audio.modeIndex;
-    const lobes = modeIndex + 2;
-    
-    // Update outer membrane
+    const t = state.clock.getElapsedTime();
+    const speed = THREE.MathUtils.clamp(settings.speed ?? 1, 0.1, 3);
+    const time = t * (0.45 + speed * 0.8);
+    const rotationAmount = THREE.MathUtils.clamp(settings.fieldRotation ?? settings.rotation ?? 1, 0, 2);
+
+    const smooth = smoothRef.current;
+    smooth.sub = smoothAR(smooth.sub, clamp01(audioRaw.sub), dt, 16, 6);
+    smooth.bass = smoothAR(smooth.bass, clamp01(audioRaw.bass), dt, 22, 9);
+    smooth.mid = smoothAR(smooth.mid, clamp01(audioRaw.mid), dt, 24, 10);
+    smooth.high = smoothAR(smooth.high, clamp01(audioRaw.high), dt, 28, 12);
+    smooth.energy = smoothExp(smooth.energy, clamp01(audioRaw.energy), dt, 11);
+    smooth.kick = smoothAR(smooth.kick, clamp01(audioRaw.kick), dt, 30, 12);
+
+    const beatDetected = audioRaw.kick > 0.56;
+    if (beatDetected && !beatLatchRef.current) {
+      smooth.beat = 1;
+      smooth.kickSpike = 1;
+    }
+    beatLatchRef.current = beatDetected;
+    smooth.beat *= Math.exp(-dt * 8.2);
+    smooth.kickSpike *= Math.exp(-dt * 9.6);
+    if (audioRaw.kick > 0.82) {
+      smooth.kickSpike = Math.max(smooth.kickSpike, 1);
+    }
+
+    // Water preset sensitivity trim: 30% less than current behavior.
+    const musicSensitivity = 0.42;
+    const mSub = smooth.sub * musicSensitivity;
+    const mBass = smooth.bass * musicSensitivity;
+    const mMid = smooth.mid * musicSensitivity;
+    const mHigh = smooth.high * musicSensitivity;
+    const mEnergy = smooth.energy * musicSensitivity;
+    const mKick = smooth.kick * musicSensitivity;
+    const mBeat = smooth.beat * musicSensitivity;
+    const mKickSpike = smooth.kickSpike * musicSensitivity;
+
+    // Intro -> build -> drop -> breakdown -> outro evolution cycle.
+    const evoClock = t * (0.7 + speed * 0.35);
+    const cycleLen = 120;
+    const sectionLen = cycleLen / 5;
+    const local = evoClock % cycleLen;
+    const section = Math.floor(local / sectionLen);
+    const secP = (local - section * sectionLen) / sectionLen;
+    const next = (section + 1) % 5;
+    const eased = secP * secP * (3 - 2 * secP);
+
+    const targets = [
+      { warp: 0.18, shine: 0.2, motion: 0.22 }, // intro
+      { warp: 0.44, shine: 0.4, motion: 0.46 }, // build
+      { warp: 0.88, shine: 0.82, motion: 0.84 }, // drop
+      { warp: 0.34, shine: 0.32, motion: 0.38 }, // breakdown
+      { warp: 0.16, shine: 0.24, motion: 0.2 }, // outro
+    ];
+
+    const evoWarpTarget = THREE.MathUtils.lerp(targets[section].warp, targets[next].warp, eased);
+    const evoShineTarget = THREE.MathUtils.lerp(targets[section].shine, targets[next].shine, eased);
+    const evoMotionTarget = THREE.MathUtils.lerp(targets[section].motion, targets[next].motion, eased);
+
+    smooth.evoWarp = smoothExp(
+      smooth.evoWarp,
+      clamp01(evoWarpTarget + mBass * 0.32 + mMid * 0.18 + mBeat * 0.24 + mKickSpike * 0.26),
+      dt,
+      3.8,
+    );
+    smooth.evoShine = smoothExp(
+      smooth.evoShine,
+      clamp01(evoShineTarget + mHigh * 0.34 + mEnergy * 0.22 + mBeat * 0.22),
+      dt,
+      3.5,
+    );
+    smooth.evoMotion = smoothExp(
+      smooth.evoMotion,
+      clamp01(evoMotionTarget + mSub * 0.24 + mEnergy * 0.28 + mKick * 0.2 + mKickSpike * 0.32),
+      dt,
+      3.4,
+    );
+
+    const palette = Array.isArray(settings.colorPalette) ? settings.colorPalette : [];
+    const c0 = palette[0] || "#06b6d4";
+    const c1 = palette[1] || c0;
+    const c2 = palette[2] || c1;
+    const c3 = palette[3] || c2;
+    const trailBlend = 0.45 + 0.35 * Math.sin(time * 0.62 + mEnergy * 1.8);
+
     if (outerMeshRef.current) {
-      const geometry = outerMeshRef.current.geometry as THREE.BufferGeometry;
-      const positionAttr = geometry.attributes.position;
-      
-      if (!outerOriginalPositions.current) {
-        outerOriginalPositions.current = new Float32Array(positionAttr.array);
-      }
-      
-      const breathScale = 1 + sub * 0.12;
-      
-      for (let i = 0; i < positionAttr.count; i++) {
-        const ox = outerOriginalPositions.current[i * 3];
-        const oy = outerOriginalPositions.current[i * 3 + 1];
-        const oz = outerOriginalPositions.current[i * 3 + 2];
-        
-        const r = Math.sqrt(ox * ox + oy * oy + oz * oz);
-        const theta = Math.atan2(oy, ox);
-        const phi = Math.acos(oz / (r || 1));
-        
-        // Multi-layer standing waves
-        const wave1 = Math.sin(lobes * theta + time) * Math.sin(phi * 3);
-        const wave2 = Math.cos((lobes + 1) * theta - time * 0.7) * Math.sin(phi * 2);
-        const wave3 = Math.sin(lobes * 2 * theta + time * 1.3) * Math.cos(phi * 4) * 0.5;
-        const displacement = (wave1 * mid + wave2 * bass + wave3 * high * 0.5) * settings.intensity * 0.25;
-        
-        // High-frequency ripples
-        const ripple = high * 0.03 * Math.sin(time * 12 + theta * 8 + phi * 6);
-        
-        const newR = (r + displacement + ripple) * breathScale;
-        const nx = ox / r || 0;
-        const ny = oy / r || 0;
-        const nz = oz / r || 0;
-        
-        positionAttr.setXYZ(i, nx * newR, ny * newR, nz * newR);
-      }
-      
-      positionAttr.needsUpdate = true;
-      geometry.computeVertexNormals();
-      
-      // Update shader uniforms
-      const material = outerMeshRef.current.material as THREE.ShaderMaterial;
-      if (material.uniforms) {
-        material.uniforms.uTime.value = time;
-        material.uniforms.uBass.value = bass;
-        material.uniforms.uMid.value = mid;
-        material.uniforms.uHigh.value = high;
-        material.uniforms.uEnergy.value = energy;
-        
-        const colors = settings.colorPalette;
-        if (colors[0]) material.uniforms.uColor1.value.set(colors[0]);
-        if (colors[1]) material.uniforms.uColor2.value.set(colors[1]);
-        if (colors[2]) material.uniforms.uColor3.value.set(colors[2]);
+      const mat = outerMeshRef.current.material as THREE.ShaderMaterial;
+      if (mat.uniforms) {
+        mat.uniforms.uTime.value = time;
+        mat.uniforms.uBass.value = mBass;
+        mat.uniforms.uMid.value = mMid;
+        mat.uniforms.uHigh.value = mHigh;
+        mat.uniforms.uEnergy.value = mEnergy;
+        mat.uniforms.uBeat.value = mBeat;
+        mat.uniforms.uKickSpike.value = mKickSpike;
+        mat.uniforms.uReflectivity.value = clamp01(0.36 + smooth.evoShine * 0.34 + mEnergy * 0.44 + mHigh * 0.28);
+        mat.uniforms.uIridescence.value = clamp01(0.22 + smooth.evoShine * 0.46 + mHigh * 0.34 + mBeat * 0.22);
+        mat.uniforms.uEvoWarp.value = smooth.evoWarp;
+        mat.uniforms.uEvoShine.value = smooth.evoShine;
+        mat.uniforms.uEvoMotion.value = smooth.evoMotion;
+        mat.uniforms.uColorA.value.set(c0);
+        mat.uniforms.uColorB.value.set(c1);
+        mat.uniforms.uColorC.value.set(c2);
+        mat.uniforms.uColorD.value.set(c3);
       }
     }
-    
-    // Update inner layer with offset waves
+
     if (innerMeshRef.current) {
-      const geometry = innerMeshRef.current.geometry as THREE.BufferGeometry;
-      const positionAttr = geometry.attributes.position;
-      
+      const geom = innerMeshRef.current.geometry as THREE.BufferGeometry;
+      const posAttr = geom.attributes.position as THREE.BufferAttribute;
+
       if (!innerOriginalPositions.current) {
-        innerOriginalPositions.current = new Float32Array(positionAttr.array);
+        innerOriginalPositions.current = new Float32Array(posAttr.array);
       }
-      
-      for (let i = 0; i < positionAttr.count; i++) {
+
+      const lobes = Math.max(2, (audioRaw.modeIndex ?? 1) + 2);
+      const intensity = THREE.MathUtils.clamp(settings.intensity ?? 1, 0, 3);
+      const breath = 1 + mSub * 0.14 + mEnergy * 0.12 + mBeat * 0.09 + mKickSpike * 0.14;
+
+      for (let i = 0; i < posAttr.count; i++) {
         const ox = innerOriginalPositions.current[i * 3];
         const oy = innerOriginalPositions.current[i * 3 + 1];
         const oz = innerOriginalPositions.current[i * 3 + 2];
-        
+
         const r = Math.sqrt(ox * ox + oy * oy + oz * oz);
+        if (r < 1e-5) {
+          posAttr.setXYZ(i, ox, oy, oz);
+          continue;
+        }
+
         const theta = Math.atan2(oy, ox);
-        const phi = Math.acos(oz / (r || 1));
-        
-        // Counter-rotating waves for depth
-        const wave = Math.sin(lobes * theta - time * 0.8) * Math.sin(phi * 2.5);
-        const displacement = wave * bass * settings.intensity * 0.15;
-        
-        const newR = r + displacement;
-        const nx = ox / r || 0;
-        const ny = oy / r || 0;
-        const nz = oz / r || 0;
-        
-        positionAttr.setXYZ(i, nx * newR, ny * newR, nz * newR);
+        const phi = Math.acos(THREE.MathUtils.clamp(oz / r, -1, 1));
+        const waveA = Math.sin(lobes * theta + time * (1.25 + smooth.evoMotion * 0.9)) * Math.sin(phi * 2.4 + time * 0.45);
+        const waveB = Math.cos((lobes + 1.5) * theta - time * (0.95 + smooth.evoMotion * 0.75)) * Math.sin(phi * 3.2 - time * 0.6);
+        const waveC = Math.sin((theta * 3.0 + phi * 4.0) + time * (2.0 + smooth.evoMotion * 1.4));
+        const response = (0.38 + mBass * 0.95 + mMid * 0.72 + mHigh * 0.42 + mBeat * 0.6 + mKickSpike * 0.95 + smooth.evoWarp * 0.58) * intensity;
+        const displacement = (waveA * 0.5 + waveB * 0.42 + waveC * 0.3) * response;
+
+        const newR = (r + displacement) * breath;
+        const invR = 1 / r;
+        posAttr.setXYZ(i, ox * invR * newR, oy * invR * newR, oz * invR * newR);
       }
-      
-      positionAttr.needsUpdate = true;
+
+      posAttr.needsUpdate = true;
+      geom.computeVertexNormals();
+
+      const innerMat = innerMeshRef.current.material as THREE.MeshPhysicalMaterial;
+      innerMat.color.set(c1);
+      innerMat.emissive.set(c0);
+      innerMat.emissiveIntensity = 0.28 + mMid * 0.78 + mEnergy * 0.42 + mBeat * 0.26;
+      innerMat.roughness = THREE.MathUtils.clamp(0.2 - mHigh * 0.12 - smooth.evoShine * 0.08, 0.05, 0.24);
+      innerMat.transmission = THREE.MathUtils.clamp(0.52 + mEnergy * 0.2 + smooth.evoShine * 0.14, 0.24, 0.88);
+      innerMat.opacity = THREE.MathUtils.clamp(0.34 + mEnergy * 0.24 + mBeat * 0.1, 0.24, 0.84);
     }
-    
-    // Animate core glow
+
     if (coreMeshRef.current) {
-      const scale = 0.8 + energy * 0.4 + Math.sin(time * 2) * 0.1;
+      const scale =
+        0.66 +
+        mEnergy * 0.58 +
+        mBass * 0.26 +
+        mBeat * 0.34 +
+        mKickSpike * 0.42 +
+        Math.sin(time * (2.1 + smooth.evoMotion * 1.2)) * 0.11;
       coreMeshRef.current.scale.setScalar(scale);
-      
-      const material = coreMeshRef.current.material as THREE.MeshBasicMaterial;
-      material.opacity = 0.3 + bass * 0.4;
+      const coreMat = coreMeshRef.current.material as THREE.MeshPhysicalMaterial;
+      coreMat.color.set(c2);
+      coreMat.emissive.set(c3);
+      coreMat.emissiveIntensity = 0.42 + mBass * 0.95 + mKick * 0.46 + mBeat * 0.22 + mKickSpike * 0.45;
+      coreMat.opacity = THREE.MathUtils.clamp(0.2 + mEnergy * 0.34 + mBeat * 0.1 + mKickSpike * 0.08, 0.16, 0.86);
     }
-    
-    // Smooth group rotation
-    groupRef.current.rotation.y = time * 0.15;
-    groupRef.current.rotation.x = Math.sin(time * 0.2) * 0.08;
-    groupRef.current.rotation.z = Math.cos(time * 0.25) * 0.05;
+
+    if (outerTrailsRef.current) {
+      const outerGeom = outerTrailsRef.current.geometry as THREE.BufferGeometry;
+      const posAttr = outerGeom.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < trailData.outerCount; i++) {
+        const s = i * 6;
+        const phase = trailData.outerSeeds[s];
+        const latPhase = trailData.outerSeeds[s + 1];
+        const lonOffset = trailData.outerSeeds[s + 2];
+        const speedSeed = trailData.outerSeeds[s + 3];
+        const baseRadius = trailData.outerSeeds[s + 4];
+        const jitterPhase = trailData.outerSeeds[s + 5];
+
+        const anim = time * (0.46 + speedSeed * (0.58 + smooth.evoMotion * 0.72)) + phase;
+        const lat = Math.sin(anim * 0.76 + latPhase) * 0.92;
+        const lon = anim + lonOffset + Math.sin(anim * 0.34 + jitterPhase) * 0.24;
+        const radius = baseRadius + Math.sin(anim * 1.6 + jitterPhase) * (0.05 + mBass * 0.08 + mKickSpike * 0.11);
+
+        const cosLat = Math.cos(lat);
+        const px = Math.cos(lon) * cosLat * radius;
+        const py = Math.sin(lat) * radius;
+        const pz = Math.sin(lon) * cosLat * radius;
+
+        let tx = -Math.sin(lon) * cosLat;
+        let ty = 0.0;
+        let tz = Math.cos(lon) * cosLat;
+        const tLen = Math.sqrt(tx * tx + ty * ty + tz * tz) || 1;
+        tx /= tLen;
+        ty /= tLen;
+        tz /= tLen;
+
+        const segLen = 0.16 + mHigh * 0.2 + mKickSpike * 0.24;
+        const p0x = px - tx * segLen * 0.5;
+        const p0y = py - ty * segLen * 0.5;
+        const p0z = pz - tz * segLen * 0.5;
+        const p1x = px + tx * segLen * 0.5;
+        const p1y = py + ty * segLen * 0.5;
+        const p1z = pz + tz * segLen * 0.5;
+
+        posAttr.setXYZ(i * 2, p0x, p0y, p0z);
+        posAttr.setXYZ(i * 2 + 1, p1x, p1y, p1z);
+      }
+      posAttr.needsUpdate = true;
+
+      const outerMat = outerTrailsRef.current.material as THREE.LineBasicMaterial;
+      const outerTrailColor = new THREE.Color(c1)
+        .lerp(new THREE.Color(c3), trailBlend)
+        .lerp(new THREE.Color(c2), 0.2 + mBeat * 0.08 + mKickSpike * 0.08);
+      outerMat.color.copy(outerTrailColor);
+      outerMat.opacity = THREE.MathUtils.clamp(0.9 + mEnergy * 0.24 + mBeat * 0.2 + mKickSpike * 0.24, 0.78, 1);
+      outerTrailsRef.current.rotation.y = time * (0.42 + mMid * 0.32);
+      outerTrailsRef.current.rotation.x = Math.sin(time * 0.55) * (0.05 + mEnergy * 0.04);
+    }
+
+    if (innerTrailsRef.current) {
+      const innerGeom = innerTrailsRef.current.geometry as THREE.BufferGeometry;
+      const posAttr = innerGeom.attributes.position as THREE.BufferAttribute;
+      const trailScale = 1 + mEnergy * 0.18 + mBeat * 0.18 + mKickSpike * 0.24;
+
+      for (let i = 0; i < trailData.innerCount; i++) {
+        const s = i * 8;
+        const phase = trailData.innerSeeds[s];
+        const a = trailData.innerSeeds[s + 1];
+        const b = trailData.innerSeeds[s + 2];
+        const c = trailData.innerSeeds[s + 3];
+        const rx = trailData.innerSeeds[s + 4];
+        const ry = trailData.innerSeeds[s + 5];
+        const rz = trailData.innerSeeds[s + 6];
+        const speedSeed = trailData.innerSeeds[s + 7];
+
+        const anim = time * (0.66 + speedSeed * (0.55 + smooth.evoMotion * 0.7)) + phase;
+        const px = Math.sin(anim * a) * rx * trailScale;
+        const py = Math.cos(anim * b) * ry * trailScale;
+        const pz = Math.sin(anim * c + phase * 0.7) * rz * trailScale;
+
+        let tx = a * Math.cos(anim * a) * rx;
+        let ty = -b * Math.sin(anim * b) * ry;
+        let tz = c * Math.cos(anim * c + phase * 0.7) * rz;
+        const tLen = Math.sqrt(tx * tx + ty * ty + tz * tz) || 1;
+        tx /= tLen;
+        ty /= tLen;
+        tz /= tLen;
+
+        const segLen = 0.12 + mMid * 0.16 + mKickSpike * 0.15;
+        const p0x = px - tx * segLen * 0.5;
+        const p0y = py - ty * segLen * 0.5;
+        const p0z = pz - tz * segLen * 0.5;
+        const p1x = px + tx * segLen * 0.5;
+        const p1y = py + ty * segLen * 0.5;
+        const p1z = pz + tz * segLen * 0.5;
+
+        posAttr.setXYZ(i * 2, p0x, p0y, p0z);
+        posAttr.setXYZ(i * 2 + 1, p1x, p1y, p1z);
+      }
+      posAttr.needsUpdate = true;
+
+      const innerMat = innerTrailsRef.current.material as THREE.LineBasicMaterial;
+      const innerTrailColor = new THREE.Color(c0)
+        .lerp(new THREE.Color(c2), 0.52 + 0.28 * Math.cos(time * 0.54 + mHigh * 1.6))
+        .lerp(new THREE.Color(c3), 0.16 + mKickSpike * 0.08);
+      innerMat.color.copy(innerTrailColor);
+      innerMat.opacity = THREE.MathUtils.clamp(0.76 + mEnergy * 0.2 + mKickSpike * 0.2, 0.64, 0.96);
+      innerTrailsRef.current.rotation.y = -time * (0.35 + mHigh * 0.25);
+      innerTrailsRef.current.rotation.z = Math.cos(time * 0.48) * (0.04 + mBeat * 0.05);
+    }
+
+    const o = orbitRef.current;
+    if (!o.dragging) {
+      o.targetYaw += dt * (0.2 + rotationAmount * 0.74 + mMid * 0.56 + mEnergy * 0.42 + mBeat * 0.3 + mKickSpike * 0.38);
+      o.targetPitch =
+        Math.sin(time * (0.34 + rotationAmount * 0.42 + smooth.evoMotion * 0.3)) *
+        (0.14 + rotationAmount * 0.24) *
+        (0.75 + mMid * 0.95 + mBeat * 0.25 + mKickSpike * 0.3);
+      o.targetRoll =
+        Math.cos(time * (0.28 + rotationAmount * 0.38 + smooth.evoMotion * 0.26)) *
+        (0.1 + rotationAmount * 0.23) *
+        (0.6 + mHigh * 0.82 + mBeat * 0.24 + mKickSpike * 0.28);
+    }
+
+    o.yaw += (o.targetYaw - o.yaw) * 0.16;
+    o.pitch += (o.targetPitch - o.pitch) * 0.16;
+    o.roll += (o.targetRoll - o.roll) * 0.14;
+
+    groupRef.current.rotation.y = o.yaw;
+    groupRef.current.rotation.x = o.pitch + mEnergy * 0.04;
+    groupRef.current.rotation.z = o.roll + (mHigh - 0.5) * 0.06;
   });
 
   const colors = settings.colorPalette;
-  
+
   return (
     <group ref={groupRef}>
-      {/* Inner glowing core */}
       <mesh ref={coreMeshRef}>
-        <icosahedronGeometry args={[1.2, 3]} />
-        <meshBasicMaterial
-          color={colors[2] || "#ffffff"}
+        <sphereGeometry args={[1.1, 48, 48]} />
+        <meshPhysicalMaterial
+          color={colors[2] || colors[1] || "#b6f1ff"}
+          emissive={colors[3] || colors[2] || "#ffffff"}
+          emissiveIntensity={0.62}
+          metalness={0.05}
+          roughness={0.14}
+          transmission={0.32}
+          clearcoat={1}
+          clearcoatRoughness={0.035}
           transparent
-          opacity={0.4}
+          opacity={0.5}
+          depthWrite={false}
         />
       </mesh>
-      
-      {/* Inner membrane layer */}
+
       <mesh ref={innerMeshRef}>
-        <icosahedronGeometry args={[2.2, 5]} />
-        <meshStandardMaterial
-          color={colors[1] || "#0066ff"}
-          emissive={colors[1] || "#0044aa"}
-          emissiveIntensity={0.3}
+        <icosahedronGeometry args={[2.1, 5]} />
+        <meshPhysicalMaterial
+          color={colors[1] || colors[0] || "#2f7dff"}
+          emissive={colors[0] || "#00c6ff"}
+          emissiveIntensity={0.42}
           transparent
-          opacity={0.35}
-          metalness={0.5}
+          opacity={0.5}
+          metalness={0.18}
           roughness={0.1}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      
-      {/* Outer water membrane with custom shader */}
-      <mesh ref={outerMeshRef}>
-        <icosahedronGeometry args={[3, 6]} />
-        <shaderMaterial
-          {...waterShader}
-          transparent
+          transmission={0.64}
+          thickness={0.95}
+          ior={1.28}
+          clearcoat={1}
+          clearcoatRoughness={0.045}
           side={THREE.DoubleSide}
           depthWrite={false}
         />
       </mesh>
+
+      <mesh ref={outerMeshRef}>
+        <sphereGeometry args={[3.0, 128, 128]} />
+        <shaderMaterial
+          {...waterShader}
+          transparent
+          side={THREE.FrontSide}
+          depthWrite={false}
+          depthTest
+          blending={THREE.NormalBlending}
+          toneMapped={false}
+        />
+      </mesh>
+
+      <lineSegments ref={outerTrailsRef} renderOrder={12} scale={[1.08, 1.08, 1.08]}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[trailData.outerPositions, 3]}
+            usage={THREE.DynamicDrawUsage}
+          />
+        </bufferGeometry>
+        <lineBasicMaterial
+          color={colors[3] || colors[2] || colors[1] || "#d8f4ff"}
+          transparent
+          opacity={0.96}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          depthTest={false}
+          toneMapped={false}
+        />
+      </lineSegments>
+
+      <lineSegments ref={innerTrailsRef} renderOrder={11} scale={[0.86, 0.86, 0.86]}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[trailData.innerPositions, 3]}
+            usage={THREE.DynamicDrawUsage}
+          />
+        </bufferGeometry>
+        <lineBasicMaterial
+          color={colors[3] || colors[2] || colors[1] || "#d8f4ff"}
+          transparent
+          opacity={0.86}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          depthTest={false}
+          toneMapped={false}
+        />
+      </lineSegments>
     </group>
   );
 }
@@ -3094,7 +3649,7 @@ function ChladniGeometry({ getAudioData, settings }: { getAudioData: () => Audio
       {/* Node particles */}
       <points ref={particlesRef}>
         <bufferGeometry>
-          <bufferAttribute attach="attributes-position" count={particleCount} array={particlePositions} itemSize={3} usage={THREE.DynamicDrawUsage} />
+          <bufferAttribute attach="attributes-position" args={[particlePositions, 3]} usage={THREE.DynamicDrawUsage} />
         </bufferGeometry>
         <pointsMaterial
           size={0.1}
@@ -3113,240 +3668,501 @@ function ChladniGeometry({ getAudioData, settings }: { getAudioData: () => Audio
 // === PRESET 11: Resonant Field Lines (PREMIUM - Electromagnetic Force Visualization) ===
 function ResonantFieldLines({ getAudioData, settings }: { getAudioData: () => AudioData, settings: any }) {
   const groupRef = useRef<THREE.Group>(null);
-  const fieldPolesRef = useRef<THREE.Mesh[]>([]);
-  const ionTrailsRef = useRef<THREE.Points>(null);
-  const lineCount = 54;
-  const pointsPerLine = 60;
-  const smoothedAudioRef = useRef({ sub: 0, bass: 0, mid: 0, high: 0, kick: 0, energy: 0 });
-  const tempColor = useMemo(() => new THREE.Color(), []);
-  
-  // Ionized particles following field lines
-  const ionCount = 400;
-  const ionData = useMemo(() => {
-    const positions = new Float32Array(ionCount * 3);
-    const phases = new Float32Array(ionCount * 2); // lineIndex, progress along line
-    for (let i = 0; i < ionCount; i++) {
-      phases[i * 2] = Math.floor(Math.random() * lineCount);
-      phases[i * 2 + 1] = Math.random();
-      positions[i * 3] = 0;
-      positions[i * 3 + 1] = 0;
-      positions[i * 3 + 2] = 0;
-    }
-    return { positions, phases };
-  }, []);
-  
-  // Dipole pole positions (computed dynamically)
-  const polePositionsRef = useRef<{ north: THREE.Vector3, south: THREE.Vector3 }>({
-    north: new THREE.Vector3(0, 4, 0),
-    south: new THREE.Vector3(0, -4, 0)
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+  const smoothRef = useRef({
+    bass: 0,
+    mid: 0,
+    high: 0,
+    energy: 0,
+    kick: 0,
+    beat: 0,
+    zoomPulse: 0,
+    evoComplexity: 0.32,
+    evoWarp: 0.2,
+    evoGlow: 0.16,
+    evoSpeed: 0.3,
+    evoPalette: 0.38,
+    evoSymmetry: 0.24,
   });
-  
-  // Pre-create line objects with reusable geometries
-  const lineObjects = useMemo(() => {
-    const lines: THREE.Line[] = [];
-    for (let i = 0; i < lineCount; i++) {
-      const positions = new Float32Array(pointsPerLine * 3);
-      const colors = new Float32Array(pointsPerLine * 3);
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-      const material = new THREE.LineBasicMaterial({ 
-        vertexColors: true,
-        transparent: true, 
-        opacity: 0.85,
-        blending: THREE.AdditiveBlending
-      });
-      lines.push(new THREE.Line(geometry, material));
-    }
-    return lines;
+  const beatLatchRef = useRef(false);
+  const orbitRef = useRef({
+    dragging: false,
+    lastX: 0,
+    lastY: 0,
+    yaw: 0,
+    pitch: 0,
+    targetYaw: 0,
+    targetPitch: 0,
+  });
+
+  useEffect(() => {
+    const isDragSurface = (target: EventTarget | null): boolean => {
+      const el = target as HTMLElement | null;
+      if (!el) return false;
+      if (el.tagName === "CANVAS") return true;
+      if (el.closest("[data-testid='canvas-click-catcher']")) return true;
+      return false;
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      if (!isDragSurface(e.target)) return;
+      const o = orbitRef.current;
+      o.dragging = true;
+      o.lastX = e.clientX;
+      o.lastY = e.clientY;
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      const o = orbitRef.current;
+      if (!o.dragging) return;
+      const dx = e.clientX - o.lastX;
+      const dy = e.clientY - o.lastY;
+      o.lastX = e.clientX;
+      o.lastY = e.clientY;
+
+      const sensitivity = 0.0065;
+      o.targetYaw += dx * sensitivity;
+      o.targetPitch = THREE.MathUtils.clamp(o.targetPitch + dy * sensitivity, -1.25, 1.25);
+    };
+
+    const stopDrag = () => {
+      orbitRef.current.dragging = false;
+    };
+
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopDrag);
+    window.addEventListener("pointercancel", stopDrag);
+
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopDrag);
+      window.removeEventListener("pointercancel", stopDrag);
+    };
   }, []);
-  
-  // Store computed line positions for ion particles
-  const linePositionsCache = useRef<Float32Array[]>(
-    Array.from({ length: lineCount }, () => new Float32Array(pointsPerLine * 3))
+
+  const shader = useMemo(
+    () => ({
+      uniforms: {
+        uTime: { value: 0 },
+        uResolution: { value: new THREE.Vector2(1, 1) },
+        uBass: { value: 0 },
+        uMid: { value: 0 },
+        uHigh: { value: 0 },
+        uBeat: { value: 0 },
+        uZoomPulse: { value: 0 },
+        uSymmetryOn: { value: 1 },
+        uParallax: { value: 0.35 },
+        uEvoComplexity: { value: 0.32 },
+        uEvoWarp: { value: 0.2 },
+        uEvoGlow: { value: 0.16 },
+        uEvoSpeed: { value: 0.3 },
+        uEvoPalette: { value: 0.38 },
+        uEvoSymmetry: { value: 0.24 },
+        uColorA: { value: new THREE.Color("#d946ef") },
+        uColorB: { value: new THREE.Color("#06b6d4") },
+        uColorC: { value: new THREE.Color("#fb7185") },
+        uColorD: { value: new THREE.Color("#f59e0b") },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        varying vec3 vNormalW;
+        uniform float uTime;
+        uniform float uBass;
+        uniform float uMid;
+        uniform float uHigh;
+        uniform float uEvoComplexity;
+        uniform float uEvoWarp;
+        uniform float uEvoSpeed;
+        uniform float uBeat;
+        void main() {
+          vUv = uv;
+          vec3 n = normalize(normal);
+          vec3 p = position;
+
+          float t = uTime * (0.35 + 0.95 * uEvoSpeed);
+          float warpA = sin((uv.x * 28.0 + uv.y * 21.0) + t * 1.2);
+          float warpB = sin((uv.x * 43.0 - uv.y * 31.0) - t * 0.9);
+          float warp = (warpA * 0.55 + warpB * 0.45);
+
+          float disp = warp * (0.18 + 0.42 * uEvoWarp + 0.22 * uMid + 0.12 * uHigh);
+          disp += (uBeat * 0.14 + uBass * 0.08) * sin(t * 2.2 + uv.y * 18.0);
+          p += n * disp;
+
+          vec4 world = modelMatrix * vec4(p, 1.0);
+          vWorldPos = world.xyz;
+          vNormalW = normalize(mat3(modelMatrix) * n);
+          gl_Position = projectionMatrix * viewMatrix * world;
+        }
+      `,
+      fragmentShader: `
+        precision highp float;
+
+        uniform float uTime;
+        uniform vec2  uResolution;
+        uniform float uBass;
+        uniform float uMid;
+        uniform float uHigh;
+        uniform float uBeat;
+        uniform float uZoomPulse;
+        uniform float uSymmetryOn;
+        uniform float uParallax;
+        uniform float uEvoComplexity;
+        uniform float uEvoWarp;
+        uniform float uEvoGlow;
+        uniform float uEvoSpeed;
+        uniform float uEvoPalette;
+        uniform float uEvoSymmetry;
+        uniform vec3 uColorA;
+        uniform vec3 uColorB;
+        uniform vec3 uColorC;
+        uniform vec3 uColorD;
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        varying vec3 vNormalW;
+
+        float hash21(vec2 p){
+          p = fract(p*vec2(123.34, 456.21));
+          p += dot(p, p+34.345);
+          return fract(p.x*p.y);
+        }
+
+        float noise(vec2 p){
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          float a = hash21(i);
+          float b = hash21(i+vec2(1.0,0.0));
+          float c = hash21(i+vec2(0.0,1.0));
+          float d = hash21(i+vec2(1.0,1.0));
+          vec2 u = f*f*(3.0-2.0*f);
+          return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+        }
+
+        float fbm(vec2 p){
+          float v = 0.0;
+          float a = 0.55;
+          mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+          for(int i=0;i<5;i++){
+            v += a * noise(p);
+            p = m * p;
+            a *= 0.5;
+          }
+          return v;
+        }
+
+        vec2 rot(vec2 p, float a){
+          float s = sin(a), c = cos(a);
+          return mat2(c,-s,s,c)*p;
+        }
+
+        vec2 flowWarp(vec2 p, float t){
+          float e = 0.0025;
+          float n1 = fbm(p + vec2(e, 0.0) + t);
+          float n2 = fbm(p - vec2(e, 0.0) + t);
+          float n3 = fbm(p + vec2(0.0, e) + t);
+          float n4 = fbm(p - vec2(0.0, e) + t);
+          vec2 grad = vec2(n1 - n2, n3 - n4);
+          return vec2(-grad.y, grad.x);
+        }
+
+        vec2 symmetryFold(vec2 p, float folds){
+          float a = atan(p.y, p.x);
+          float r = length(p);
+          float tau = 6.28318530718;
+          float sector = tau / folds;
+          a = mod(a + sector*0.5, sector) - sector*0.5;
+          return vec2(cos(a), sin(a)) * r;
+        }
+
+        vec3 paletteStops(float x, vec3 a, vec3 b, vec3 c, vec3 d){
+          vec3 col = mix(a, b, smoothstep(0.0, 0.35, x));
+          col = mix(col, c, smoothstep(0.25, 0.75, x));
+          col = mix(col, d, smoothstep(0.65, 1.0, x));
+          return col;
+        }
+
+        float fieldLayer(vec2 q, float baseF, float t, float high){
+          float f1 = sin((q.x + q.y) * baseF + t * (0.6 + 0.8*uMid));
+          float f2 = sin((q.x - q.y) * (baseF*1.4) - t * (0.5 + 0.7*uBass));
+          float f3 = sin((q.x*2.0 + q.y*3.0) * (baseF*0.8) + t * (0.4 + 1.0*high));
+          float field = (f1 + 0.8*f2 + 0.6*f3);
+          float ribbons = 0.5 + 0.5*sin(field);
+          ribbons = smoothstep(0.35, 0.75, ribbons);
+          ribbons = pow(ribbons, 1.2);
+          float grain = fbm(q*6.0 + vec2(t, -t));
+          ribbons += (grain - 0.5) * (0.35*high);
+          return ribbons;
+        }
+
+        void main(){
+          vec2 uv = vUv;
+          vec2 p = uv * 2.0 - 1.0;
+          vec2 safeRes = max(uResolution, vec2(1.0));
+          p.x *= safeRes.x / safeRes.y;
+
+          float bass = clamp(uBass, 0.0, 1.0);
+          float mid  = clamp(uMid,  0.0, 1.0);
+          float high = clamp(uHigh, 0.0, 1.0);
+
+          float evoC = clamp(uEvoComplexity, 0.0, 1.0);
+          float evoW = clamp(uEvoWarp, 0.0, 1.0);
+          float evoG = clamp(uEvoGlow, 0.0, 1.0);
+          float evoS = clamp(uEvoSpeed, 0.0, 1.0);
+          float evoP = clamp(uEvoPalette, 0.0, 1.0);
+          float evoSym = clamp(uEvoSymmetry, 0.0, 1.0);
+
+          float t = uTime * (0.25 + 0.9*evoS + 0.25*mid);
+          float beatPulse = clamp(uBeat, 0.0, 1.0);
+          float zoomPulse = clamp(uZoomPulse, 0.0, 1.0);
+          float zoom = 1.0 + 0.06*beatPulse + 0.09*zoomPulse + 0.05*bass;
+
+          float par = clamp(uParallax, 0.0, 1.0);
+          vec2 parOffset = vec2(0.015, -0.010) * par * (0.3 + 0.7*mid);
+          float breath = 0.07 * sin(t * (0.75 + 1.8*bass));
+          p *= (zoom * (1.0 + breath));
+          p = rot(p, 0.12 * sin(t * 0.25) + 0.18*mid + 0.10*evoC);
+
+          if (uSymmetryOn > 0.5) {
+            float folds = mix(3.0, 10.0, clamp(0.35*mid + 0.65*evoSym, 0.0, 1.0));
+            p = symmetryFold(p, folds);
+          }
+
+          float warpAmt = (0.14 + 0.55*high + 0.28*mid) * (0.35 + 0.95*evoW);
+          vec2 curl1 = flowWarp(p * (1.4 + 2.8*(mid + 0.6*evoC)), t);
+          vec2 curl2 = flowWarp((p+parOffset) * (1.4 + 2.8*(mid + 0.6*evoC)), t + 0.35);
+          vec2 p1 = p + curl1 * warpAmt;
+          vec2 p2 = (p + parOffset) + curl2 * warpAmt;
+
+          float baseF = 3.2 + 7.8*(mid + 0.55*evoC) + 2.4*bass;
+          float r1 = fieldLayer(p1, baseF, t, high);
+          float r2 = fieldLayer(p2, baseF, t, high);
+          float ribbons = mix(r1, r2, 0.55*par);
+
+          float pulse = smoothstep(0.35, 1.0, bass) + 0.65*beatPulse;
+          pulse = clamp(pulse, 0.0, 1.0);
+          float glow = pow(ribbons, 2.4) * (0.25 + 1.05*pulse) + pow(ribbons, 6.0) * (0.15 + 1.25*high);
+          glow *= (0.35 + 1.2*evoG);
+
+          float x = clamp(ribbons * 0.9 + 0.25*(0.5 + 0.5*sin(t*0.2)), 0.0, 1.0);
+          vec3 colA = paletteStops(x, uColorA, uColorB, uColorC, uColorD);
+          vec3 colB = paletteStops(
+            x * 0.96 + 0.02,
+            uColorA * 0.32,
+            uColorB * 0.38,
+            uColorC * 0.44,
+            uColorD * 0.50
+          );
+          vec3 col = mix(colB, colA, evoP);
+
+          float sat = 0.85 + 0.8*high + 0.35*evoG;
+          float luma = dot(col, vec3(0.2126,0.7152,0.0722));
+          col = mix(vec3(luma), col, sat);
+
+          col *= 0.8 + 1.2*ribbons;
+          col += glow * vec3(1.15, 0.82, 1.35);
+
+          vec3 V = normalize(cameraPosition - vWorldPos);
+          float microA = fbm(vUv * 48.0 + vec2(t * 0.35, -t * 0.27));
+          float microB = fbm(vUv.yx * 72.0 + vec2(-t * 0.42, t * 0.31));
+          vec3 N = normalize(
+            normalize(vNormalW) +
+            vec3(microA - 0.5, microB - 0.5, 0.0) * (0.28 + 0.35 * evoG + 0.2 * high)
+          );
+
+          vec3 R = reflect(-V, N);
+          float fres = pow(1.0 - max(dot(N, V), 0.0), 2.6);
+
+          vec3 envTop = mix(uColorB, uColorC, 0.45) * 1.25;
+          vec3 envHorizon = mix(uColorA, uColorD, 0.5) * 0.9;
+          vec3 envBottom = mix(uColorA * 0.35, uColorB * 0.25, 0.5);
+          float envY = clamp(R.y * 0.5 + 0.5, 0.0, 1.0);
+          vec3 env = mix(envBottom, envHorizon, smoothstep(0.0, 0.45, envY));
+          env = mix(env, envTop, smoothstep(0.45, 1.0, envY));
+
+          float specPrimary =
+            pow(max(dot(R, normalize(vec3(-0.35, 0.75, 0.55))), 0.0), 42.0) *
+            (0.35 + 0.8 * evoG + 0.45 * high);
+          float specRim =
+            pow(max(dot(R, normalize(vec3(0.62, 0.28, -0.72))), 0.0), 78.0) *
+            (0.2 + 0.55 * beatPulse + 0.35 * bass);
+          float clearCoat =
+            pow(max(dot(N, normalize(V + normalize(vec3(0.18, 0.88, 0.42)))), 0.0), 180.0) *
+            (0.05 + 0.12 * evoG + 0.1 * beatPulse);
+
+          vec3 reflection =
+            env * (0.22 + 0.55 * fres + 0.28 * evoP) +
+            vec3(1.0, 0.95, 1.0) * (specPrimary + specRim + clearCoat);
+
+          float lacquer = smoothstep(0.6, 0.95, fbm(vUv * 120.0 + vec2(t * 0.15, -t * 0.11)));
+          reflection += lacquer * (0.03 + 0.08 * high) * mix(uColorB, uColorC, 0.5);
+
+          col = mix(col, col * 0.72 + reflection, clamp(0.3 + 0.45 * evoG + 0.2 * high, 0.0, 0.95));
+          col *= 0.78 + 0.22 * clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
+
+          float ca = 0.003 * (0.3 + high) * (0.4 + pulse) * (0.5 + 0.6*evoG);
+          col = vec3(col.r + ca*0.85, col.g, col.b - ca*0.85);
+
+          float v = 1.0 - smoothstep(0.2, 1.3, length(p));
+          col *= max(v, 0.08);
+          // Guard against negative/NaN values on some GPUs.
+          col = clamp(col + vec3(0.18, 0.08, 0.22), vec3(0.0), vec3(8.0));
+          col = pow(max(col, vec3(0.0)), vec3(0.95));
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+    }),
+    [],
   );
 
-  // Cleanup geometries and materials on unmount
-  useEffect(() => {
-    return () => {
-      lineObjects.forEach((line) => {
-        line.geometry.dispose();
-        (line.material as THREE.LineBasicMaterial).dispose();
-      });
-    };
-  }, [lineObjects]);
-
   useFrame((state, delta) => {
-    if (!groupRef.current) return;
+    const material = materialRef.current;
+    if (!material) return;
+
     const audioRaw = getAudioData();
-    const time = state.clock.getElapsedTime() * settings.speed;
-    
-    // Option 4: Attack/release smoothing for musical response
     const dt = Math.min(delta, 0.1);
-    const smooth = smoothedAudioRef.current;
-    smooth.sub = smoothAR(smooth.sub, audioRaw.sub, dt, 12, 5);
-    smooth.bass = smoothAR(smooth.bass, audioRaw.bass, dt, 14, 6);
-    smooth.mid = smoothAR(smooth.mid, audioRaw.mid, dt, 16, 8);
-    smooth.high = smoothAR(smooth.high, audioRaw.high, dt, 20, 10);
-    smooth.kick = smoothAR(smooth.kick, audioRaw.kick, dt, 25, 8);
-    smooth.energy = smoothExp(smooth.energy, audioRaw.energy, dt, 8);
-    
-    const symmetry = audioRaw.modeIndex + 2;
-    const fieldStrength = (smooth.sub + smooth.bass) * 0.7 * settings.intensity;
-    
-    // Dynamic pole separation based on bass
-    const poleSeparation = 4.5 + smooth.bass * 2;
-    polePositionsRef.current.north.set(0, poleSeparation, 0);
-    polePositionsRef.current.south.set(0, -poleSeparation, 0);
-    
-    // Update pole meshes
-    fieldPolesRef.current.forEach((pole, idx) => {
-      if (!pole) return;
-      const isNorth = idx === 0;
-      const poleY = isNorth ? poleSeparation : -poleSeparation;
-      pole.position.y = poleY;
-      const pulseScale = 0.5 + smooth.kick * 0.4 + smooth.energy * 0.2;
-      pole.scale.setScalar(pulseScale);
-      pole.rotation.y = time * (isNorth ? 0.5 : -0.5);
-    });
-    
-    // Calculate field lines as magnetic dipole curves
-    lineObjects.forEach((line, idx) => {
-      const geometry = line.geometry as THREE.BufferGeometry;
-      const posAttr = geometry.attributes.position as THREE.BufferAttribute;
-      const colorAttr = geometry.attributes.color as THREE.BufferAttribute;
-      const angle = (idx / lineCount) * Math.PI * 2;
-      const cache = linePositionsCache.current[idx];
-      
-      for (let j = 0; j < pointsPerLine; j++) {
-        const t = j / (pointsPerLine - 1);
-        
-        // Parametric curve from north pole to south pole
-        // Classic magnetic field line shape
-        const theta = t * Math.PI; // 0 to π (north to south)
-        const startRadius = 0.5 + (idx % 6) * 0.4;
-        const r = startRadius * Math.sin(theta) * (1 + fieldStrength * 0.5);
-        
-        // Add audio-reactive perturbations
-        const symMod = Math.sin(angle * symmetry + time * 0.5) * fieldStrength * 0.3;
-        const spiralOffset = Math.sin(t * 6 + time * 2) * smooth.mid * 0.2;
-        
-        const x = Math.cos(angle + spiralOffset) * (r + symMod);
-        const y = poleSeparation * Math.cos(theta) + Math.sin(time + t * 3) * smooth.high * 0.3;
-        const z = Math.sin(angle + spiralOffset) * (r + symMod);
-        
-        posAttr.setXYZ(j, x, y, z);
-        cache[j * 3] = x;
-        cache[j * 3 + 1] = y;
-        cache[j * 3 + 2] = z;
-        
-        // Color gradient: warm near poles, cool in middle
-        const colorIdx = idx % settings.colorPalette.length;
-        tempColor.set(settings.colorPalette[colorIdx]);
-        const poleProximity = 1 - Math.abs(t - 0.5) * 2; // 0 at poles, 1 at equator
-        const brightness = 0.5 + poleProximity * 0.4 + smooth.high * 0.3;
-        tempColor.offsetHSL((1 - poleProximity) * 0.08, 0, poleProximity * 0.15);
-        colorAttr.setXYZ(j, tempColor.r * brightness, tempColor.g * brightness, tempColor.b * brightness);
-      }
-      posAttr.needsUpdate = true;
-      colorAttr.needsUpdate = true;
-      
-      const material = line.material as THREE.LineBasicMaterial;
-      material.opacity = 0.55 + smooth.energy * 0.4;
-    });
-    
-    // Ionized particles following field lines
-    if (ionTrailsRef.current) {
-      const ionAttr = ionTrailsRef.current.geometry.attributes.position;
-      const { phases } = ionData;
-      
-      for (let i = 0; i < ionCount; i++) {
-        // Progress along the line
-        phases[i * 2 + 1] += 0.008 * (1 + smooth.energy * 2);
-        
-        if (phases[i * 2 + 1] > 1) {
-          phases[i * 2 + 1] = 0;
-          phases[i * 2] = Math.floor(Math.random() * lineCount);
-        }
-        
-        const lineIdx = Math.floor(phases[i * 2]) % lineCount;
-        const progress = phases[i * 2 + 1];
-        const cache = linePositionsCache.current[lineIdx];
-        
-        // Interpolate position along the cached line
-        const linePos = progress * (pointsPerLine - 1);
-        const idx1 = Math.floor(linePos);
-        const idx2 = Math.min(idx1 + 1, pointsPerLine - 1);
-        const frac = linePos - idx1;
-        
-        const x = cache[idx1 * 3] * (1 - frac) + cache[idx2 * 3] * frac;
-        const y = cache[idx1 * 3 + 1] * (1 - frac) + cache[idx2 * 3 + 1] * frac;
-        const z = cache[idx1 * 3 + 2] * (1 - frac) + cache[idx2 * 3 + 2] * frac;
-        
-        // Add small offset for visual depth
-        const jitter = Math.sin(time * 10 + i) * 0.05 * smooth.high;
-        ionAttr.setXYZ(i, x + jitter, y, z + jitter);
-      }
-      ionAttr.needsUpdate = true;
-      
-      const mat = ionTrailsRef.current.material as THREE.PointsMaterial;
-      mat.size = 0.08 + smooth.kick * 0.05;
-      mat.opacity = 0.7 + smooth.energy * 0.3;
+    const t = state.clock.getElapsedTime();
+    const smooth = smoothRef.current;
+
+    smooth.bass = smoothAR(smooth.bass, clamp01(audioRaw.bass), dt, 14, 6);
+    smooth.mid = smoothAR(smooth.mid, clamp01(audioRaw.mid), dt, 16, 8);
+    smooth.high = smoothAR(smooth.high, clamp01(audioRaw.high), dt, 20, 10);
+    smooth.energy = smoothExp(smooth.energy, clamp01(audioRaw.energy), dt, 8);
+    smooth.kick = smoothAR(smooth.kick, clamp01(audioRaw.kick), dt, 24, 8);
+
+    const beatDetected = audioRaw.kick > 0.55;
+    if (beatDetected && !beatLatchRef.current) smooth.beat = 1;
+    beatLatchRef.current = beatDetected;
+    smooth.beat *= Math.exp(-dt * 6.5);
+    smooth.zoomPulse = Math.max(
+      smooth.zoomPulse * Math.exp(-dt * 4.2),
+      smooth.beat * 0.95 + smooth.bass * 0.36,
+    );
+
+    // Intro -> build -> drop -> breakdown -> outro evolution cycle.
+    const cycleLen = 128.0;
+    const sectionLen = cycleLen / 5.0;
+    const local = t % cycleLen;
+    const section = Math.floor(local / sectionLen);
+    const secP = (local - section * sectionLen) / sectionLen;
+    const next = (section + 1) % 5;
+
+    const targets = [
+      { complexity: 0.2, warp: 0.12, glow: 0.08, speed: 0.22, palette: 0.32, symmetry: 0.22 }, // intro
+      { complexity: 0.45, warp: 0.28, glow: 0.18, speed: 0.42, palette: 0.44, symmetry: 0.42 }, // build
+      { complexity: 0.82, warp: 0.72, glow: 0.56, speed: 0.68, palette: 0.75, symmetry: 0.78 }, // drop
+      { complexity: 0.3, warp: 0.16, glow: 0.12, speed: 0.3, palette: 0.28, symmetry: 0.5 }, // breakdown
+      { complexity: 0.14, warp: 0.08, glow: 0.06, speed: 0.2, palette: 0.2, symmetry: 0.3 }, // outro
+    ];
+    const eased = secP * secP * (3 - 2 * secP);
+    const evoTarget = {
+      complexity: THREE.MathUtils.lerp(targets[section].complexity, targets[next].complexity, eased),
+      warp: THREE.MathUtils.lerp(targets[section].warp, targets[next].warp, eased),
+      glow: THREE.MathUtils.lerp(targets[section].glow, targets[next].glow, eased),
+      speed: THREE.MathUtils.lerp(targets[section].speed, targets[next].speed, eased),
+      palette: THREE.MathUtils.lerp(targets[section].palette, targets[next].palette, eased),
+      symmetry: THREE.MathUtils.lerp(targets[section].symmetry, targets[next].symmetry, eased),
+    };
+
+    // Audio-couple the evolution layer so it stays alive.
+    smooth.evoComplexity = smoothExp(
+      smooth.evoComplexity,
+      clamp01(evoTarget.complexity + smooth.mid * 0.18 + smooth.bass * 0.08),
+      dt,
+      3.6,
+    );
+    smooth.evoWarp = smoothExp(
+      smooth.evoWarp,
+      clamp01(evoTarget.warp + smooth.bass * 0.22 + smooth.high * 0.12),
+      dt,
+      4.1,
+    );
+    smooth.evoGlow = smoothExp(
+      smooth.evoGlow,
+      clamp01(evoTarget.glow + smooth.high * 0.25 + smooth.beat * 0.18),
+      dt,
+      4.6,
+    );
+    smooth.evoSpeed = smoothExp(smooth.evoSpeed, clamp01(evoTarget.speed + smooth.energy * 0.24), dt, 3.8);
+    smooth.evoPalette = smoothExp(smooth.evoPalette, clamp01(evoTarget.palette + smooth.high * 0.12), dt, 2.8);
+    smooth.evoSymmetry = smoothExp(
+      smooth.evoSymmetry,
+      clamp01(evoTarget.symmetry + smooth.mid * 0.2 + smooth.beat * 0.12),
+      dt,
+      3.2,
+    );
+
+    const symmetryOn = (settings.fieldSymmetryOn ?? true) ? 1 : 0;
+    const parallax = clamp01(0.22 + smooth.mid * 0.45 + smooth.high * 0.18);
+
+    const pxW = state.size.width * state.gl.getPixelRatio();
+    const pxH = state.size.height * state.gl.getPixelRatio();
+
+    material.uniforms.uTime.value = t * (0.8 + settings.speed * 0.5);
+    material.uniforms.uResolution.value.set(pxW, pxH);
+    material.uniforms.uBass.value = smooth.bass;
+    material.uniforms.uMid.value = smooth.mid;
+    material.uniforms.uHigh.value = smooth.high;
+    material.uniforms.uBeat.value = smooth.beat;
+    material.uniforms.uZoomPulse.value = smooth.zoomPulse;
+    material.uniforms.uSymmetryOn.value = symmetryOn;
+    material.uniforms.uParallax.value = parallax;
+    material.uniforms.uEvoComplexity.value = smooth.evoComplexity;
+    material.uniforms.uEvoWarp.value = smooth.evoWarp;
+    material.uniforms.uEvoGlow.value = smooth.evoGlow;
+    material.uniforms.uEvoSpeed.value = smooth.evoSpeed;
+    material.uniforms.uEvoPalette.value = smooth.evoPalette;
+    material.uniforms.uEvoSymmetry.value = smooth.evoSymmetry;
+
+    const palette = Array.isArray(settings.colorPalette) ? settings.colorPalette : [];
+    material.uniforms.uColorA.value.set(palette[0] || "#d946ef");
+    material.uniforms.uColorB.value.set(palette[1] || palette[0] || "#06b6d4");
+    material.uniforms.uColorC.value.set(palette[2] || palette[1] || palette[0] || "#fb7185");
+    material.uniforms.uColorD.value.set(palette[3] || palette[2] || palette[1] || palette[0] || "#f59e0b");
+
+    const o = orbitRef.current;
+    const rotationAmount = THREE.MathUtils.clamp(settings.fieldRotation ?? 1, 0, 2);
+    const audioSpin = smooth.mid * 0.24 + smooth.high * 0.18 + smooth.beat * 0.3 + smooth.energy * 0.12;
+    if (!o.dragging) {
+      o.targetYaw += dt * (0.02 + rotationAmount * 0.24 + audioSpin * rotationAmount * 0.45);
+      const autoPitch =
+        Math.sin(t * (0.22 + 0.42 * rotationAmount) + smooth.energy * 0.9) *
+        (0.06 + 0.24 * rotationAmount) *
+        (0.55 + smooth.mid * 0.9);
+      o.targetPitch += (autoPitch - o.targetPitch) * Math.min(1, dt * 3.2);
     }
-    
-    groupRef.current.rotation.y = time * 0.08;
-    groupRef.current.rotation.x = Math.sin(time * 0.15) * 0.15 * smooth.sub;
+    o.yaw += (o.targetYaw - o.yaw) * 0.16;
+    o.pitch += (o.targetPitch - o.pitch) * 0.16;
+
+    if (groupRef.current) {
+      groupRef.current.rotation.y = o.yaw;
+      groupRef.current.rotation.x =
+        o.pitch * 0.9 +
+        Math.sin(t * (0.18 + rotationAmount * 0.35)) * 0.07 * rotationAmount +
+        smooth.energy * 0.05 * rotationAmount;
+      groupRef.current.rotation.z =
+        Math.cos(t * (0.16 + rotationAmount * 0.33)) * 0.07 * rotationAmount +
+        (smooth.high - 0.5) * 0.08 * rotationAmount;
+    }
   });
 
   return (
     <group ref={groupRef}>
-      {/* North magnetic pole */}
-      <mesh ref={(el) => { if (el) fieldPolesRef.current[0] = el; }} position={[0, 4, 0]}>
-        <octahedronGeometry args={[0.5, 2]} />
-        <meshBasicMaterial
-          color={settings.colorPalette[0]}
-          transparent
-          opacity={0.7}
-          blending={THREE.AdditiveBlending}
+      <mesh>
+        <sphereGeometry args={[4.2, 192, 192]} />
+        <shaderMaterial
+          ref={materialRef}
+          {...shader}
+          transparent={false}
+          blending={THREE.NormalBlending}
+          toneMapped={false}
+          side={THREE.DoubleSide}
+          depthWrite={false}
+          depthTest={true}
         />
       </mesh>
-      
-      {/* South magnetic pole */}
-      <mesh ref={(el) => { if (el) fieldPolesRef.current[1] = el; }} position={[0, -4, 0]}>
-        <octahedronGeometry args={[0.5, 2]} />
-        <meshBasicMaterial
-          color={settings.colorPalette[1] || settings.colorPalette[0]}
-          transparent
-          opacity={0.7}
-          blending={THREE.AdditiveBlending}
-        />
-      </mesh>
-      
-      {/* Ionized particles following field lines */}
-      <points ref={ionTrailsRef}>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            count={ionCount}
-            array={ionData.positions}
-            itemSize={3}
-            usage={THREE.DynamicDrawUsage}
-          />
-        </bufferGeometry>
-        <pointsMaterial
-          size={0.1}
-          color={settings.colorPalette[2] || settings.colorPalette[0]}
-          transparent
-          opacity={0.8}
-          blending={THREE.AdditiveBlending}
-          sizeAttenuation
-        />
-      </points>
-      
-      {/* Field lines */}
-      {lineObjects.map((line, idx) => (
-        <primitive key={idx} object={line} />
-      ))}
     </group>
   );
 }
@@ -3827,11 +4643,10 @@ const PsyFilterMaterial = shaderMaterial(
 
 extend({ PsyFilterMaterial });
 
-declare global {
-  namespace JSX {
-    interface IntrinsicElements {
-      psyFilterMaterial: any;
-    }
+declare module "@react-three/fiber" {
+  interface ThreeElements {
+    psyFilterMaterial: any;
+    particleGlowMaterial: any;
   }
 }
 
@@ -4002,10 +4817,12 @@ function OpacityGroup({ opacity, children }: { opacity: number; children: React.
 function PresetTransition({
   presetName,
   renderPreset,
+  onActivePresetsChange,
   transitionDuration = 0.3,
 }: {
   presetName: string;
   renderPreset: (presetName: string, blend: { intensity: number; morph: number }) => React.ReactNode;
+  onActivePresetsChange?: (activeA: string, activeB: string, isTransitioning: boolean) => void;
   transitionDuration?: number;
 }) {
   const [fromPreset, setFromPreset] = useState(presetName);
@@ -4026,6 +4843,10 @@ function PresetTransition({
     morphFrom: 0.0,
     morphTo: 1.0,
   });
+
+  useEffect(() => {
+    onActivePresetsChange?.(t.activeA, t.activeB, t.isTransitioning);
+  }, [onActivePresetsChange, t.activeA, t.activeB, t.isTransitioning]);
 
   if (!t.isTransitioning || t.activeA === t.activeB) {
     return <group>{renderPreset(t.activeA, { intensity: t.intensity, morph: t.morph })}</group>;
@@ -4051,8 +4872,38 @@ function ThreeScene({
   fractalUniforms,
   renderProfile = "desktopCinematic",
   adaptiveQualityTier = 1,
-}: AudioVisualizerProps) {
+  playbackTimeSec = 0,
+  evolutionEnabled = false,
+  evolutionSpec = null,
+  useWebGPU,
+}: ThreeSceneProps) {
   const [hasError, setHasError] = useState(false);
+  const [transitionPresets, setTransitionPresets] = useState(() => ({
+    activeA: settings.presetName,
+    activeB: settings.presetName,
+    isTransitioning: false,
+  }));
+  const fractalPresetActive = isFractalPreset(settings.presetName);
+  const sceneZoom = fractalPresetActive ? 1 : zoom;
+  const handleActivePresetsChange = useCallback((activeA: string, activeB: string, isTransitioning: boolean) => {
+    setTransitionPresets((prev) => {
+      if (prev.activeA === activeA && prev.activeB === activeB && prev.isTransitioning === isTransitioning) {
+        return prev;
+      }
+      return { activeA, activeB, isTransitioning };
+    });
+  }, []);
+  const needsWebGL = useMemo(() => {
+    const activeA = transitionPresets.activeA || settings.presetName;
+    const activeB = transitionPresets.activeB || settings.presetName;
+    return (
+      presetRequiresWebGL(settings.presetName) ||
+      presetRequiresWebGL(activeA) ||
+      (transitionPresets.isTransitioning && presetRequiresWebGL(activeB))
+    );
+  }, [settings.presetName, transitionPresets.activeA, transitionPresets.activeB, transitionPresets.isTransitioning]);
+  const canUseWebGPU = useWebGPU && hasWebGPU();
+  const useWebGPUForThisFrame = canUseWebGPU && !needsWebGL;
   const effectiveFractalUniforms = useMemo(() => {
     if (!fractalUniforms) return fractalUniforms;
     const next = { ...fractalUniforms };
@@ -4060,30 +4911,194 @@ function ThreeScene({
     next.u_aaLevel = tierToAA[adaptiveQualityTier];
     return next;
   }, [fractalUniforms, adaptiveQualityTier]);
+
+  const evolutionStateRef = useRef(createEvolutionState());
+  const evolutionSignalsRef = useRef<EvolutionSignals>({
+    isDrop: false,
+    dropIntensity: 0,
+    dropAge: 0,
+  });
+  const evolvedAudioCacheRef = useRef<{ frameKey: number; data: AudioData | null }>({ frameKey: -1, data: null });
+  useEffect(() => {
+    evolutionStateRef.current = createEvolutionState();
+    evolutionSignalsRef.current = { isDrop: false, dropIntensity: 0, dropAge: 0 };
+    evolvedAudioCacheRef.current = { frameKey: -1, data: null };
+  }, [settings.presetName, evolutionEnabled, evolutionSpec?.preset]);
+
+  const getEvolvedAudioData = useCallback((): AudioData => {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const frameKey = Math.floor(now / 12);
+    if (evolvedAudioCacheRef.current.frameKey === frameKey && evolvedAudioCacheRef.current.data) {
+      return evolvedAudioCacheRef.current.data;
+    }
+
+    const base = getAudioData();
+    if (!evolutionEnabled || !evolutionSpec?.preset.enabled) {
+      evolutionSignalsRef.current = { isDrop: false, dropIntensity: 0, dropAge: 0 };
+      evolvedAudioCacheRef.current = { frameKey, data: base };
+      return base;
+    }
+
+    const baseAiStrength = clamp01(settings.aiEvolutionStrength ?? evolutionSpec.preset.ai?.strength ?? 0.62);
+    const aiMode = settings.aiEvolutionMode ?? "musical";
+    const aiModeGain = aiMode === "subtle" ? 0.78 : aiMode === "aggressive" ? 1.26 : 1.0;
+    const aiStrength = clamp01(baseAiStrength * aiModeGain);
+    const aiSpeed = clamp01(settings.aiEvolutionSpeed ?? 0.55);
+    const aiBias = settings.aiReactivityBias ?? "motion";
+    const biasStructure = aiBias === "structure" ? 0.22 : 0;
+    const biasMotion = aiBias === "motion" ? 0.22 : 0;
+    const biasColor = aiBias === "color" ? 0.22 : 0;
+    const biasAudio = aiBias === "audio" ? 0.22 : 0;
+    const evolutionPreset = {
+      ...evolutionSpec.preset,
+      ai: {
+        enabled: evolutionSpec.preset.ai?.enabled ?? true,
+        strength: aiStrength,
+        responsiveness: clamp01((evolutionSpec.preset.ai?.responsiveness ?? 0.72) * (0.8 + aiSpeed * 0.5)),
+        creativity: evolutionSpec.preset.ai?.creativity,
+      },
+    };
+
+    const audioFrame: AudioFrame = {
+      rms: base.energy,
+      low: base.bass,
+      mid: base.mid,
+      high: base.high,
+      onset: base.kick,
+      dominantFreq: base.dominantFreq,
+      modeIndex: base.modeIndex,
+    };
+
+    const tSec = Number.isFinite(playbackTimeSec) ? playbackTimeSec : 0;
+    const evolved = evolveParams(
+      evolutionPreset,
+      evolutionSpec.defaultSections,
+      tSec,
+      audioFrame,
+      evolutionStateRef.current,
+      { bpm: evolutionSpec.defaultBpm },
+    );
+    const signals = getEvolutionSignals(
+      evolutionStateRef.current,
+      tSec,
+    );
+    evolutionSignalsRef.current = signals;
+
+    const dropBoost = settings.aiDropBoost !== false && signals.isDrop ? clamp01(signals.dropIntensity) : 0;
+
+    const aiRhythmA = 0.5 + 0.5 * Math.sin(tSec * (1.35 + evolved.speed * (2.2 + aiSpeed * 1.4)) + evolved.palette * Math.PI * 2);
+    const aiRhythmB = 0.5 + 0.5 * Math.cos(tSec * (2.9 + evolved.warp * (3.0 + aiSpeed * 0.9)) + evolved.symmetry * Math.PI * 2);
+    const aiTexture = clamp01(evolved.particles * (0.58 + biasStructure * 0.35) + evolved.glow * (0.34 + biasColor * 0.35));
+    const aiMomentum = clamp01(
+      evolved.zoomPulse * (0.48 + biasMotion * 0.45) +
+      evolved.speed * (0.22 + aiSpeed * 0.22) +
+      aiRhythmA * 0.17,
+    );
+    const motionBoost = 1 + biasMotion * 0.45;
+    const structureBoost = 1 + biasStructure * 0.45;
+    const colorBoost = 1 + biasColor * 0.45;
+    const audioBoost = 1 + biasAudio * 0.45;
+
+    const sub = clamp01(base.sub * (0.68 + evolved.zoomPulse * 0.66 * motionBoost + aiStrength * 0.12) + aiRhythmB * aiStrength * 0.08);
+    const bass = clamp01(
+      base.bass * (0.68 + evolved.warp * 0.96 * motionBoost + aiStrength * (0.14 + biasAudio * 0.12)) +
+      evolved.zoomPulse * (0.18 + biasMotion * 0.08) +
+      aiRhythmB * aiStrength * 0.12,
+    );
+    const mid = clamp01(
+      base.mid * (0.72 + evolved.complexity * 0.84 * structureBoost + aiStrength * 0.12) +
+      aiRhythmA * aiStrength * (0.12 + biasAudio * 0.1) +
+      aiTexture * 0.06,
+    );
+    const high = clamp01(
+      base.high * (0.7 + evolved.glow * 0.9 * colorBoost + aiStrength * 0.1) +
+      aiRhythmA * aiStrength * 0.08 +
+      evolved.palette * (0.08 + biasColor * 0.1),
+    );
+    const energy = clamp01(
+      base.energy * (0.72 + evolved.speed * (0.32 + aiSpeed * 0.16) + aiStrength * 0.1) +
+      aiMomentum * 0.14 +
+      aiTexture * 0.08,
+    );
+    const kick = clamp01(base.kick + evolved.zoomPulse * 0.22 * motionBoost + evolved.glow * 0.08 * colorBoost + aiRhythmB * aiStrength * 0.1);
+
+    const dropGain = 1 + dropBoost * (0.22 + aiStrength * 0.2);
+    const boostedBass = clamp01(bass * dropGain * audioBoost);
+    const boostedMid = clamp01(mid * (1 + dropBoost * 0.09) * audioBoost);
+    const boostedHigh = clamp01(high * (1 + dropBoost * 0.07) * audioBoost);
+    const boostedEnergy = clamp01(energy * (1 + dropBoost * 0.16));
+    const boostedKick = clamp01(kick + dropBoost * 0.3);
+
+    const clampRange = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+    const dominantFreq = clampRange(
+      base.dominantFreq * (0.9 + evolved.palette * 0.22) +
+        evolved.symmetry * 90 +
+        aiRhythmA * 55 * aiStrength +
+        dropBoost * 26,
+      60,
+      500,
+    );
+    const modeFromFreq = 1 + Math.round(((dominantFreq - 60) / (500 - 60)) * 7);
+    const modeBias = 1 + Math.round(clamp01(evolved.symmetry * 0.7 + aiRhythmB * 0.3) * 7);
+    const modeIndex = clampRange(
+      Math.round(modeFromFreq * (1 - aiStrength * 0.25) + modeBias * (aiStrength * 0.25)),
+      1,
+      8,
+    );
+
+    const result: AudioData = {
+      ...base,
+      sub,
+      bass: boostedBass,
+      mid: boostedMid,
+      high: boostedHigh,
+      energy: boostedEnergy,
+      kick: boostedKick,
+      dominantFreq,
+      modeIndex,
+    };
+
+    evolvedAudioCacheRef.current = { frameKey, data: result };
+    return result;
+  }, [
+    getAudioData,
+    evolutionEnabled,
+    evolutionSpec,
+    playbackTimeSec,
+    settings.aiEvolutionStrength,
+    settings.aiEvolutionMode,
+    settings.aiReactivityBias,
+    settings.aiEvolutionSpeed,
+    settings.aiDropBoost,
+  ]);
+
+  const getDropSignals = useCallback(() => evolutionSignalsRef.current, []);
   
   const activeFilters = settings.imageFilters || ["none"];
   const renderPreset = (presetName: string, blend: { intensity: number; morph: number }) => {
     if (settings.presetEnabled === false) return null;
 
+    const resolvedPresetName = resolveThreePresetName(presetName);
     const blendedSettings = { ...settings, intensity: settings.intensity * blend.intensity };
 
-    if (presetName === "Energy Rings") return <EnergyRings getAudioData={getAudioData} settings={blendedSettings} />;
-    if (presetName === "Psy Tunnel") return <PsyTunnel getAudioData={getAudioData} settings={blendedSettings} />;
-    if (presetName === "Particle Field") return <ParticleField getAudioData={getAudioData} settings={blendedSettings} />;
-    if (presetName === "Waveform Sphere") return <WaveformSphere getAudioData={getAudioData} settings={blendedSettings} />;
-    if (presetName === "Audio Bars") return <AudioBars getAudioData={getAudioData} settings={blendedSettings} />;
-    if (presetName === "Geometric Kaleidoscope") return <GeometricKaleidoscope getAudioData={getAudioData} settings={blendedSettings} />;
-    if (presetName === "Cosmic Web") return <CosmicWeb getAudioData={getAudioData} settings={blendedSettings} />;
-    if (presetName === "Cymatic Sand Plate") return <CymaticSandPlate getAudioData={getAudioData} settings={blendedSettings} />;
-    if (presetName === "Water Membrane Orb") return <WaterMembraneOrb getAudioData={getAudioData} settings={blendedSettings} />;
-    if (presetName === "Chladni Geometry") return <ChladniGeometry getAudioData={getAudioData} settings={blendedSettings} />;
-    if (presetName === "Resonant Field Lines") return <ResonantFieldLines getAudioData={getAudioData} settings={blendedSettings} />;
-    if (presetName === "Premium Field") return <PremiumField getAudioData={getAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Energy Rings") return <EnergyRings getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Psy Tunnel") return <PsyTunnel getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Psy Extra") return <PsyExtra getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Particle Field") return <ParticleField getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Waveform Sphere") return <WaveformSphere getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Audio Bars") return <AudioBars getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Geometric Kaleidoscope") return <GeometricKaleidoscope getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Cosmic Web") return <CosmicWeb getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Cymatic Sand Plate") return <CymaticSandPlate getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Water Membrane Orb") return <WaterMembraneOrb getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Chladni Geometry") return <ChladniGeometry getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Resonant Field Lines") return <ResonantFieldLines getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Premium Field") return <PremiumField getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
 
-    if (isFractalPreset(presetName)) {
-      const fp = getFractalPreset(presetName);
+    if (isFractalPreset(resolvedPresetName)) {
+      const fp = getFractalPreset(resolvedPresetName);
       if (!fp) return null;
-      return <FractalPresetBridge preset={fp} getAudioData={getAudioData} uniforms={effectiveFractalUniforms || {}} />;
+      return <FractalPresetBridge preset={fp} getAudioData={getEvolvedAudioData} uniforms={effectiveFractalUniforms || {}} />;
     }
 
     return null;
@@ -4107,13 +5122,48 @@ function ThreeScene({
       }}
     >
       <Canvas
-        gl={{ 
-          antialias: renderProfile !== "mobile60",
-          toneMapping: THREE.ACESFilmicToneMapping,
-          powerPreference: "high-performance",
-          alpha: false,
-          stencil: false,
-          depth: true,
+        key={useWebGPUForThisFrame ? "backend-webgpu" : "backend-webgl"}
+        gl={async (props) => {
+          if (!useWebGPUForThisFrame) {
+            const renderer = new THREE.WebGLRenderer({
+              canvas: props.canvas as HTMLCanvasElement,
+              antialias: renderProfile !== "mobile60",
+              powerPreference: "high-performance",
+              alpha: false,
+              stencil: false,
+              depth: true,
+            });
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+            renderer.toneMappingExposure =
+              renderProfile === "exportQuality"
+                ? 1.06
+                : renderProfile === "desktopCinematic"
+                  ? 1.03
+                  : 1.0;
+            return renderer;
+          }
+
+          const renderer = new WebGPURenderer({
+            canvas: props.canvas as HTMLCanvasElement,
+            antialias: renderProfile !== "mobile60",
+            powerPreference: "high-performance",
+            alpha: false,
+            stencil: false,
+            depth: true,
+          });
+
+          await renderer.init();
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.outputColorSpace = THREE.SRGBColorSpace;
+          renderer.toneMappingExposure =
+            renderProfile === "exportQuality"
+              ? 1.06
+              : renderProfile === "desktopCinematic"
+                ? 1.03
+                : 1.0;
+
+          return renderer;
         }}
         camera={{ position: [0, 0, 15], fov: 45 }}
         style={{ width: "100%", height: "100%", pointerEvents: "none" }}
@@ -4127,12 +5177,10 @@ function ThreeScene({
         ]}
         events={() => ({ enabled: false, priority: 0 })}
         onCreated={({ gl }) => {
-          if (!gl.getContext()) {
+          // WebGL renderer exposes getContext(); WebGPU renderer does not.
+          if ("getContext" in gl && typeof gl.getContext === "function" && !gl.getContext()) {
             setHasError(true);
           }
-          // Option 5: Ensure proper sRGB output for linear workflow
-          gl.outputColorSpace = THREE.SRGBColorSpace;
-          gl.toneMappingExposure = renderProfile === "exportQuality" ? 1.06 : renderProfile === "desktopCinematic" ? 1.03 : 1.0;
         }}
       >
         <color attach="background" args={['#050508']} />
@@ -4143,7 +5191,7 @@ function ThreeScene({
           imageUrl={backgroundImage} 
           filterId={filterId}
           intensity={settings.intensity}
-          getAudioData={getAudioData}
+          getAudioData={getEvolvedAudioData}
           layerOffset={index * 0.5}
         />
       ))}
@@ -4152,19 +5200,28 @@ function ThreeScene({
       <pointLight position={[10, 10, 10]} intensity={1} />
       <pointLight position={[-10, -10, -10]} intensity={0.5} color="#ff00ff" />
       
-      <ZoomableScene zoom={zoom}>
+      <ZoomableScene zoom={sceneZoom}>
         <PresetTransition
           presetName={settings.presetName}
           transitionDuration={0.3}
           renderPreset={renderPreset}
+          onActivePresetsChange={handleActivePresetsChange}
         />
       </ZoomableScene>
+
+      <DropFX
+        enabled={Boolean(evolutionEnabled && settings.evolutionEnabled !== false)}
+        aiStrength={clamp01(settings.aiEvolutionStrength ?? 0.62)}
+        colorPalette={settings.colorPalette}
+        getSignals={getDropSignals}
+        getAudio={getEvolvedAudioData}
+      />
 
       {(settings.psyOverlays || []).map((overlayId) => (
         <PsyPresetWrapper
           key={`overlay-${overlayId}`}
           preset={overlayId as PsyPresetName}
-          getAudioData={getAudioData}
+          getAudioData={getEvolvedAudioData}
           intensity={settings.intensity}
           speed={settings.speed}
           opacity={0.4}
@@ -4172,8 +5229,8 @@ function ThreeScene({
         />
       ))}
 
-      {!isFractalPreset(settings.presetName) && (
-        <AudioReactiveEffects getAudioData={getAudioData} settings={settings} />
+      {!fractalPresetActive && !useWebGPUForThisFrame && (
+        <AudioReactiveEffects getAudioData={getEvolvedAudioData} settings={settings} />
       )}
     </Canvas>
     </div>
@@ -4188,22 +5245,132 @@ export function AudioVisualizer({
   fractalUniforms,
   renderProfile = "desktopCinematic",
   adaptiveQualityTier = 1,
+  playbackTimeSec = 0,
+  evolutionEnabled = false,
+  evolutionSpec = null,
 }: AudioVisualizerProps) {
-  const [webglSupported] = useState(() => isWebGLAvailable());
+  const [webGPUAvailable] = useState(() => hasWebGPU());
+  const [rendererSupported] = useState(() => hasCompatibleRenderer());
+  const [babylonEngineLabel, setBabylonEngineLabel] = useState("");
+  const [forceThreeFallback, setForceThreeFallback] = useState(false);
+  const useWebGPU = WEBGPU_EXPERIMENT_ENABLED && webGPUAvailable;
+  const shouldUseBabylon =
+    BABYLON_EXPERIMENT_ENABLED &&
+    !forceThreeFallback &&
+    settings.presetEnabled !== false &&
+    !isFractalPreset(settings.presetName) &&
+    hasBabylonPreset(settings.presetName);
 
-  if (!webglSupported) {
+  useEffect(() => {
+    setForceThreeFallback(false);
+    setBabylonEngineLabel("");
+  }, [settings.presetName]);
+
+  const handleBabylonFatalError = useCallback((error: unknown) => {
+    console.error("[AudioVisualizer] Babylon runtime failed. Falling back to Three.", error);
+    setForceThreeFallback(true);
+  }, []);
+
+  if (!rendererSupported) {
     return <FallbackVisualizer settings={settings} backgroundImage={backgroundImage} />;
   }
 
+  if (shouldUseBabylon) {
+    return (
+      <>
+        <BabylonVisualizer
+          presetName={settings.presetName}
+          getAudioData={getAudioData}
+          intensity={settings.intensity}
+          backgroundImage={backgroundImage}
+          onEngineLabelChange={setBabylonEngineLabel}
+          onFatalError={handleBabylonFatalError}
+        />
+        <div
+          style={{
+            position: "absolute",
+            top: 12,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 6,
+            pointerEvents: "none",
+            padding: "6px 12px",
+            borderRadius: 999,
+            border: "1px solid rgba(34, 197, 94, 0.55)",
+            background: "rgba(8, 12, 14, 0.82)",
+            color: "#baf3d1",
+            fontSize: 12,
+            letterSpacing: "0.02em",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {babylonEngineLabel || "Babylon renderer starting..."}
+        </div>
+      </>
+    );
+  }
+
   return (
-    <ThreeScene
-      getAudioData={getAudioData}
-      settings={settings}
-      backgroundImage={backgroundImage}
-      zoom={zoom}
-      fractalUniforms={fractalUniforms}
-      renderProfile={renderProfile}
-      adaptiveQualityTier={adaptiveQualityTier}
-    />
+    <>
+      <ThreeScene
+        getAudioData={getAudioData}
+        settings={settings}
+        backgroundImage={backgroundImage}
+        zoom={zoom}
+        fractalUniforms={fractalUniforms}
+        renderProfile={renderProfile}
+        adaptiveQualityTier={adaptiveQualityTier}
+        playbackTimeSec={playbackTimeSec}
+        evolutionEnabled={evolutionEnabled}
+        evolutionSpec={evolutionSpec}
+        useWebGPU={useWebGPU}
+      />
+      {forceThreeFallback && (
+        <div
+          style={{
+            position: "absolute",
+            top: 12,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 6,
+            pointerEvents: "none",
+            padding: "6px 12px",
+            borderRadius: 999,
+            border: "1px solid rgba(250, 204, 21, 0.55)",
+            background: "rgba(20, 14, 4, 0.86)",
+            color: "#fef08a",
+            fontSize: 12,
+            letterSpacing: "0.02em",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Babylon failed for this preset, switched to Three fallback.
+        </div>
+      )}
+      {!useWebGPU && (
+        <div
+          style={{
+            position: "absolute",
+            top: 12,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 6,
+            pointerEvents: "none",
+            padding: "6px 12px",
+            borderRadius: 999,
+            border: "1px solid rgba(168, 85, 247, 0.55)",
+            background: "rgba(8, 8, 14, 0.82)",
+            color: "#d7c8ff",
+            fontSize: 12,
+            letterSpacing: "0.02em",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {webGPUAvailable
+            ? "WebGPU disabled, using compatibility mode."
+            : "WebGPU not available, using compatibility mode."}
+        </div>
+      )}
+    </>
   );
 }

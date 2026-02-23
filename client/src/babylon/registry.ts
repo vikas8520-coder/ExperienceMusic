@@ -77,6 +77,14 @@ export const BABYLON_PRESETS: Record<string, BabylonPresetDefinition> = {
       heavyEdges: true,
     }),
   },
+  "Ritual Tapestry V3 (Babylon)": {
+    id: "ritual-tapestry-v3",
+    name: "Ritual Tapestry V3 (Babylon)",
+    create: ({ scene }) => createRitualTapestryV3Preset(scene, {
+      enableGlow: true,
+      heavyEdges: true,
+    }),
+  },
 };
 
 export function hasBabylonPreset(presetName: string): boolean {
