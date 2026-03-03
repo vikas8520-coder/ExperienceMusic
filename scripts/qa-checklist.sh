@@ -102,6 +102,57 @@ if grep -q 'CollapsibleSection' client/src/components/UIControls.tsx; then
 else
   fail "CollapsibleSection missing from UIControls"
 fi
+
+# Dual-mode layout: ZenMode and CommandCenter exist
+if [ -f client/src/components/layout/ZenMode.tsx ] && [ -f client/src/components/layout/CommandCenter.tsx ]; then
+  pass "ZenMode and CommandCenter layout components exist"
+else
+  fail "Missing ZenMode or CommandCenter layout components"
+fi
+
+# Layout mode state in Home.tsx
+if grep -q 'layoutMode' client/src/pages/Home.tsx; then
+  pass "layoutMode state present in Home.tsx"
+else
+  fail "layoutMode state missing from Home.tsx"
+fi
+
+# Projection hook exists
+if [ -f client/src/hooks/useProjection.ts ]; then
+  pass "useProjection hook exists"
+else
+  fail "useProjection hook missing"
+fi
+
+# IconRail + SidePanel for Zen mode
+if [ -f client/src/components/layout/IconRail.tsx ] && [ -f client/src/components/layout/SidePanel.tsx ]; then
+  pass "IconRail and SidePanel components exist"
+else
+  fail "Missing IconRail or SidePanel components"
+fi
+
+# ModeToggle + ProjectionButton
+if [ -f client/src/components/layout/ModeToggle.tsx ] && [ -f client/src/components/layout/ProjectionButton.tsx ]; then
+  pass "ModeToggle and ProjectionButton components exist"
+else
+  fail "Missing ModeToggle or ProjectionButton components"
+fi
+
+# CommandPalette has mode switch action
+if grep -q 'action:switch-mode' client/src/components/CommandPalette.tsx; then
+  pass "CommandPalette has mode switch action"
+else
+  fail "CommandPalette missing mode switch action"
+fi
+
+# Extracted settings panels
+for panel in PresetsPanel ColorsPanel EffectsPanel PerformPanel AudioPanel RecordPanel LibraryPanel; do
+  if [ -f "client/src/components/settings/${panel}.tsx" ]; then
+    pass "${panel} extracted component exists"
+  else
+    fail "${panel} extracted component missing"
+  fi
+done
 echo
 
 # --- 5. Summary ---

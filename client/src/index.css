@@ -199,3 +199,27 @@ input[type="color"]:focus {
   border-color: hsl(var(--primary));
   box-shadow: 0 0 0 2px hsl(var(--primary) / 0.3);
 }
+
+/* Command Center grid cells */
+[data-testid="command-center"] > div > div {
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Projection popout window resets */
+.projection-body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  overflow: hidden;
+}
+
+/* Zen mode: icon rail glow on hover */
+[data-testid="icon-rail"] button:hover {
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.2);
+}
+
+/* Side panel slide animation layer */
+[data-testid="side-panel"] {
+  will-change: transform, opacity;
+}

@@ -42,12 +42,19 @@ vi.mock('@react-three/fiber', () => ({
     camera: {},
     size: { width: 800, height: 600 },
   })),
+  extend: vi.fn(),
 }));
 
 vi.mock('@react-three/drei', () => ({
   OrbitControls: () => null,
   Environment: () => null,
+  Sphere: () => null,
   useTexture: vi.fn(),
+  shaderMaterial: vi.fn(() => {
+    const Comp = () => null;
+    Comp.key = '';
+    return Comp;
+  }),
 }));
 
 vi.mock('@react-three/postprocessing', () => ({

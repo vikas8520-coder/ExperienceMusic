@@ -6,10 +6,10 @@ import { RadialSystem } from "@/components/RadialSystem";
 import { TrackLibrary } from "@/components/TrackLibrary";
 import { SoundCloudPanel } from "@/components/SoundCloudPanel";
 import { useAudioAnalyzer } from "@/hooks/use-audio-analyzer";
-import { 
-  colorPalettes, 
-  type PresetName, 
-  type ImageFilterId, 
+import {
+  colorPalettes,
+  type PresetName,
+  type ImageFilterId,
   type PsyOverlayId,
   type ColorSettings,
   type ColorModeId,
@@ -28,6 +28,11 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { SessionStats } from "@/components/SessionStats";
 import { useSessionStats } from "@/hooks/useSessionStats";
 import { startVirtualCamera, stopVirtualCamera } from "@/lib/virtualCamera";
+import { ZenMode } from "@/components/layout/ZenMode";
+import { CommandCenter } from "@/components/layout/CommandCenter";
+import { ModeToggle, type LayoutMode } from "@/components/layout/ModeToggle";
+import { ProjectionButton } from "@/components/layout/ProjectionButton";
+import { useProjection } from "@/hooks/useProjection";
 
 export interface SavedTrack {
   id: string;
@@ -76,6 +81,12 @@ export default function Home() {
   const [micReactiveEnabled, setMicReactiveEnabled] = useState(false);
   const [radialOpenRequestToken, setRadialOpenRequestToken] = useState(0);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
+    try {
+      return (localStorage.getItem("experience-layout-mode") as LayoutMode) || "zen";
+    } catch { return "zen"; }
+  });
+  const { isProjecting, toggleProjection } = useProjection();
   const [ambientMode, setAmbientMode] = useState(false);
   const ambientTimerRef = useRef<number | null>(null);
   const [virtualCameraOn, setVirtualCameraOn] = useState(false);
@@ -737,6 +748,19 @@ export default function Home() {
     };
   }, [getAudioData, micReactiveEnabled, micStatus, micFeatures]);
 
+  const cycleLayoutMode = useCallback(() => {
+    setLayoutMode(prev => {
+      const next = prev === "zen" ? "command" : "zen";
+      try { localStorage.setItem("experience-layout-mode", next); } catch {}
+      return next;
+    });
+  }, []);
+
+  const handleToggleProjection = useCallback(() => {
+    const canvas = document.querySelector('canvas');
+    if (canvas) toggleProjection(canvas);
+  }, [toggleProjection]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -744,6 +768,13 @@ export default function Home() {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      // Ctrl+Shift+L: cycle layout mode
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "L") {
+        e.preventDefault();
+        cycleLayoutMode();
         return;
       }
 
@@ -811,6 +842,10 @@ export default function Home() {
             audioRef.current.currentTime = Math.min(duration, audioRef.current.currentTime + 5);
           }
           break;
+        case 'KeyP':
+          e.preventDefault();
+          handleToggleProjection();
+          break;
         case 'KeyF':
           e.preventDefault();
           toggleFullscreen();
@@ -838,7 +873,7 @@ export default function Home() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [audioFile, isPlaying, duration, toggleFullscreen, closeAllUI]);
+  }, [audioFile, isPlaying, duration, toggleFullscreen, closeAllUI, cycleLayoutMode, handleToggleProjection]);
 
   // Audio time/duration tracking
   useEffect(() => {
@@ -1222,16 +1257,67 @@ export default function Home() {
     }
   };
 
+  const sharedCanvasProps = {
+    screenZoomLayerRef,
+    onCanvasClick: handleCanvasClick,
+    onCanvasPointerDown: handleCanvasPointerDown,
+    onCanvasPointerMove: handleCanvasPointerMove,
+    onCanvasPointerUp: handleCanvasPointerUp,
+    onCanvasDoubleClick: handleCanvasDoubleClick,
+    onScreenTouchStart: handleScreenTouchStart,
+    onScreenTouchMove: handleScreenTouchMove,
+    onScreenTouchEnd: handleScreenTouchEnd,
+  };
+
+  const sharedProps = {
+    getAudioData: getReactiveAudioData,
+    isPlaying,
+    onPlayPause: togglePlay,
+    onFileUpload: handleFileUpload,
+    trackName: audioFileName,
+    currentTime,
+    duration,
+    onSeek: handleSeek,
+    volume,
+    onVolumeChange: handleVolumeChange,
+    onPreviousTrack: handlePreviousTrack,
+    onNextTrack: handleNextTrack,
+    hasLibraryTracks: savedTracks.length > 0,
+    settings,
+    setSettings,
+    backgroundImage: thumbnailUrl,
+    zoom: visualizationZoom,
+    onZoomChange: setVisualizationZoom,
+    fractalUniforms,
+    fractalSpecs,
+    fractalMacros,
+    onFractalUniformChange: setFractalUniform,
+    renderProfile,
+    adaptiveQualityTier,
+    colorSettings,
+    setColorSettings,
+    isRecording,
+    onToggleRecording: toggleRecording,
+    recordingQuality,
+    onRecordingQualityChange: setRecordingQuality,
+    onSavePreset: handleSavePreset,
+    isFullscreen,
+    onToggleFullscreen: toggleFullscreen,
+    micStatus,
+    onToggleMicReactivity: toggleMicReactivity,
+    ...sharedCanvasProps,
+  };
+
   return (
-    <div 
+    <div
       className="w-full h-screen relative bg-background overflow-hidden selection:bg-primary/30"
       data-testid="app-root"
       onMouseMove={markUiActivity}
     >
-      
+
       {/* Background Thumbnail Layer */}
       {thumbnailUrl && (
-        <div 
+        <div
           className="absolute inset-0 z-0 opacity-20 blur-xl"
           style={{
             backgroundImage: `url(${thumbnailUrl})`,
@@ -1240,126 +1326,42 @@ export default function Home() {
           }}
         />
       )}
-      
-      {/* 3D Visualizer Layer */}
-      <AudioVisualizer 
-        getAudioData={getReactiveAudioData}
-        settings={settings}
-        backgroundImage={thumbnailUrl}
-        zoom={visualizationZoom}
-        fractalUniforms={fractalUniforms}
-        renderProfile={renderProfile}
-        adaptiveQualityTier={adaptiveQualityTier}
-      />
 
-      <div className="pointer-events-none absolute right-3 top-3 z-30 rounded-md border border-white/15 bg-black/45 px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-white/85">
-        <span className="font-semibold">Quality:</span> {renderProfileLabel}{" "}
-        <span className="text-white/60">Tier {adaptiveQualityTier}</span>
-      </div>
+      {/* Mode Toggle + Projection Button (always visible) */}
+      <ModeToggle mode={layoutMode} onToggle={cycleLayoutMode} />
+      <ProjectionButton isProjecting={isProjecting} onToggle={handleToggleProjection} />
 
-      {/* Canvas Click Catcher - covers visualization area, sits below UI panels */}
-      <div
-        ref={screenZoomLayerRef}
-        className="absolute inset-0 z-10"
-        onPointerDown={handleCanvasPointerDown}
-        onPointerMove={handleCanvasPointerMove}
-        onPointerUp={handleCanvasPointerUp}
-        onPointerCancel={handleCanvasPointerUp}
-        onClick={handleCanvasClick}
-        onDoubleClick={handleCanvasDoubleClick}
-        onTouchStart={handleScreenTouchStart}
-        onTouchMove={handleScreenTouchMove}
-        onTouchEnd={handleScreenTouchEnd}
-        onTouchCancel={handleScreenTouchEnd}
-        style={{ pointerEvents: 'auto', touchAction: "none" }}
-        data-testid="canvas-click-catcher"
-      />
-
-      {/* Ambient mode peek bar */}
-      {ambientMode && isPlaying && (
-        <div
-          className="fixed bottom-0 left-0 right-0 h-1 z-50 bg-white/10 hover:bg-white/30 transition-colors cursor-pointer"
-          onMouseEnter={() => { setAmbientMode(false); markUiActivity(); }}
-          data-testid="ambient-peek-bar"
+      {/* Layout Modes */}
+      {layoutMode === "zen" ? (
+        <ZenMode
+          {...sharedProps}
+          onSaveToLibrary={handleSaveToLibrary}
+          savedTracks={savedTracks}
+          onLoadTrack={handleLoadTrack}
+          onDeleteTrack={handleDeleteTrack}
+          showSoundCloud={showSoundCloud}
+          onToggleSoundCloud={() => setShowSoundCloud(!showSoundCloud)}
+          onPlaySoundCloudTrack={handleSoundCloudTrack}
+        />
+      ) : (
+        <CommandCenter
+          {...sharedProps}
+          onSavePreset={handleSavePreset}
         />
       )}
 
-      <div className={
-        (ambientMode && isPlaying)
-          ? "opacity-0 translate-y-4 pointer-events-none transition-all duration-700"
-          : uiAutoHidden
-            ? "opacity-0 pointer-events-none transition-opacity duration-300"
-            : "opacity-100 transition-all duration-300"
-      }>
-        <RadialSystem
-          activeTab={activeTab}
-          settings={settings}
-          setSettings={setSettings}
-          colorSettings={colorSettings}
-          setColorSettings={setColorSettings}
-          zoom={visualizationZoom}
-          onZoomChange={setVisualizationZoom}
-          fractalSpecs={fractalSpecs}
-          fractalMacros={fractalMacros}
-          fractalUniforms={fractalUniforms}
-          onFractalUniformChange={setFractalUniform}
-          adaptiveQualityTier={adaptiveQualityTier}
-          micStatus={micStatus}
-          onToggleMicReactivity={toggleMicReactivity}
-          openRequestToken={radialOpenRequestToken}
-          leftDockCollapsed={isCreatePanelCollapsed}
-        />
+      {/* SoundCloud Panel (shared, renders as overlay) */}
+      <SoundCloudPanel
+        isOpen={showSoundCloud}
+        onClose={() => setShowSoundCloud(false)}
+        onPlayTrack={handleSoundCloudTrack}
+      />
 
-        {/* UI Overlay */}
-        <UIControls 
-          isPlaying={isPlaying}
-          onPlayPause={togglePlay}
-          onFileUpload={handleFileUpload}
-          settings={settings}
-          setSettings={setSettings}
-          colorSettings={colorSettings}
-          setColorSettings={setColorSettings}
-          isRecording={isRecording}
-          onToggleRecording={toggleRecording}
-          recordingQuality={recordingQuality}
-          onRecordingQualityChange={setRecordingQuality}
-          onSavePreset={handleSavePreset}
-          onThumbnailAnalysis={handleThumbnailAnalysis}
-          onThumbnailUpload={handleThumbnailUpload}
-          thumbnailUrl={thumbnailUrl}
-          onSaveToLibrary={handleSaveToLibrary}
-          onToggleLibrary={() => setShowLibrary(!showLibrary)}
-          onToggleSoundCloud={() => setShowSoundCloud(!showSoundCloud)}
-          activeTab={activeTab}
-          onActiveTabChange={setActiveTab}
-          trackName={audioFileName}
-          isFullscreen={isFullscreen}
-          onToggleFullscreen={toggleFullscreen}
-          zoom={visualizationZoom}
-          onZoomChange={setVisualizationZoom}
-          currentTime={currentTime}
-          duration={duration}
-          onSeek={handleSeek}
-          volume={volume}
-          onVolumeChange={handleVolumeChange}
-          onPreviousTrack={handlePreviousTrack}
-          onNextTrack={handleNextTrack}
-          hasLibraryTracks={savedTracks.length > 0}
-          fractalSpecs={fractalSpecs}
-          fractalMacros={fractalMacros}
-          fractalUniforms={fractalUniforms}
-          onFractalUniformChange={setFractalUniform}
-          micStatus={micStatus}
-          onToggleMicReactivity={toggleMicReactivity}
-          onOpenRadialSettings={() => setRadialOpenRequestToken((prev) => prev + 1)}
-          createPanelCollapsed={isCreatePanelCollapsed}
-          onCreatePanelCollapsedChange={setIsCreatePanelCollapsed}
-        />
-        
-        {/* Track Library Panel */}
+      {/* Track Library Panel (shared overlay for Command Center mode) */}
+      {layoutMode === "command" && (
         <AnimatePresence>
           {showLibrary && (
-            <TrackLibrary 
+            <TrackLibrary
               tracks={savedTracks}
               onLoadTrack={handleLoadTrack}
               onDeleteTrack={handleDeleteTrack}
@@ -1367,14 +1369,7 @@ export default function Home() {
             />
           )}
         </AnimatePresence>
-        
-        {/* SoundCloud Panel */}
-        <SoundCloudPanel
-          isOpen={showSoundCloud}
-          onClose={() => setShowSoundCloud(false)}
-          onPlayTrack={handleSoundCloudTrack}
-        />
-      </div>
+      )}
 
       {/* Command Palette (Cmd+K) */}
       <CommandPalette
@@ -1389,13 +1384,10 @@ export default function Home() {
         isPlaying={isPlaying}
         trailsOn={settings.trailsOn}
         darkOverlay={settings.darkOverlay}
-      />
-
-      {/* Session Stats */}
-      <SessionStats
-        isPlaying={isPlaying}
-        presetName={settings.presetName}
-        getAudioData={getReactiveAudioData}
+        layoutMode={layoutMode}
+        onSwitchMode={cycleLayoutMode}
+        isProjecting={isProjecting}
+        onToggleProjection={handleToggleProjection}
       />
 
     </div>
