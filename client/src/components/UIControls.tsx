@@ -50,6 +50,7 @@ import {
   VolumeX,
   Box
 } from "lucide-react";
+import { motion } from "framer-motion";
 
 const presetIconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   rings: Circle,
@@ -80,6 +81,7 @@ interface UIControlsProps {
     imageFilters: ImageFilterId[];
     psyOverlays?: PsyOverlayId[];
     trailsOn?: boolean;
+    darkOverlay?: boolean;
     trailsAmount?: number;
     glowEnabled?: boolean;
     glowIntensity?: number;
@@ -119,6 +121,9 @@ interface UIControlsProps {
   onActiveTabChange?: (tab: "listen" | "create" | "perform" | "record") => void;
   micStatus?: "idle" | "starting" | "running" | "error";
   onToggleMicReactivity?: () => void;
+  onOpenRadialSettings?: () => void;
+  createPanelCollapsed?: boolean;
+  onCreatePanelCollapsedChange?: (collapsed: boolean) => void;
 }
 
 export interface ThumbnailAnalysis {
@@ -136,6 +141,78 @@ function formatTime(seconds: number): string {
 }
 
 type TabId = "listen" | "create" | "perform" | "record";
+
+type DockRingBounds = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+
+type DockRingPosition = {
+  x: number;
+  y: number;
+};
+
+type CreateDockRingProps = {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  topInset: number;
+  bottomInset: number;
+};
+
+const SETTINGS_DOCK_RING_SIZE = 220;
+const SETTINGS_DOCK_RING_RADIUS = SETTINGS_DOCK_RING_SIZE / 2;
+const SETTINGS_DOCK_RING_MARGIN = 16;
+
+function getDockRingBounds(topInset: number, bottomInset: number): DockRingBounds {
+  const viewportWidth = typeof window === "undefined" ? 1280 : window.innerWidth;
+  const viewportHeight = typeof window === "undefined" ? 720 : window.innerHeight;
+
+  const minX = SETTINGS_DOCK_RING_MARGIN + SETTINGS_DOCK_RING_RADIUS;
+  const maxX = Math.max(minX, viewportWidth - SETTINGS_DOCK_RING_MARGIN - SETTINGS_DOCK_RING_RADIUS);
+  const minY = topInset + SETTINGS_DOCK_RING_MARGIN + SETTINGS_DOCK_RING_RADIUS;
+  const maxY = Math.max(minY, viewportHeight - bottomInset - SETTINGS_DOCK_RING_MARGIN - SETTINGS_DOCK_RING_RADIUS);
+
+  return { minX, maxX, minY, maxY };
+}
+
+function clampDockRingPosition(position: DockRingPosition, bounds: DockRingBounds): DockRingPosition {
+  return {
+    x: Math.max(bounds.minX, Math.min(bounds.maxX, position.x)),
+    y: Math.max(bounds.minY, Math.min(bounds.maxY, position.y)),
+  };
+}
+
+function defaultDockRingPosition(topInset: number, bottomInset: number): DockRingPosition {
+  const bounds = getDockRingBounds(topInset, bottomInset);
+  return {
+    x: bounds.maxX,
+    y: (bounds.minY + bounds.maxY) / 2,
+  };
+}
+
+function snapDockRingToEdge(position: DockRingPosition, bounds: DockRingBounds): DockRingPosition {
+  const candidates: DockRingPosition[] = [
+    { x: bounds.minX, y: position.y },
+    { x: bounds.maxX, y: position.y },
+    { x: position.x, y: bounds.minY },
+    { x: position.x, y: bounds.maxY },
+  ];
+
+  let closest = candidates[0];
+  let closestDistance = Number.POSITIVE_INFINITY;
+
+  for (const candidate of candidates) {
+    const distance = Math.hypot(candidate.x - position.x, candidate.y - position.y);
+    if (distance < closestDistance) {
+      closest = candidate;
+      closestDistance = distance;
+    }
+  }
+
+  return clampDockRingPosition(closest, bounds);
+}
 
 export function UIControls({
   isPlaying,
@@ -177,16 +254,28 @@ export function UIControls({
   onActiveTabChange,
   micStatus = "idle",
   onToggleMicReactivity,
+  onOpenRadialSettings,
+  createPanelCollapsed,
+  onCreatePanelCollapsedChange,
 }: UIControlsProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ThumbnailAnalysis | null>(null);
   const [localThumbnailUrl, setLocalThumbnailUrl] = useState<string | null>(null);
+  const [isSettingsDockRingOpen, setIsSettingsDockRingOpen] = useState(true);
+  const [internalCreatePanelCollapsed, setInternalCreatePanelCollapsed] = useState(false);
   const [internalTab, setInternalTab] = useState<TabId>("listen");
   const activeTab = controlledTab ?? internalTab;
+  const isCreatePanelCollapsed = createPanelCollapsed ?? internalCreatePanelCollapsed;
   const setActiveTab = useCallback((tab: TabId) => {
     if (onActiveTabChange) onActiveTabChange(tab);
     else setInternalTab(tab);
   }, [onActiveTabChange]);
+  const setCreatePanelCollapsed = useCallback((collapsed: boolean) => {
+    if (createPanelCollapsed === undefined) {
+      setInternalCreatePanelCollapsed(collapsed);
+    }
+    onCreatePanelCollapsedChange?.(collapsed);
+  }, [createPanelCollapsed, onCreatePanelCollapsedChange]);
 
   const audioInputRef = useRef<HTMLInputElement>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
@@ -302,10 +391,12 @@ export function UIControls({
 
   const currentColorModeName = colorModes.find(m => m.id === colorSettings.mode)?.name || "Gradient";
 
-  const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  const normalizedTab: "listen" | "create" | "record" =
+    activeTab === "listen" || activeTab === "record" ? activeTab : "create";
+
+  const tabs: { id: "listen" | "create" | "record"; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: "listen", label: "Listen", icon: Eye },
     { id: "create", label: "Create", icon: Sparkles },
-    { id: "perform", label: "Perform", icon: Zap },
     { id: "record", label: "Record", icon: Video },
   ];
 
@@ -341,7 +432,7 @@ export function UIControls({
           <div className="flex items-center gap-1 md:gap-2">
             {tabs.map((tab) => {
               const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
+              const isActive = normalizedTab === tab.id;
               return (
                 <button
                   key={tab.id}
@@ -399,6 +490,16 @@ export function UIControls({
                     : "Enable Mic"}
               </span>
             </button>
+            <button
+              type="button"
+              onClick={() => setIsSettingsDockRingOpen((v) => !v)}
+              className="flex items-center gap-1 md:gap-1.5 px-2.5 md:px-4 py-1.5 md:py-2 rounded-full text-[11px] md:text-xs font-medium transition-all text-white/50 hover:text-white/80"
+              data-testid="button-radial-settings-topnav"
+              title={isSettingsDockRingOpen ? "Hide Settings Ring" : "Show Settings Ring"}
+            >
+              <Settings className="w-3.5 h-3.5 md:w-4 md:h-4" />
+              <span className="hidden sm:inline">Settings</span>
+            </button>
           </div>
 
           <div className="w-16 md:w-24 shrink-0" />
@@ -421,10 +522,31 @@ export function UIControls({
         >
           <Cloud className="w-4 h-4 md:w-5 md:h-5" />
         </button>
+        <button
+          className="pointer-events-auto rounded-full px-3 py-2"
+          style={{
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            backdropFilter: "blur(10px)",
+            color: "rgba(255,255,255,0.88)",
+          }}
+          onClick={() => setIsSettingsDockRingOpen((v) => !v)}
+          title="Settings Ring"
+          data-testid="button-settings-ring"
+        >
+          <Settings size={18} />
+        </button>
       </div>
 
+      <CreateDockRing
+        isOpen={isSettingsDockRingOpen}
+        onOpenChange={setIsSettingsDockRingOpen}
+        topInset={52}
+        bottomInset={52}
+      />
+
       {/* Tab Content */}
-      {activeTab === "create" && <CreateTabContent
+      {normalizedTab === "create" && <CreateTabContent
         settings={settings}
         setSettings={setSettings}
         updateSetting={updateSetting}
@@ -437,22 +559,15 @@ export function UIControls({
         thumbnailInputRef={thumbnailInputRef}
         zoom={zoom}
         onZoomChange={onZoomChange}
+        isCollapsed={isCreatePanelCollapsed}
+        onCollapsedChange={setCreatePanelCollapsed}
         fractalSpecs={fractalSpecs}
         fractalUniforms={fractalUniforms}
         onFractalUniformChange={onFractalUniformChange}
+        onSavePreset={onSavePreset}
       />}
 
-      {activeTab === "perform" && <PerformTabContent
-        settings={settings}
-        updateSetting={updateSetting}
-        zoom={zoom}
-        onZoomChange={onZoomChange}
-        fractalMacros={fractalMacros}
-        fractalUniforms={fractalUniforms}
-        onFractalUniformChange={onFractalUniformChange}
-      />}
-
-      {activeTab === "record" && <RecordTabContent
+      {normalizedTab === "record" && <RecordTabContent
         isRecording={isRecording}
         onToggleRecording={onToggleRecording}
         recordingQuality={recordingQuality}
@@ -549,6 +664,214 @@ export function UIControls({
   );
 }
 
+function CreateDockRing({ isOpen, onOpenChange, topInset, bottomInset }: CreateDockRingProps) {
+  const [position, setPosition] = useState<DockRingPosition>(() => defaultDockRingPosition(topInset, bottomInset));
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStateRef = useRef({ active: false, offsetX: 0, offsetY: 0 });
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleResize = () => {
+      const bounds = getDockRingBounds(topInset, bottomInset);
+      setPosition((prev) => clampDockRingPosition(prev, bounds));
+    };
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [isOpen, topInset, bottomInset]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!dragStateRef.current.active) return;
+      const bounds = getDockRingBounds(topInset, bottomInset);
+      setPosition(
+        clampDockRingPosition(
+          {
+            x: event.clientX - dragStateRef.current.offsetX,
+            y: event.clientY - dragStateRef.current.offsetY,
+          },
+          bounds,
+        ),
+      );
+    };
+
+    const finishDrag = () => {
+      if (!dragStateRef.current.active) return;
+      dragStateRef.current.active = false;
+      setIsDragging(false);
+      const bounds = getDockRingBounds(topInset, bottomInset);
+      setPosition((prev) => snapDockRingToEdge(prev, bounds));
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", finishDrag);
+    window.addEventListener("pointercancel", finishDrag);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", finishDrag);
+      window.removeEventListener("pointercancel", finishDrag);
+    };
+  }, [isOpen, topInset, bottomInset]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onOpenChange(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onOpenChange]);
+
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      dragStateRef.current.active = true;
+      dragStateRef.current.offsetX = event.clientX - position.x;
+      dragStateRef.current.offsetY = event.clientY - position.y;
+      setIsDragging(true);
+      event.preventDefault();
+    },
+    [position.x, position.y],
+  );
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[45] pointer-events-none" data-ui-root="true">
+      <motion.div
+        className="pointer-events-auto absolute"
+        animate={{ left: position.x, top: position.y }}
+        transition={isDragging ? { duration: 0 } : { type: "spring", stiffness: 600, damping: 32, mass: 0.9 }}
+        style={{
+          transform: "translate(-50%, -50%)",
+        }}
+      >
+        <motion.div
+          className="relative flex items-center justify-center rounded-full select-none"
+          onPointerDown={handlePointerDown}
+          role="dialog"
+          aria-label="Settings Ring"
+          title="Drag settings ring"
+          animate={{
+            scale: isDragging ? 1.02 : [1, 1.01, 1],
+          }}
+          transition={{
+            duration: isDragging ? 0.2 : 2.6,
+            repeat: isDragging ? 0 : Infinity,
+            ease: "easeInOut",
+          }}
+          style={{
+            width: SETTINGS_DOCK_RING_SIZE,
+            height: SETTINGS_DOCK_RING_SIZE,
+            background:
+              "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.12), rgba(255,255,255,0.05) 40%, rgba(255,255,255,0.03) 70%, rgba(0,0,0,0.02))",
+            border: "1px solid rgba(255,255,255,0.22)",
+            boxShadow: isDragging
+              ? "0 18px 50px rgba(0,0,0,0.38)"
+              : "0 14px 40px rgba(0,0,0,0.32)",
+            backdropFilter: "blur(12px)",
+            overflow: "hidden",
+            cursor: isDragging ? "grabbing" : "grab",
+          }}
+        >
+          <div
+            className="absolute inset-[10px] rounded-full"
+            style={{
+              background:
+                "radial-gradient(circle at 60% 40%, rgba(0,0,0,0.18), rgba(0,0,0,0.32) 70%)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "inset 0 10px 25px rgba(0,0,0,0.35)",
+            }}
+          />
+
+          <div
+            className="absolute inset-0 rounded-full pointer-events-none"
+            style={{
+              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.10)",
+            }}
+          />
+
+          <motion.div
+            className="absolute inset-[-30%] rounded-full pointer-events-none"
+            style={{
+              background:
+                "conic-gradient(from 90deg, rgba(168,85,247,0.00), rgba(168,85,247,0.20), rgba(255,255,255,0.18), rgba(168,85,247,0.00))",
+              filter: isDragging ? "blur(6px)" : "blur(7px)",
+              opacity: isDragging ? 0.85 : 0.55,
+              mixBlendMode: "screen",
+            }}
+            animate={{ rotate: 360 }}
+            transition={{
+              duration: isDragging ? 1.1 : 2.8,
+              repeat: Infinity,
+              ease: "linear",
+            }}
+          />
+
+          <motion.div
+            className="absolute -inset-[18px] rounded-full pointer-events-none"
+            animate={{
+              opacity: isDragging ? 0.55 : [0.18, 0.28, 0.18],
+              scale: isDragging ? 1.06 : [1, 1.03, 1],
+            }}
+            transition={{
+              duration: isDragging ? 0.25 : 2.8,
+              repeat: isDragging ? 0 : Infinity,
+              ease: "easeInOut",
+            }}
+            style={{
+              background:
+                "radial-gradient(circle, rgba(168,85,247,0.22), rgba(168,85,247,0.00) 60%)",
+              filter: "blur(10px)",
+            }}
+          />
+        </motion.div>
+      </motion.div>
+    </div>
+  );
+}
+
+function CollapsibleSection({ title, testId, defaultOpen = false, badge, children }: {
+  title: string;
+  testId: string;
+  defaultOpen?: boolean;
+  badge?: number;
+  children: React.ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <div data-testid={`section-${testId}`}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between py-1.5"
+        data-testid={`button-toggle-section-${testId}`}
+      >
+        <span className="text-xs uppercase tracking-widest text-accent font-bold">{title}</span>
+        <div className="flex items-center gap-1.5">
+          {!isOpen && badge !== undefined && badge > 0 && (
+            <span className="text-[9px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full" data-testid={`badge-${testId}`}>
+              {badge}
+            </span>
+          )}
+          {isOpen ? <ChevronUp className="w-3.5 h-3.5 text-white/50" /> : <ChevronDown className="w-3.5 h-3.5 text-white/50" />}
+        </div>
+      </button>
+      {isOpen && <div className="space-y-2 mt-1">{children}</div>}
+    </div>
+  );
+}
+
 function CreateTabContent({
   settings,
   setSettings,
@@ -562,9 +885,12 @@ function CreateTabContent({
   thumbnailInputRef,
   zoom,
   onZoomChange,
+  isCollapsed,
+  onCollapsedChange,
   fractalSpecs,
   fractalUniforms,
   onFractalUniformChange,
+  onSavePreset,
 }: {
   settings: UIControlsProps["settings"];
   setSettings: UIControlsProps["setSettings"];
@@ -578,59 +904,77 @@ function CreateTabContent({
   thumbnailInputRef: React.RefObject<HTMLInputElement | null>;
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
+  isCollapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
   fractalSpecs?: import("@/engine/presets/types").UniformSpec[];
   fractalUniforms?: import("@/engine/presets/types").UniformValues;
   onFractalUniformChange?: (key: string, value: any) => void;
+  onSavePreset: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-30 pointer-events-none" style={{ top: '52px', bottom: '52px' }}>
-      <div className="flex flex-col md:flex-row h-full gap-3 md:gap-0 p-3 md:p-4 overflow-y-auto md:overflow-visible pointer-events-auto md:pointer-events-none">
-        {/* Left Panel - Presets */}
-        <div className="w-full md:w-[280px] shrink-0 glass-panel rounded-xl settings-panel overflow-y-auto pointer-events-auto" data-ui-root="true" style={{ maxHeight: 'calc(100vh - 130px)' }}>
-          <div className="p-4 space-y-4">
-            <h2 className="text-sm font-bold font-display uppercase tracking-widest text-white" data-testid="heading-presets">Presets</h2>
-            <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/25 px-3 py-2">
-              <Label className="text-xs uppercase tracking-widest text-muted-foreground">Preset Output</Label>
-              <Switch
-                checked={settings.presetEnabled !== false}
-                onCheckedChange={(checked) => updateSetting("presetEnabled", checked)}
-                data-testid="toggle-preset-enabled"
-              />
-            </div>
+      <div className="relative h-full p-3 md:p-4 pointer-events-none">
+        <div
+          className={`relative h-full pointer-events-none ${isCollapsed ? "w-full md:w-[28px]" : "w-full md:w-[280px]"}`}
+        >
+          <div
+            className="h-full w-full md:w-[280px] transition-transform duration-300 ease-out"
+            style={{ transform: isCollapsed ? "translateX(calc(-100% + 28px))" : "translateX(0)" }}
+          >
+            {/* Left Panel - Presets + Controls */}
+            <div
+              className={`left-presets-scroll w-full md:w-[280px] shrink-0 glass-panel rounded-xl settings-panel overflow-y-auto ${
+                isCollapsed ? "pointer-events-none" : "pointer-events-auto"
+              }`}
+              data-ui-root="true"
+              style={{ maxHeight: "calc(100vh - 130px)" }}
+            >
+              <div className="p-4 space-y-3">
 
-            {presetCategories.map((category) => (
-              <div key={category.name} className="space-y-2">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">{category.name}</p>
-                <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))' }}>
-                  {category.presets.map((preset) => {
-                    const IconComponent = presetIconMap[preset.icon];
-                    const isActive = settings.presetName === preset.name;
-                    return (
-                      <button
-                        key={preset.name}
-                        onClick={() => setSettings((prev: typeof settings) => ({ ...prev, presetName: preset.name, presetEnabled: true }))}
-                        className={`flex flex-col items-center justify-center rounded-lg transition-all aspect-square ${
-                          isActive
-                            ? "bg-white/15 ring-1 ring-primary/70 text-white shadow-[0_0_8px_rgba(var(--primary),0.2)]"
-                            : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 active:scale-[0.97]"
-                        }`}
-                        title={preset.name}
-                        data-testid={`button-preset-${preset.shortName.toLowerCase()}`}
-                      >
-                        {IconComponent && <IconComponent className={`w-4 h-4 shrink-0 mb-1 ${isActive ? 'text-primary' : 'text-white/40'}`} />}
-                        <span className="text-[9px] font-medium leading-tight text-center line-clamp-2 px-0.5">{preset.shortName}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+            {/* --- Presets Section (default open) --- */}
+            <CollapsibleSection title="Presets" testId="presets" defaultOpen={true}>
+              <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+                <Label className="text-xs uppercase tracking-widest text-muted-foreground">Preset Output</Label>
+                <Switch
+                  checked={settings.presetEnabled !== false}
+                  onCheckedChange={(checked) => updateSetting("presetEnabled", checked)}
+                  data-testid="toggle-preset-enabled"
+                />
               </div>
-            ))}
+
+              {presetCategories.map((category) => (
+                <div key={category.name} className="space-y-2">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">{category.name}</p>
+                  <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))' }}>
+                    {category.presets.map((preset) => {
+                      const IconComponent = presetIconMap[preset.icon];
+                      const isActive = settings.presetName === preset.name;
+                      return (
+                        <button
+                          key={preset.name}
+                          onClick={() => setSettings((prev: typeof settings) => ({ ...prev, presetName: preset.name, presetEnabled: true }))}
+                          className={`flex flex-col items-center justify-center rounded-lg transition-all aspect-square ${
+                            isActive
+                              ? "bg-white/15 ring-1 ring-primary/70 text-white shadow-[0_0_8px_rgba(var(--primary),0.2)]"
+                              : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white/80 active:scale-[0.97]"
+                          }`}
+                          title={preset.name}
+                          data-testid={`button-preset-${preset.shortName.toLowerCase()}`}
+                        >
+                          {IconComponent && <IconComponent className={`w-4 h-4 shrink-0 mb-1 ${isActive ? 'text-primary' : 'text-white/40'}`} />}
+                          <span className="text-[9px] font-medium leading-tight text-center line-clamp-2 px-0.5">{preset.shortName}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </CollapsibleSection>
 
             <div className="h-px bg-white/10" />
 
-            {/* Color Mode Selector */}
-            <div className="space-y-3">
-              <Label className="text-xs uppercase tracking-widest text-accent font-bold">Color Mode</Label>
+            {/* --- Colors Section --- */}
+            <CollapsibleSection title="Colors" testId="colors">
               <div className="flex gap-1 flex-wrap">
                 {colorModes.filter(m => m.id !== "ai" && m.id !== "custom").map((mode) => (
                   <button
@@ -719,13 +1063,16 @@ function CreateTabContent({
                   <div key={idx} className="flex-1" style={{ backgroundColor: color }} />
                 ))}
               </div>
-            </div>
+            </CollapsibleSection>
 
             <div className="h-px bg-white/10" />
 
-            {/* Image Filters */}
-            <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-widest text-purple-400 font-bold">Image Filters</Label>
+            {/* --- Image Filters Section --- */}
+            <CollapsibleSection
+              title="Image Filters"
+              testId="filters"
+              badge={settings.imageFilters.filter(f => f !== "none").length}
+            >
               <div className="flex gap-1 flex-wrap">
                 {imageFilters.filter(f => f.id !== "none").map((filter) => {
                   const isActive = settings.imageFilters.includes(filter.id);
@@ -753,13 +1100,16 @@ function CreateTabContent({
                   );
                 })}
               </div>
-            </div>
+            </CollapsibleSection>
 
             <div className="h-px bg-white/10" />
 
-            {/* Psy Overlays */}
-            <div className="space-y-2">
-              <Label className="text-xs uppercase tracking-widest text-cyan-400 font-bold">Psy Overlays</Label>
+            {/* --- Psy Overlays Section --- */}
+            <CollapsibleSection
+              title="Psy Overlays"
+              testId="overlays"
+              badge={(settings.psyOverlays || []).length}
+            >
               <div className="flex gap-1 flex-wrap">
                 {psyOverlays.map((overlay) => {
                   const currentOverlays = settings.psyOverlays || [];
@@ -788,16 +1138,13 @@ function CreateTabContent({
                   );
                 })}
               </div>
-            </div>
+            </CollapsibleSection>
 
             <div className="h-px bg-white/10" />
 
-            {/* Thumbnail / Artwork Upload + AI */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label className="text-xs uppercase tracking-widest text-accent font-bold">Artwork</Label>
-                {isAnalyzing && <Loader2 className="w-3 h-3 text-primary animate-spin" />}
-              </div>
+            {/* --- Artwork Section --- */}
+            <CollapsibleSection title="Artwork" testId="artwork">
+              {isAnalyzing && <Loader2 className="w-3 h-3 text-primary animate-spin" />}
               <button
                 type="button"
                 className="relative w-full aspect-video rounded-lg border border-white/10 bg-black/50 overflow-hidden cursor-pointer p-0"
@@ -836,130 +1183,72 @@ function CreateTabContent({
                   AI Colors
                 </Button>
               ) : null}
-            </div>
-          </div>
-        </div>
-
-        {/* Spacer pushes right panel to right on desktop */}
-        <div className="hidden md:block flex-1" />
-
-        {/* Right Panel - Controls */}
-        <div className="w-full md:w-[280px] shrink-0 glass-panel rounded-xl settings-panel overflow-y-auto pointer-events-auto" data-ui-root="true" style={{ maxHeight: 'calc(100vh - 130px)' }}>
-          <div className="p-4 space-y-5">
-            <h2 className="text-sm font-bold font-display uppercase tracking-widest text-white" data-testid="heading-controls">Controls</h2>
-
-            {/* Intensity */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="uppercase tracking-widest text-muted-foreground">Intensity</span>
-                <span className="font-mono text-primary" data-testid="text-intensity-value">{Math.round(settings.intensity / 3 * 100)}%</span>
-              </div>
-              <Slider
-                min={0} max={3} step={0.1}
-                value={[settings.intensity]}
-                onValueChange={([val]) => updateSetting('intensity', val)}
-                className="w-full"
-                data-testid="slider-intensity"
-              />
-            </div>
-
-            {/* Speed */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="uppercase tracking-widest text-muted-foreground">Speed</span>
-                <span className="font-mono text-green-400" data-testid="text-speed-value">{Math.round(settings.speed / 2 * 100)}%</span>
-              </div>
-              <Slider
-                min={0} max={2} step={0.1}
-                value={[settings.speed]}
-                onValueChange={([val]) => updateSetting('speed', val)}
-                className="w-full"
-                data-testid="slider-speed"
-              />
-            </div>
-
-            {/* Glow */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="uppercase tracking-widest text-muted-foreground">Glow</span>
-                <span className="font-mono text-blue-400" data-testid="text-glow-value">{Math.round((settings.glowIntensity ?? 1.0) / 2 * 100)}%</span>
-              </div>
-              <Slider
-                min={0.2} max={2.0} step={0.1}
-                value={[settings.glowIntensity ?? 1.0]}
-                onValueChange={([val]) => {
-                  setSettings((prev: typeof settings) => ({ ...prev, glowIntensity: val }));
-                }}
-                className="w-full"
-                data-testid="slider-glow-intensity"
-              />
-            </div>
-
-            {/* Zoom */}
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs">
-                <span className="uppercase tracking-widest text-muted-foreground">Zoom</span>
-                <span className="font-mono text-amber-400" data-testid="text-zoom-value">{zoom !== undefined ? Math.round(zoom * 100) : 100}%</span>
-              </div>
-              <Slider
-                min={50} max={300} step={1}
-                value={[zoom !== undefined ? zoom * 100 : 100]}
-                onValueChange={([val]) => onZoomChange?.(val / 100)}
-                className="w-full"
-                data-testid="slider-zoom"
-              />
-            </div>
+            </CollapsibleSection>
 
             <div className="h-px bg-white/10" />
 
-            {/* Dark Overlay Toggle */}
-            <div className="flex items-center justify-between">
-              <Label className="text-xs text-muted-foreground">Dark Overlay</Label>
-              <Switch
-                checked={settings.trailsOn ?? false}
-                onCheckedChange={(checked) => {
-                  setSettings((prev: typeof settings) => ({ ...prev, trailsOn: checked }));
-                }}
-                data-testid="toggle-dark-overlay"
-              />
-            </div>
+            {/* --- Effects Section --- */}
+            <CollapsibleSection title="Effects" testId="effects">
+              <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+                <Label className="text-xs text-muted-foreground">Dark Overlay</Label>
+                <Switch
+                  checked={settings.darkOverlay ?? false}
+                  onCheckedChange={(checked) => updateSetting("darkOverlay" as any, checked)}
+                  data-testid="toggle-dark-overlay"
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/25 px-3 py-2">
+                <Label className="text-xs text-muted-foreground">Motion Trails</Label>
+                <Switch
+                  checked={settings.trailsOn ?? false}
+                  onCheckedChange={(checked) => updateSetting("trailsOn", checked)}
+                  data-testid="toggle-trails"
+                />
+              </div>
+            </CollapsibleSection>
 
-            {/* Motion Trails Toggle */}
-            <div className="flex items-center justify-between">
-              <Label className="text-xs text-muted-foreground">Motion Trails</Label>
-              <Switch
-                checked={(settings.trailsOn ?? false) && (settings.trailsAmount ?? 0) > 0}
-                onCheckedChange={(checked) => {
-                  setSettings((prev: typeof settings) => ({
-                    ...prev,
-                    trailsOn: checked,
-                    trailsAmount: checked ? 0.75 : 0
-                  }));
-                }}
-                data-testid="toggle-motion-trails"
-              />
-            </div>
+            <div className="h-px bg-white/10" />
 
-            {/* Glow Enable Toggle */}
-            <div className="flex items-center justify-between">
-              <Label className="text-xs text-muted-foreground">Glow Enable</Label>
-              <Switch
-                checked={settings.glowEnabled ?? true}
-                onCheckedChange={(checked) => {
-                  setSettings((prev: typeof settings) => ({ ...prev, glowEnabled: checked }));
-                }}
-                data-testid="toggle-glow"
-              />
-            </div>
+            {/* Save Preset — always visible */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-[10px] h-8 border-primary/50 text-primary"
+              onClick={onSavePreset}
+              data-testid="button-save-preset"
+            >
+              <Save className="mr-1.5 h-3 w-3" />
+              Save Preset
+            </Button>
 
-            {fractalSpecs && fractalSpecs.length > 0 && fractalUniforms && onFractalUniformChange && (
-              <>
-                <div className="h-px bg-white/10" />
-                <h2 className="text-sm font-bold font-display uppercase tracking-widest text-white" data-testid="heading-fractal-controls">Fractal Controls</h2>
-                <FractalControlPanel specs={fractalSpecs} uniforms={fractalUniforms} setUniform={onFractalUniformChange} />
-              </>
-            )}
+              </div>
+            </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => onCollapsedChange(!isCollapsed)}
+            className="pointer-events-auto absolute top-1/2 -right-[14px] -translate-y-1/2 rounded-l-[18px] rounded-r-[18px] px-3 py-6"
+            style={{
+              background: "rgba(110, 88, 160, 0.45)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+              backdropFilter: "blur(14px)",
+            }}
+            title={isCollapsed ? "Expand panel" : "Collapse panel"}
+            data-testid="button-left-panel-collapse"
+          >
+            <span
+              style={{
+                display: "block",
+                fontSize: 18,
+                lineHeight: "18px",
+                color: "rgba(255,255,255,0.9)",
+              }}
+            >
+              {isCollapsed ? "<" : ">"}
+            </span>
+          </button>
         </div>
       </div>
     </div>

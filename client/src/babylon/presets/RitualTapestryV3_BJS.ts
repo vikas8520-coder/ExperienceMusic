@@ -1,4 +1,5 @@
 import * as BABYLON from "@babylonjs/core";
+import type { ShaderMaterial } from "@babylonjs/core/Materials/shaderMaterial";
 import type { BabylonPresetRuntime } from "../types";
 
 type AudioLike = {
@@ -775,7 +776,7 @@ void main(){
   let shock = 0; // beat shock envelope
   let ink = 0; // blacklight ink envelope
 
-  function setUniforms(mat: BABYLON.ShaderMaterial, variant: number, rms: number, bass: number, mid: number, high: number, beat: number, intensity: number) {
+  function setUniforms(mat: ShaderMaterial, variant: number, rms: number, bass: number, mid: number, high: number, beat: number, intensity: number) {
     mat.setFloat("time", time);
     mat.setFloat("bass", bass);
     mat.setFloat("mid", mid);

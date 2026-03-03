@@ -1,5 +1,6 @@
 import type { Express } from "express";
-import type { Server } from "http";
+import type { Server as HttpServer } from "http";
+import type { Server as HttpsServer } from "https";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import OpenAI from "openai";
@@ -20,9 +21,9 @@ const openai = openaiApiKey
   : null;
 
 export async function registerRoutes(
-  httpServer: Server,
+  httpServer: HttpServer | HttpsServer,
   app: Express
-): Promise<Server> {
+): Promise<HttpServer | HttpsServer> {
   app.use(express.json({ limit: '100mb' }));
 
   // Quick DB health check for environment verification.
@@ -255,27 +256,32 @@ Respond in JSON format:
     res.status(201).json(preset);
   });
 
-  // Seed default data if none exists
-  const existingTracks = await storage.getTracks();
-  if (existingTracks.length === 0) {
-    await storage.createTrack({
-      name: "Cosmic Journey",
-      description: "An ethereal space-themed track",
-      colorPalette: ["#1a0a2e", "#16213e", "#0f3460", "#e94560", "#533483"],
-      theme: "cosmic"
-    });
-  }
+  // Seed default data if none exists. Do not block app startup when DB is unavailable.
+  try {
+    const existingTracks = await storage.getTracks();
+    if (existingTracks.length === 0) {
+      await storage.createTrack({
+        name: "Cosmic Journey",
+        description: "An ethereal space-themed track",
+        colorPalette: ["#1a0a2e", "#16213e", "#0f3460", "#e94560", "#533483"],
+        theme: "cosmic"
+      });
+    }
 
-  const existingPresets = await storage.getPresets();
-  if (existingPresets.length === 0) {
-    await storage.createPreset({
-      name: "Default Energy",
-      settings: {
-        intensity: 1.0,
-        speed: 1.0,
-        colorPalette: ["#ff0000", "#00ff00", "#0000ff"]
-      }
-    });
+    const existingPresets = await storage.getPresets();
+    if (existingPresets.length === 0) {
+      await storage.createPreset({
+        name: "Default Energy",
+        settings: {
+          intensity: 1.0,
+          speed: 1.0,
+          colorPalette: ["#ff0000", "#00ff00", "#0000ff"]
+        }
+      });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[startup] skipping seed because storage is unavailable: ${message}`);
   }
 
   // SoundCloud API proxy endpoints to avoid CORS issues

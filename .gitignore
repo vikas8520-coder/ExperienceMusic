@@ -7,6 +7,7 @@ vite.config.ts.*
 
 # Environment files
 .env
+.env.*
 .env.local
 .env*.local
 
@@ -15,3 +16,7 @@ vite.config.ts.*
 *.mov
 *.mkv
 *.webm
+
+# Local HTTPS certs for iPad microphone testing
+certs/*.key
+certs/*.crt

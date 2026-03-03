@@ -43,6 +43,13 @@ uniform float u_edgeDetail;
 uniform float u_aaLevel;
 uniform float u_saturation;
 uniform float u_warpAmount;
+uniform float u_opacity;
+uniform int   u_colorMode;
+uniform float u_paletteRepeat;
+uniform float u_exposure;
+uniform float u_gamma;
+uniform float u_dither;
+uniform float u_colorDriverMix;
 
 uniform vec3 u_paletteA;
 uniform vec3 u_paletteB;
@@ -57,6 +64,12 @@ mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }
 
 vec3 iqPalette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
   return a + b * cos(TAU * (c * t + d));
+}
+
+float hash12(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
 }
 
 float trapCircle(vec2 z, float r) {
@@ -159,7 +172,7 @@ FractalResult computeFractal(vec2 z0, vec2 c, float power, int maxIter, float ti
 vec3 colorExterior(FractalResult fr, float time, float shimmer, float cycle,
                    vec3 palA, vec3 palB, vec3 palC, vec3 palD,
                    float sat, float edgeDetail, float orbitTrap, float glowIntensity,
-                   int maxIter) {
+                   int maxIter, int colorMode, float paletteRepeat, float colorDriverMix) {
   float t = fr.smoothIter / float(maxIter);
 
   float logT = log(1.0 + fr.smoothIter) / log(1.0 + float(maxIter));
@@ -170,11 +183,30 @@ vec3 colorExterior(FractalResult fr, float time, float shimmer, float cycle,
   float stripeMod = 0.5 + 0.5 * sin(fr.stripAngle * 6.0 + time * 2.0);
   t += shimmer * stripeMod * 0.08;
 
-  vec3 col = iqPalette(t + cycle, palA, palB, palC, palD);
+  float distDriver = 0.0;
+  if (fr.distEst > 0.0) {
+    distDriver = 1.0 - exp(-4.5 / (1.0 + fr.distEst * 220.0));
+  }
+  distDriver = clamp(distDriver, 0.0, 1.0);
+
+  float driver = mix(t, distDriver, clamp(colorDriverMix, 0.0, 1.0));
+  float cycleT = fract(driver * max(0.2, paletteRepeat) + cycle);
+
+  if (colorMode == 1) {
+    cycleT = fract((distDriver * 1.7 + t * 0.4) * max(0.2, paletteRepeat) + cycle);
+  } else if (colorMode == 2) {
+    float stripes = 0.5 + 0.5 * sin(fr.stripAngle * 12.0 + fr.smoothIter * 0.08);
+    cycleT = fract((driver * 0.7 + stripes * 0.9) * max(0.2, paletteRepeat) + cycle);
+  } else if (colorMode == 3) {
+    float trapDriver = 1.0 - smoothstep(0.0, 0.5, fr.minTrapDist);
+    cycleT = fract((driver * 0.6 + trapDriver * 1.15) * max(0.2, paletteRepeat) + cycle);
+  }
+
+  vec3 col = iqPalette(cycleT, palA, palB, palC, palD);
 
   float trapColor = 1.0 - smoothstep(0.0, 0.5, fr.minTrapDist);
   trapColor = pow(trapColor, 2.0);
-  vec3 trapCol = iqPalette(trapColor * 2.0 + cycle + 0.3, palA, palB, palC, palD);
+  vec3 trapCol = iqPalette(fract((trapColor * 2.0 + 0.3) * max(0.2, paletteRepeat) + cycle), palA, palB, palC, palD);
   col = mix(col, trapCol, orbitTrap * trapColor * 0.7);
 
   float orbitGlow = fr.orbitSum / float(maxIter);
@@ -233,7 +265,8 @@ vec3 renderPixel(vec2 fragCoord, vec2 res, float time,
                  float beatPunch, float juliaMorph, vec2 juliaC,
                  float glowIntensity, float orbitTrap, float interiorStyle,
                  float colorSpeed, float edgeDetail, float saturation, float warpAmount,
-                 vec3 palA, vec3 palB, vec3 palC, vec3 palD, float colorCycle) {
+                 vec3 palA, vec3 palB, vec3 palC, vec3 palD, float colorCycle,
+                 int colorMode, float paletteRepeat, float colorDriverMix, float dither) {
 
   vec2 uv = fragCoord / res * 2.0 - 1.0;
   uv.x *= res.x / res.y;
@@ -275,7 +308,8 @@ vec3 renderPixel(vec2 fragCoord, vec2 res, float time,
   if (fr.escaped) {
     col = colorExterior(fr, time, trebleSpark, cycle,
                         palA, palB, palC, palD,
-                        saturation, edgeDetail, orbitTrap, glowIntensity, maxIter);
+                        saturation, edgeDetail, orbitTrap, glowIntensity, maxIter,
+                        colorMode, paletteRepeat, colorDriverMix);
 
     float beatFlash = kick * 0.3;
     col += beatFlash * smoothstep(0.8, 0.0, fr.smoothIter / float(maxIter)) * vec3(0.3, 0.2, 0.4);
@@ -291,6 +325,11 @@ vec3 renderPixel(vec2 fragCoord, vec2 res, float time,
     sin(time * 4.3 + c.y * 10.0) * 0.5 + 0.5,
     sin(time * 5.1 + (c.x + c.y) * 7.0) * 0.5 + 0.5
   );
+
+  if (dither > 0.0) {
+    float grain = hash12(fragCoord + vec2(time * 13.7, time * 7.9)) - 0.5;
+    col += grain * 0.025 * clamp(dither, 0.0, 1.0);
+  }
 
   return col;
 }
@@ -309,7 +348,8 @@ void main() {
                       u_beatPunch, u_juliaMorph, u_juliaC,
                       u_glowIntensity, u_orbitTrap, u_interiorStyle,
                       u_colorSpeed, u_edgeDetail, u_saturation, u_warpAmount,
-                      u_paletteA, u_paletteB, u_paletteC, u_paletteD, u_colorCycle);
+                      u_paletteA, u_paletteB, u_paletteC, u_paletteD, u_colorCycle,
+                      u_colorMode, u_paletteRepeat, u_colorDriverMix, u_dither);
   } else {
     col = vec3(0.0);
     float faa = float(aa);
@@ -324,11 +364,15 @@ void main() {
                            u_beatPunch, u_juliaMorph, u_juliaC,
                            u_glowIntensity, u_orbitTrap, u_interiorStyle,
                            u_colorSpeed, u_edgeDetail, u_saturation, u_warpAmount,
-                           u_paletteA, u_paletteB, u_paletteC, u_paletteD, u_colorCycle);
+                           u_paletteA, u_paletteB, u_paletteC, u_paletteD, u_colorCycle,
+                           u_colorMode, u_paletteRepeat, u_colorDriverMix, u_dither);
       }
     }
     col /= faa * faa;
   }
+
+  col = vec3(1.0) - exp(-max(col, vec3(0.0)) * max(0.01, u_exposure));
+  col = pow(max(col, vec3(0.0)), vec3(1.0 / max(0.15, u_gamma)));
 
   col = clamp(col, 0.0, 1.0);
 
@@ -336,13 +380,24 @@ void main() {
 
   col = mix(col, col * col * (3.0 - 2.0 * col), 0.15);
 
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(col, u_opacity);
 }
 `;
 
 function vec3FromHex(hex: string) {
   const c = new THREE.Color(hex);
   return new THREE.Vector3(c.r, c.g, c.b);
+}
+
+function num(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function vec2Or(value: unknown, fallbackX: number, fallbackY: number): [number, number] {
+  if (Array.isArray(value) && value.length >= 2) {
+    return [num(value[0], fallbackX), num(value[1], fallbackY)];
+  }
+  return [fallbackX, fallbackY];
 }
 
 const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ uniforms, state }) => {
@@ -371,22 +426,32 @@ const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     if (!m) return;
 
     const infiniteZoom = !!uniforms.u_infiniteZoom;
+    const bassImpact = num(uniforms.u_bassImpact, 0);
+    const midMorph = num(uniforms.u_midMorph, 0);
+    const trebleShimmer = num(uniforms.u_trebleShimmer, 0);
+    const beatPunch = num(uniforms.u_beatPunch, 0);
+    const juliaMorph = num(uniforms.u_juliaMorph, 0);
+    const zoomValue = num(uniforms.u_zoom, 1.8);
+    const zoomExpValue = num(uniforms.u_zoomExp, Math.log2(Math.max(1e-12, zoomValue)));
+    const [centerX, centerY] = vec2Or(uniforms.u_center, -0.5, 0);
+    const [targetX, targetY] = vec2Or(uniforms.u_zoomTarget, centerX, centerY);
+    const [juliaCX, juliaCY] = vec2Or(uniforms.u_juliaC, -0.4, 0.6);
 
     const sa = smoothedAudio.current;
     const lerpRate = 0.08;
     const decayRate = 0.93;
     sa.bass = infiniteZoom
       ? sa.bass * 0.9
-      : Math.max(sa.bass * decayRate, sa.bass + (uniforms.u_bassImpact - sa.bass) * lerpRate);
-    sa.mid = Math.max(sa.mid * decayRate, sa.mid + (uniforms.u_midMorph - sa.mid) * lerpRate);
-    sa.treble = Math.max(sa.treble * decayRate, sa.treble + (uniforms.u_trebleShimmer - sa.treble) * lerpRate);
-    sa.beat = infiniteZoom ? sa.beat * 0.88 : sa.beat * 0.88 + uniforms.u_beatPunch * 0.12;
+      : Math.max(sa.bass * decayRate, sa.bass + (bassImpact - sa.bass) * lerpRate);
+    sa.mid = Math.max(sa.mid * decayRate, sa.mid + (midMorph - sa.mid) * lerpRate);
+    sa.treble = Math.max(sa.treble * decayRate, sa.treble + (trebleShimmer - sa.treble) * lerpRate);
+    sa.beat = infiniteZoom ? sa.beat * 0.88 : sa.beat * 0.88 + beatPunch * 0.12;
 
     const dpr = gl.getPixelRatio();
     if (infiniteZoom) {
-      const mm = Math.max(0, uniforms.u_midMorph ?? 0);
-      const ts = Math.max(0, uniforms.u_trebleShimmer ?? 0);
-      const jm = Math.max(0, uniforms.u_juliaMorph ?? 0);
+      const mm = Math.max(0, midMorph);
+      const ts = Math.max(0, trebleShimmer);
+      const jm = Math.max(0, juliaMorph);
       const motionDrive = Math.max(0.02, mm * 0.35 + ts * 0.35 + jm * 0.3);
       staticTimeRef.current += Math.min(delta, 0.05) * motionDrive;
       m.uniforms.u_time.value = staticTimeRef.current;
@@ -396,21 +461,17 @@ const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     }
     m.uniforms.u_resolution.value.set(size.width * dpr, size.height * dpr);
 
-    if (Array.isArray(uniforms.u_zoomTarget) && uniforms.u_zoomTarget.length === 2) {
-      targetCenterRef.current.set(uniforms.u_zoomTarget[0], uniforms.u_zoomTarget[1]);
-    } else {
-      targetCenterRef.current.set(uniforms.u_center[0], uniforms.u_center[1]);
-    }
+    targetCenterRef.current.set(targetX, targetY);
     if (!infiniteZoom) {
-      centerRef.current.set(uniforms.u_center[0], uniforms.u_center[1]);
+      centerRef.current.set(centerX, centerY);
     } else {
       const centerLerp = 1 - Math.exp(-8 * Math.min(delta, 0.05));
       centerRef.current.lerp(targetCenterRef.current, centerLerp);
     }
     m.uniforms.u_center.value.set(centerRef.current.x, centerRef.current.y);
     const zoomPulseEnabled = uniforms.u_zoomPulseEnabled !== false;
-    const zoomPulseStrength = typeof uniforms.u_zoomPulseStrength === "number" ? uniforms.u_zoomPulseStrength : 0.12;
-    const zoomPulseEnv = typeof state.zoomPulseEnv === "number" ? state.zoomPulseEnv : 0;
+    const zoomPulseStrength = num(uniforms.u_zoomPulseStrength, 0.12);
+    const zoomPulseEnv = num(state.zoomPulseEnv, 0);
     const zoomPulse = zoomPulseEnabled ? Math.exp(zoomPulseStrength * zoomPulseEnv) : 1;
     if (!infiniteZoom) {
       autoZoomExpRef.current = null;
@@ -419,7 +480,7 @@ const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
       autoZoomMaxExpRef.current = null;
     } else {
       if (autoZoomExpRef.current === null) {
-        const z = typeof uniforms.u_zoomExp === "number" ? uniforms.u_zoomExp : Math.log2(Math.max(1e-12, uniforms.u_zoom ?? 1.8));
+        const z = zoomExpValue;
         autoZoomExpRef.current = z;
         autoZoomMinExpRef.current = z;
         autoZoomMaxExpRef.current = Math.min(60, z + 10);
@@ -435,38 +496,45 @@ const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
         autoZoomDirRef.current = 1;
       }
     }
-    const exp = infiniteZoom ? (autoZoomExpRef.current ?? (uniforms.u_zoomExp ?? 0)) : Math.log2(Math.max(1e-12, uniforms.u_zoom ?? 1.8));
+    const exp = infiniteZoom ? (autoZoomExpRef.current ?? zoomExpValue) : Math.log2(Math.max(1e-12, zoomValue));
     const baseZoom = Math.max(1e-12, Math.pow(2, exp));
     const effectiveZoom = Math.max(1e-12, baseZoom * zoomPulse);
     m.uniforms.u_zoom.value = Math.max(1e-6, effectiveZoom);
     m.uniforms.u_zoomExp.value = Math.log2(effectiveZoom);
     m.uniforms.u_infiniteZoom.value = infiniteZoom;
-    m.uniforms.u_rotation.value = uniforms.u_rotation;
-    m.uniforms.u_iterations.value = uniforms.u_iterations;
-    m.uniforms.u_power.value = uniforms.u_power;
+    m.uniforms.u_rotation.value = num(uniforms.u_rotation, 0);
+    m.uniforms.u_iterations.value = num(uniforms.u_iterations, 128);
+    m.uniforms.u_power.value = num(uniforms.u_power, 2);
 
-    m.uniforms.u_audioGain.value = uniforms.u_audioGain;
+    m.uniforms.u_audioGain.value = num(uniforms.u_audioGain, 1);
     m.uniforms.u_bassImpact.value = sa.bass;
     m.uniforms.u_midMorph.value = sa.mid;
     m.uniforms.u_trebleShimmer.value = sa.treble;
     m.uniforms.u_beatPunch.value = sa.beat;
 
-    m.uniforms.u_juliaMorph.value = uniforms.u_juliaMorph;
-    m.uniforms.u_juliaC.value.set(uniforms.u_juliaC[0], uniforms.u_juliaC[1]);
-    m.uniforms.u_glowIntensity.value = uniforms.u_glowIntensity;
-    m.uniforms.u_orbitTrap.value = uniforms.u_orbitTrap;
-    m.uniforms.u_interiorStyle.value = uniforms.u_interiorStyle;
-    m.uniforms.u_colorSpeed.value = uniforms.u_colorSpeed;
-    m.uniforms.u_edgeDetail.value = uniforms.u_edgeDetail;
-    m.uniforms.u_aaLevel.value = uniforms.u_aaLevel;
-    m.uniforms.u_saturation.value = uniforms.u_saturation;
-    m.uniforms.u_warpAmount.value = uniforms.u_warpAmount;
+    m.uniforms.u_juliaMorph.value = juliaMorph;
+    m.uniforms.u_juliaC.value.set(juliaCX, juliaCY);
+    m.uniforms.u_glowIntensity.value = num(uniforms.u_glowIntensity, 0.8);
+    m.uniforms.u_orbitTrap.value = num(uniforms.u_orbitTrap, 0.5);
+    m.uniforms.u_interiorStyle.value = num(uniforms.u_interiorStyle, 0.5);
+    m.uniforms.u_colorSpeed.value = num(uniforms.u_colorSpeed, 0.4);
+    m.uniforms.u_edgeDetail.value = num(uniforms.u_edgeDetail, 0.5);
+    m.uniforms.u_aaLevel.value = num(uniforms.u_aaLevel, 1);
+    m.uniforms.u_saturation.value = num(uniforms.u_saturation, 1.15);
+    m.uniforms.u_warpAmount.value = num(uniforms.u_warpAmount, 0);
+    m.uniforms.u_opacity.value = num(uniforms.u_opacity, 1);
 
-    m.uniforms.u_paletteA.value.copy(vec3FromHex(uniforms.u_paletteA));
-    m.uniforms.u_paletteB.value.copy(vec3FromHex(uniforms.u_paletteB));
-    m.uniforms.u_paletteC.value.copy(vec3FromHex(uniforms.u_paletteC));
-    m.uniforms.u_paletteD.value.copy(vec3FromHex(uniforms.u_paletteD));
-    m.uniforms.u_colorCycle.value = uniforms.u_colorCycle;
+    m.uniforms.u_paletteA.value.copy(vec3FromHex(typeof uniforms.u_paletteA === "string" ? uniforms.u_paletteA : "#808080"));
+    m.uniforms.u_paletteB.value.copy(vec3FromHex(typeof uniforms.u_paletteB === "string" ? uniforms.u_paletteB : "#808080"));
+    m.uniforms.u_paletteC.value.copy(vec3FromHex(typeof uniforms.u_paletteC === "string" ? uniforms.u_paletteC : "#ffffff"));
+    m.uniforms.u_paletteD.value.copy(vec3FromHex(typeof uniforms.u_paletteD === "string" ? uniforms.u_paletteD : "#0055aa"));
+    m.uniforms.u_colorCycle.value = num(uniforms.u_colorCycle, 0.0);
+    m.uniforms.u_colorMode.value = num(uniforms.u_colorMode, 0);
+    m.uniforms.u_paletteRepeat.value = num(uniforms.u_paletteRepeat, 2.0);
+    m.uniforms.u_exposure.value = num(uniforms.u_exposure, 1.0);
+    m.uniforms.u_gamma.value = num(uniforms.u_gamma, 1.0);
+    m.uniforms.u_dither.value = num(uniforms.u_dither, 0.2);
+    m.uniforms.u_colorDriverMix.value = num(uniforms.u_colorDriverMix, 0.35);
   });
 
   const initialUniforms = useMemo(() => ({
@@ -494,11 +562,18 @@ const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     u_aaLevel: { value: 1 },
     u_saturation: { value: 1.15 },
     u_warpAmount: { value: 0 },
+    u_opacity: { value: 1 },
     u_paletteA: { value: new THREE.Vector3(0.5, 0.5, 0.5) },
     u_paletteB: { value: new THREE.Vector3(0.5, 0.5, 0.5) },
     u_paletteC: { value: new THREE.Vector3(1, 1, 1) },
     u_paletteD: { value: new THREE.Vector3(0.0, 0.33, 0.67) },
     u_colorCycle: { value: 0.0 },
+    u_colorMode: { value: 0 },
+    u_paletteRepeat: { value: 2.0 },
+    u_exposure: { value: 1.0 },
+    u_gamma: { value: 1.0 },
+    u_dither: { value: 0.2 },
+    u_colorDriverMix: { value: 0.35 },
   }), []);
 
   return (
@@ -509,6 +584,9 @@ const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
         vertexShader={vert}
         fragmentShader={frag}
         uniforms={initialUniforms}
+        transparent
+        depthWrite={false}
+        blending={THREE.NormalBlending}
       />
     </mesh>
   );
@@ -523,6 +601,7 @@ export const MandelbrotPreset: FractalPreset = {
   uniformSpecs: [
     { key: "u_center", label: "Center", type: "vec2", group: "Fractal", default: [-0.5, 0] },
     { key: "u_zoom", label: "Fractal zoom", type: "float", group: "Fractal", min: 0.5, max: 50, step: 0.01, default: 1.8, macro: true },
+    { key: "u_opacity", label: "Opacity", type: "float", group: "Fractal", min: 0, max: 1, step: 0.01, default: 1 },
     { key: "u_infiniteZoom", label: "Infinite Zoom", type: "bool", group: "Fractal Zoom", default: false },
     { key: "u_zoomExp", label: "Zoom Depth", type: "float", group: "Fractal Zoom", min: -80, max: 10, step: 0.01, default: 0,
       visibleIf: (u: UniformValues) => !!u.u_infiniteZoom },
@@ -543,6 +622,12 @@ export const MandelbrotPreset: FractalPreset = {
     { key: "u_paletteB", label: "Amplitude", type: "color", group: "Color", default: "#808080" },
     { key: "u_paletteC", label: "Frequency", type: "color", group: "Color", default: "#ffffff" },
     { key: "u_paletteD", label: "Phase", type: "color", group: "Color", default: "#0055aa" },
+    { key: "u_colorMode", label: "Coloring Mode (0 Smooth, 1 Distance, 2 Stripe, 3 Trap)", type: "int", group: "Color", min: 0, max: 3, step: 1, default: 0 },
+    { key: "u_paletteRepeat", label: "Palette Repeat", type: "float", group: "Color", min: 0.5, max: 8, step: 0.01, default: 2.0 },
+    { key: "u_colorDriverMix", label: "Driver Mix", type: "float", group: "Color", min: 0, max: 1, step: 0.01, default: 0.35 },
+    { key: "u_exposure", label: "Exposure", type: "float", group: "Color", min: 0.4, max: 2.5, step: 0.01, default: 1.0 },
+    { key: "u_gamma", label: "Gamma", type: "float", group: "Color", min: 0.6, max: 2.4, step: 0.01, default: 1.0 },
+    { key: "u_dither", label: "Banding Reduce", type: "float", group: "Color", min: 0, max: 1, step: 0.01, default: 0.2 },
     { key: "u_colorCycle", label: "Color Cycle", type: "float", group: "Color", min: 0, max: 1, step: 0.001, default: 0.0, macro: true },
     { key: "u_colorSpeed", label: "Auto Cycle Speed", type: "float", group: "Color", min: 0, max: 2, step: 0.01, default: 0.4 },
     { key: "u_saturation", label: "Saturation", type: "float", group: "Color", min: 0, max: 2, step: 0.01, default: 1.15 },

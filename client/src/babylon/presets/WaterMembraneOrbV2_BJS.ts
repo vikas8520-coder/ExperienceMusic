@@ -1,5 +1,9 @@
 import * as BABYLON from "@babylonjs/core";
 import type { BabylonPresetRuntime } from "../types";
+import type { Color4 } from "@babylonjs/core/Maths/math.color";
+import type { Vector3 } from "@babylonjs/core/Maths/math.vector";
+import type { Mesh } from "@babylonjs/core/Meshes/mesh";
+import type { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 
 type AudioLike = {
   rms?: number;
@@ -98,8 +102,8 @@ export function createWaterMembraneOrbV2Preset(
   floor.position.y = -2.15;
 
   const SACRED_RING_COUNT = 6;
-  const sacredRings: BABYLON.Mesh[] = [];
-  const sacredMats: BABYLON.StandardMaterial[] = [];
+  const sacredRings: Mesh[] = [];
+  const sacredMats: StandardMaterial[] = [];
   for (let i = 0; i < SACRED_RING_COUNT; i++) {
     const ring = BABYLON.MeshBuilder.CreateTorus(
       `waterV2SacredRing_${i}`,
@@ -128,7 +132,7 @@ export function createWaterMembraneOrbV2Preset(
   }
 
   function makeCirclePoints(radius: number, segments: number) {
-    const points: BABYLON.Vector3[] = [];
+    const points: Vector3[] = [];
     for (let i = 0; i <= segments; i++) {
       const t = (i / segments) * Math.PI * 2;
       points.push(new BABYLON.Vector3(Math.cos(t) * radius, 0, Math.sin(t) * radius));
@@ -136,8 +140,8 @@ export function createWaterMembraneOrbV2Preset(
     return points;
   }
 
-  const sigilLines: BABYLON.Vector3[][] = [];
-  const sigilColors: BABYLON.Color4[][] = [];
+  const sigilLines: Vector3[][] = [];
+  const sigilColors: Color4[][] = [];
 
   const sigilRadii = [0.45, 0.82, 1.22, 1.62, 2.05, 2.5];
   for (const r of sigilRadii) {
@@ -147,7 +151,7 @@ export function createWaterMembraneOrbV2Preset(
   }
 
   const starPts = 10;
-  const star: BABYLON.Vector3[] = [];
+  const star: Vector3[] = [];
   for (let i = 0; i <= starPts; i++) {
     const a = (i / starPts) * Math.PI * 2;
     const rr = i % 2 === 0 ? 2.25 : 1.05;

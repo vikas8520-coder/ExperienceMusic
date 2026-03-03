@@ -1,5 +1,7 @@
 import * as BABYLON from "@babylonjs/core";
 import type { BabylonPresetRuntime } from "../types";
+import type { Scene } from "@babylonjs/core/scene";
+import type { Color3 } from "@babylonjs/core/Maths/math.color";
 
 type AudioLike = {
   spectrum?: number[];
@@ -55,7 +57,7 @@ function sampleBin(bins: number[], i: number, barCount: number): number {
 }
 
 export function createAudioBarsPreset(scene: unknown): BabylonPresetRuntime {
-  const bjsScene = scene as BABYLON.Scene;
+  const bjsScene = scene as Scene;
 
   const BAR_COUNT = 112;
   const RADIUS = 1.55;
@@ -173,7 +175,7 @@ export function createAudioBarsPreset(scene: unknown): BabylonPresetRuntime {
   smoothH.fill(MIN_H);
   smoothGhost.fill(MIN_H);
 
-  const baseColors = new Array<BABYLON.Color3>(BAR_COUNT);
+  const baseColors = new Array<Color3>(BAR_COUNT);
   for (let i = 0; i < BAR_COUNT; i++) {
     const t = i / BAR_COUNT;
     const c = palette(t);

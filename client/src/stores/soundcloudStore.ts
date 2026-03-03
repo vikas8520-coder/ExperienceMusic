@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware';
 function generateState(): string {
   const array = new Uint8Array(16);
   crypto.getRandomValues(array);
-  return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(array, (b: number) => b.toString(16).padStart(2, '0')).join('');
 }
 
 export interface SoundCloudTrack {

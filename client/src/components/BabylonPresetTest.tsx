@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import * as BABYLON from "@babylonjs/core";
-import { BABYLON_PRESETS } from "@/babylon/registry";
+import type { ArcRotateCamera } from "@babylonjs/core/Cameras/arcRotateCamera";
+import type { Engine } from "@babylonjs/core/Engines/engine";
+import type { Scene } from "@babylonjs/core/scene";
+import type { DefaultRenderingPipeline } from "@babylonjs/core/PostProcesses/RenderPipeline/Pipelines/defaultRenderingPipeline";
+import { createRitualTapestryV3_GLSLOnlyPreset } from "@/babylon/presets/RitualTapestryV3_GLSLOnly_BJS";
 
 type PresetRuntime = {
   update: (
@@ -22,16 +26,11 @@ type PresetRuntime = {
 
 type AudioMode = "Cinematic" | "Club" | "Hypnotic";
 
-const PRESET_NAMES = Object.keys(BABYLON_PRESETS);
-const DEFAULT_PRESET = PRESET_NAMES.includes("Ritual Tapestry V3 (Babylon)")
-  ? "Ritual Tapestry V3 (Babylon)"
-  : PRESET_NAMES.includes("Ritual Tapestry (Babylon)")
-    ? "Ritual Tapestry (Babylon)"
-  : PRESET_NAMES.includes("Water Membrane Orb (Babylon)")
-    ? "Water Membrane Orb (Babylon)"
-  : (PRESET_NAMES[0] ?? "");
+const PRESET_NAMES = ["Ritual Tapestry V3 GLSL Only"];
+const DEFAULT_PRESET = PRESET_NAMES[0];
 const AUTO_CYCLE_SECONDS = 10;
 const HAS_PRESETS = PRESET_NAMES.length > 0;
+const FORCE_WEBGL_FOR_DEBUG = true;
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
@@ -85,11 +84,11 @@ function makeDemoAudio(t: number, mode: AudioMode) {
 export default function BabylonPresetTest() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const engineRef = useRef<BABYLON.Engine | null>(null);
-  const sceneRef = useRef<BABYLON.Scene | null>(null);
-  const cameraRef = useRef<BABYLON.ArcRotateCamera | null>(null);
+  const engineRef = useRef<Engine | null>(null);
+  const sceneRef = useRef<Scene | null>(null);
+  const cameraRef = useRef<ArcRotateCamera | null>(null);
   const runtimeRef = useRef<PresetRuntime | null>(null);
-  const pipelineRef = useRef<BABYLON.DefaultRenderingPipeline | null>(null);
+  const pipelineRef = useRef<DefaultRenderingPipeline | null>(null);
 
   const intensityRef = useRef(1.4);
   const audioModeRef = useRef<AudioMode>("Cinematic");
@@ -211,44 +210,84 @@ export default function BabylonPresetTest() {
 
     const createRuntime = (name: string) => {
       const scene = sceneRef.current;
-      if (!scene || !BABYLON_PRESETS[name]) return;
+      if (!scene) return;
       disposeRuntime();
-      runtimeRef.current = BABYLON_PRESETS[name].create({ scene }) as PresetRuntime;
+      const runtime = createRitualTapestryV3_GLSLOnlyPreset(scene, {
+        enableGlow: true,
+        heavyEdges: true,
+      });
+      runtimeRef.current = runtime as unknown as PresetRuntime;
       console.log("[BabylonPresetTest] Preset:", name);
     };
 
     const start = async () => {
+      if (engineRef.current) return;
+      let engine: Engine | null = null;
       try {
-        try {
-          const WebGPUEngineCtor = (BABYLON as any).WebGPUEngine;
-          if (typeof WebGPUEngineCtor === "function") {
-            const webgpuEngine = new WebGPUEngineCtor(canvas, {
-              antialiasing: true,
-              powerPreference: "high-performance",
-            });
-            await webgpuEngine.initAsync();
-            engineRef.current = webgpuEngine as BABYLON.Engine;
-            setEngineLabel("WebGPUEngine");
-            console.log("[BabylonPresetTest] Engine:", webgpuEngine.getClassName(), "WebGPU");
-          } else {
-            throw new Error("WebGPUEngine unavailable");
-          }
-        } catch (error) {
-          engineRef.current = new BABYLON.Engine(canvas, true, {
+        if (FORCE_WEBGL_FOR_DEBUG) {
+          engine = new BABYLON.Engine(canvas, true, {
             preserveDrawingBuffer: false,
             stencil: false,
             antialias: true,
             powerPreference: "high-performance",
           });
-          setEngineLabel("Engine (WebGL fallback)");
-          console.log("[BabylonPresetTest] Engine:", engineRef.current.getClassName(), "WebGL fallback", error);
+          setEngineLabel("Engine (WebGL forced)");
+          console.log("[BabylonPresetTest] Engine:", engine?.getClassName(), "WebGL forced");
+        } else {
+          try {
+            const WebGPUEngineCtor = (BABYLON as any).WebGPUEngine;
+            if (typeof WebGPUEngineCtor === "function") {
+              const webgpuEngine = new WebGPUEngineCtor(canvas, {
+                antialiasing: true,
+                powerPreference: "high-performance",
+              });
+              await webgpuEngine.initAsync();
+              engine = webgpuEngine as Engine;
+              setEngineLabel("WebGPUEngine");
+              console.log("[BabylonPresetTest] Engine:", webgpuEngine.getClassName(), "WebGPU");
+            } else {
+              throw new Error("WebGPUEngine unavailable");
+            }
+          } catch (error) {
+            engine = new BABYLON.Engine(canvas, true, {
+              preserveDrawingBuffer: false,
+              stencil: false,
+              antialias: true,
+              powerPreference: "high-performance",
+            });
+            setEngineLabel("Engine (WebGL fallback)");
+            console.log("[BabylonPresetTest] Engine:", engine?.getClassName(), "WebGL fallback", error);
+          }
         }
 
-        if (stopped || !engineRef.current) return;
+        if (!engine) return;
+        const activeEngine = engine;
+        if (stopped) {
+          activeEngine.dispose();
+          return;
+        }
+        if (engineRef.current) {
+          activeEngine.dispose();
+          return;
+        }
+        engineRef.current = activeEngine;
+        activeEngine.onContextLostObservable.add(() => console.warn("Babylon context lost"));
+        activeEngine.onContextRestoredObservable.add(() => console.warn("Babylon context restored"));
+        console.log("Babylon engine:", activeEngine.getClassName());
 
-        const scene = new BABYLON.Scene(engineRef.current);
+        const scene = new BABYLON.Scene(activeEngine);
         scene.clearColor = new BABYLON.Color4(0, 0, 0, 1);
         sceneRef.current = scene;
+        const canvasRect = canvas.getBoundingClientRect();
+        console.log(
+          "[BabylonPresetTest] Canvas size:",
+          Math.round(canvasRect.width),
+          "x",
+          Math.round(canvasRect.height),
+        );
+        if (canvasRect.width < 2 || canvasRect.height < 2) {
+          console.warn("[BabylonPresetTest] Canvas has zero/near-zero size.");
+        }
 
         const camera = new BABYLON.ArcRotateCamera(
           "babylon-test-cam",
@@ -258,6 +297,11 @@ export default function BabylonPresetTest() {
           new BABYLON.Vector3(0, -0.65, 0),
           scene,
         );
+        scene.activeCamera = camera;
+        camera.setTarget(new BABYLON.Vector3(0, 0.25, 0));
+        camera.alpha = Math.PI / 2;
+        camera.beta = Math.PI / 2.2;
+        camera.radius = 7.5;
         camera.lowerRadiusLimit = 2.5;
         camera.upperRadiusLimit = 9.0;
         camera.wheelDeltaPercentage = 0.01;
@@ -269,9 +313,9 @@ export default function BabylonPresetTest() {
 
         let last = performance.now();
         let t = 0;
-        engineRef.current.runRenderLoop(() => {
+        activeEngine.runRenderLoop(() => {
           const activeScene = sceneRef.current;
-          if (!activeScene || !runtimeRef.current) return;
+          if (!activeScene) return;
 
           const now = performance.now();
           const dt = Math.min(1 / 20, Math.max(1 / 240, (now - last) / 1000));
@@ -294,16 +338,31 @@ export default function BabylonPresetTest() {
             }
           }
 
-          runtimeRef.current.update(fake, dt, { intensity: intensityRef.current, morph: 0 });
+          const w = window as any;
+          if (!w.__once) {
+            console.log("runtime.update running");
+            w.__once = true;
+          }
+          runtimeRef.current?.update(fake, dt, { intensity: intensityRef.current, morph: 0 });
           activeScene.render();
         });
 
         const onResize = () => {
-          engineRef.current?.resize();
+          activeEngine.resize();
         };
+        activeEngine.resize();
+        window.requestAnimationFrame(() => activeEngine.resize());
         window.addEventListener("resize", onResize);
         removeResize = () => window.removeEventListener("resize", onResize);
       } catch (error) {
+        if (engine && engineRef.current !== engine) {
+          try {
+            engine.stopRenderLoop();
+            engine.dispose();
+          } catch {
+            // ignore secondary cleanup errors
+          }
+        }
         console.error("[BabylonPresetTest] failed to start", error);
       }
     };
@@ -313,14 +372,16 @@ export default function BabylonPresetTest() {
     return () => {
       stopped = true;
       removeResize?.();
+      const engine = engineRef.current;
       try {
+        engine?.stopRenderLoop();
         pipelineRef.current?.dispose();
         pipelineRef.current = null;
         disposeRuntime();
         sceneRef.current?.dispose();
         sceneRef.current = null;
         cameraRef.current = null;
-        engineRef.current?.dispose();
+        engine?.dispose();
         engineRef.current = null;
       } catch (error) {
         console.warn("[BabylonPresetTest] cleanup error", error);
@@ -330,10 +391,14 @@ export default function BabylonPresetTest() {
 
   useEffect(() => {
     const scene = sceneRef.current;
-    if (!scene || !BABYLON_PRESETS[presetName]) return;
+    if (!scene) return;
     try {
       runtimeRef.current?.dispose();
-      runtimeRef.current = BABYLON_PRESETS[presetName].create({ scene }) as PresetRuntime;
+      const runtime = createRitualTapestryV3_GLSLOnlyPreset(scene, {
+        enableGlow: true,
+        heavyEdges: true,
+      });
+      runtimeRef.current = runtime as unknown as PresetRuntime;
       console.log("[BabylonPresetTest] Preset:", presetName);
     } catch (error) {
       console.error("[BabylonPresetTest] preset switch failed", error);

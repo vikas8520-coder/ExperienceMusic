@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Music, Clock, User } from "lucide-react";
+import { X, Music, Clock, User, Trash2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { SavedTrack } from "@/pages/Home";
 
@@ -54,13 +54,16 @@ export function TrackLibrary({ tracks, onLoadTrack, onDeleteTrack, onClose }: Tr
           <div className="space-y-2.5">
             <AnimatePresence>
               {tracks.map((track, index) => (
-                <motion.button
+                <motion.div
                   key={track.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: 100 }}
                   transition={{ delay: index * 0.04 }}
                   onClick={() => onLoadTrack(track)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onLoadTrack(track); } }}
+                  role="button"
+                  tabIndex={0}
                   className="w-full text-left rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 hover:border-white/20 hover:bg-white/[0.06] transition-all cursor-pointer"
                   data-testid={`track-item-${track.id}`}
                 >
@@ -76,14 +79,27 @@ export function TrackLibrary({ tracks, onLoadTrack, onDeleteTrack, onClose }: Tr
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 text-white/40 shrink-0 mt-0.5">
-                      <Clock className="w-3 h-3" />
-                      <span className="text-xs font-mono">
-                        {track.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
+                    <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                      <div className="flex items-center gap-1 text-white/40">
+                        <Clock className="w-3 h-3" />
+                        <span className="text-xs font-mono">
+                          {track.createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteTrack(track.id);
+                        }}
+                        className="text-white/30 hover:text-red-400 transition-colors p-0.5"
+                        data-testid={`button-delete-track-${track.id}`}
+                        title="Delete track"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                </motion.button>
+                </motion.div>
               ))}
             </AnimatePresence>
           </div>

@@ -4782,8 +4782,8 @@ function AudioReactiveEffects({ getAudioData, settings }: { getAudioData: () => 
       noiseOn={true}
       vignetteOn={true}
       kaleidoOn={settings.presetName === "Geometric Kaleidoscope"}
-      afterimageOn={settings.trailsOn ?? false}
-      trails={settings.trailsAmount ?? 0.75}
+      afterimageOn={(settings.trailsOn ?? false) || (settings.darkOverlay ?? false)}
+      trails={(settings.darkOverlay && !settings.trailsOn) ? 0.3 : (settings.trailsAmount ?? 0.75)}
     />
   );
 }

@@ -1,5 +1,9 @@
 import * as BABYLON from "@babylonjs/core";
 import type { BabylonPresetRuntime } from "../types";
+import type { Scene } from "@babylonjs/core/scene";
+import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
+import type { Color4 } from "@babylonjs/core/Maths/math.color";
+import type { Vector3 } from "@babylonjs/core/Maths/math.vector";
 
 type AudioLike = {
   rms?: number;
@@ -47,7 +51,7 @@ export function createCosmicWebPreset(
   scene: unknown,
   opts?: { enableGlow?: boolean },
 ): BabylonPresetRuntime {
-  const bjsScene = scene as BABYLON.Scene;
+  const bjsScene = scene as Scene;
   const enableGlow = opts?.enableGlow ?? true;
 
   const WEB_R = 3.6;
@@ -83,10 +87,11 @@ export function createCosmicWebPreset(
   bjsScene.fogColor = new BABYLON.Color3(0.01, 0.015, 0.03);
   bjsScene.fogDensity = FOG_BASE;
 
-  let glow: BABYLON.GlowLayer | null = null;
+  let glow: GlowLayer | null = null;
   if (enableGlow) {
-    glow = new BABYLON.GlowLayer("cwGlow", bjsScene, { blurKernelSize: 64 });
-    glow.intensity = 0.7;
+    const g = new BABYLON.GlowLayer("cwGlow", bjsScene, { blurKernelSize: 64 });
+    g.intensity = 0.7;
+    glow = g;
   }
 
   const nodeBase = BABYLON.MeshBuilder.CreateSphere(
@@ -131,9 +136,9 @@ export function createCosmicWebPreset(
   coreMat.emissiveFresnelParameters.bias = 0.08;
 
   type Node = {
-    base: BABYLON.Vector3;
-    p: BABYLON.Vector3;
-    drift: BABYLON.Vector3;
+    base: Vector3;
+    p: Vector3;
+    drift: Vector3;
     s: number;
     phase: number;
     pulse: number;
@@ -169,8 +174,8 @@ export function createCosmicWebPreset(
     }
   }
 
-  const linePoints: BABYLON.Vector3[][] = edges.map((e) => [nodes[e.a].p.clone(), nodes[e.b].p.clone()]);
-  const lineColorsInit: BABYLON.Color4[][] = edges.map(() => [
+  const linePoints: Vector3[][] = edges.map((e) => [nodes[e.a].p.clone(), nodes[e.b].p.clone()]);
+  const lineColorsInit: Color4[][] = edges.map(() => [
     new BABYLON.Color4(0.2, 0.8, 1.0, 0.22),
     new BABYLON.Color4(0.2, 0.8, 1.0, 0.22),
   ]);

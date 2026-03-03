@@ -1,11 +1,51 @@
-import express, { type Request, Response, NextFunction } from "express";
+import express, {
+  type Express,
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
-import { createServer } from "http";
+import fs from "fs";
+import path from "path";
+import { createServer as createHttpServer, type Server as HttpServer } from "http";
+import { createServer as createHttpsServer, type Server as HttpsServer } from "https";
+
+type NodeServer = HttpServer | HttpsServer;
+
+function createAppServer(app: Express): NodeServer {
+  const devHttpsEnabled =
+    process.env.NODE_ENV !== "production" && process.env.APP_DEV_HTTPS === "1";
+
+  if (!devHttpsEnabled) {
+    return createHttpServer(app);
+  }
+
+  const keyPath =
+    process.env.APP_DEV_HTTPS_KEY_PATH ??
+    path.resolve(process.cwd(), "certs", "dev-ipad.key");
+  const certPath =
+    process.env.APP_DEV_HTTPS_CERT_PATH ??
+    path.resolve(process.cwd(), "certs", "dev-ipad.crt");
+
+  if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
+    throw new Error(
+      `APP_DEV_HTTPS=1 but certificate files were not found (key=${keyPath}, cert=${certPath})`,
+    );
+  }
+
+  return createHttpsServer(
+    {
+      key: fs.readFileSync(keyPath),
+      cert: fs.readFileSync(certPath),
+    },
+    app,
+  );
+}
 
 const app = express();
-const httpServer = createServer(app);
+const appServer = createAppServer(app);
 
 declare module "http" {
   interface IncomingMessage {
@@ -64,7 +104,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  await registerRoutes(httpServer, app);
+  await registerRoutes(appServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -86,7 +126,7 @@ app.use((req, res, next) => {
     serveStatic(app);
   } else {
     const { setupVite } = await import("./vite");
-    await setupVite(httpServer, app);
+    await setupVite(appServer, app);
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
@@ -94,14 +134,24 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
+  const host = process.env.HOST || "0.0.0.0";
+  const protocol =
+    process.env.NODE_ENV !== "production" && process.env.APP_DEV_HTTPS === "1"
+      ? "https"
+      : "http";
+  appServer.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true,
+      host,
     },
     () => {
-      log(`serving on port ${port}`);
+      const displayHost = host === "0.0.0.0" ? "localhost" : host;
+      log(`serving on ${protocol}://${displayHost}:${port}`);
+      if (protocol === "http") {
+        log(
+          `mic capture requires a secure origin; use http://localhost:${port} (not http://0.0.0.0:${port})`,
+        );
+      }
     },
   );
 })();

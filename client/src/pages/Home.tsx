@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, type MouseEvent, type TouchEv
 import { AnimatePresence } from "framer-motion";
 import { AudioVisualizer } from "@/components/AudioVisualizer";
 import { UIControls, type ThumbnailAnalysis } from "@/components/UIControls";
+import { RadialSystem } from "@/components/RadialSystem";
 import { TrackLibrary } from "@/components/TrackLibrary";
 import { SoundCloudPanel } from "@/components/SoundCloudPanel";
 import { useAudioAnalyzer } from "@/hooks/use-audio-analyzer";
@@ -64,10 +65,12 @@ export default function Home() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [visualizationZoom, setVisualizationZoom] = useState(1);
   const [activeTab, setActiveTab] = useState<"listen" | "create" | "perform" | "record">("listen");
+  const [isCreatePanelCollapsed, setIsCreatePanelCollapsed] = useState(false);
   const [uiAutoHidden, setUiAutoHidden] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
   const [adaptiveQualityTier, setAdaptiveQualityTier] = useState<0 | 1 | 2>(1);
   const [micReactiveEnabled, setMicReactiveEnabled] = useState(false);
+  const [radialOpenRequestToken, setRadialOpenRequestToken] = useState(0);
   const lastTapRef = useRef(0);
   const hideTimerRef = useRef<number | null>(null);
   const pinchRef = useRef<{ startDist: number; startZoom: number; mode: "fractal" | "scene"; min: number; max: number } | null>(null);
@@ -223,6 +226,7 @@ export default function Home() {
     imageFilters: ["none"] as ImageFilterId[],
     psyOverlays: [] as PsyOverlayId[],
     trailsOn: false,
+    darkOverlay: false,
     trailsAmount: 0.75,
     glowEnabled: true,
     glowIntensity: 1.0,
@@ -1248,6 +1252,25 @@ export default function Home() {
       />
 
       <div className={uiAutoHidden ? "opacity-0 pointer-events-none transition-opacity duration-300" : "opacity-100 transition-opacity duration-300"}>
+        <RadialSystem
+          activeTab={activeTab}
+          settings={settings}
+          setSettings={setSettings}
+          colorSettings={colorSettings}
+          setColorSettings={setColorSettings}
+          zoom={visualizationZoom}
+          onZoomChange={setVisualizationZoom}
+          fractalSpecs={fractalSpecs}
+          fractalMacros={fractalMacros}
+          fractalUniforms={fractalUniforms}
+          onFractalUniformChange={setFractalUniform}
+          adaptiveQualityTier={adaptiveQualityTier}
+          micStatus={micStatus}
+          onToggleMicReactivity={toggleMicReactivity}
+          openRequestToken={radialOpenRequestToken}
+          leftDockCollapsed={isCreatePanelCollapsed}
+        />
+
         {/* UI Overlay */}
         <UIControls 
           isPlaying={isPlaying}
@@ -1289,6 +1312,9 @@ export default function Home() {
           onFractalUniformChange={setFractalUniform}
           micStatus={micStatus}
           onToggleMicReactivity={toggleMicReactivity}
+          onOpenRadialSettings={() => setRadialOpenRequestToken((prev) => prev + 1)}
+          createPanelCollapsed={isCreatePanelCollapsed}
+          onCreatePanelCollapsedChange={setIsCreatePanelCollapsed}
         />
         
         {/* Track Library Panel */}

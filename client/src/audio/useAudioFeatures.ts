@@ -67,8 +67,14 @@ export function useAudioFeatures() {
       setError(null);
 
       if (!window.isSecureContext) {
+        const { protocol, hostname, port } = window.location;
+        const localhostUrl = `${protocol}//localhost${port ? `:${port}` : ""}`;
+        const secureGuidance =
+          hostname === "0.0.0.0"
+            ? `Open ${localhostUrl} on this machine, or use HTTPS for other devices.`
+            : "Use HTTPS, or open via localhost on this machine.";
         throw new Error(
-          `Microphone is blocked on insecure pages (${window.location.origin}). Use https:// (or localhost on this device).`
+          `Microphone requires a secure context. Current origin: ${window.location.origin}. ${secureGuidance}`
         );
       }
 
@@ -84,19 +90,31 @@ export function useAudioFeatures() {
       localCtx = new Ctx({ latencyHint: "interactive" });
       await localCtx.resume();
 
-      localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-        video: false,
-      });
+      // iPad/Safari can reject some advanced constraints; retry with plain audio.
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+          video: false,
+        });
+      } catch {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
+      }
 
       localSource = localCtx.createMediaStreamSource(localStream);
 
       let usingWorklet = false;
-      if (typeof AudioWorkletNode !== "undefined" && localCtx.audioWorklet?.addModule) {
+      const isIOSLike =
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      // Worklet behavior is inconsistent on iPad Safari; analyzer fallback is more reliable.
+      if (!isIOSLike && typeof AudioWorkletNode !== "undefined" && localCtx.audioWorklet?.addModule) {
         try {
           await localCtx.audioWorklet.addModule(workletUrl.href);
           localNode = new AudioWorkletNode(localCtx, "feature-worklet", {
@@ -206,7 +224,13 @@ export function useAudioFeatures() {
       }
       await teardownPipeline();
 
-      const message = e?.message ?? "Failed to start microphone reactivity";
+      const fallbackMessage = e?.message ?? "Failed to start microphone reactivity";
+      const message =
+        e?.name === "NotAllowedError"
+          ? "Microphone permission was denied. Allow microphone access in browser site settings and retry."
+          : e?.name === "NotFoundError"
+            ? "No microphone input device was found on this machine."
+            : fallbackMessage;
       setStatus("error");
       setError(message);
       throw new Error(message);

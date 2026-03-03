@@ -1,5 +1,7 @@
 import * as BABYLON from "@babylonjs/core";
 import type { BabylonPresetRuntime } from "../types";
+import type { Scene } from "@babylonjs/core/scene";
+import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
 
 type AudioLike = {
   rms?: number;
@@ -30,7 +32,7 @@ export function createParticleFieldPreset(
   scene: unknown,
   opts?: { enableGlow?: boolean },
 ): BabylonPresetRuntime {
-  const bjsScene = scene as BABYLON.Scene;
+  const bjsScene = scene as Scene;
   const enableGlow = opts?.enableGlow ?? true;
 
   const FIELD_R = 3.2;
@@ -66,10 +68,11 @@ export function createParticleFieldPreset(
   bjsScene.fogColor = new BABYLON.Color3(0.01, 0.015, 0.03);
   bjsScene.fogDensity = FOG_BASE;
 
-  let glow: BABYLON.GlowLayer | null = null;
+  let glow: GlowLayer | null = null;
   if (enableGlow) {
-    glow = new BABYLON.GlowLayer("pfGlow", bjsScene, { blurKernelSize: 64 });
-    glow.intensity = 0.75;
+    const g = new BABYLON.GlowLayer("pfGlow", bjsScene, { blurKernelSize: 64 });
+    g.intensity = 0.75;
+    glow = g;
   }
 
   const coreOrb = BABYLON.MeshBuilder.CreateSphere(

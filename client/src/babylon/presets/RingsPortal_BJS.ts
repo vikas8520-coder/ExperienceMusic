@@ -1,5 +1,10 @@
 import * as BABYLON from "@babylonjs/core";
 import type { BabylonPresetRuntime } from "../types";
+import type { Scene } from "@babylonjs/core/scene";
+import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
+import type { Mesh } from "@babylonjs/core/Meshes/mesh";
+import type { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
+import type { Quaternion } from "@babylonjs/core/Maths/math.vector";
 
 type AudioLike = {
   rms?: number;
@@ -35,7 +40,7 @@ export function createRingsPortalPreset(
   scene: unknown,
   opts?: RingsPortalOptions,
 ): BabylonPresetRuntime {
-  const bjsScene = scene as BABYLON.Scene;
+  const bjsScene = scene as Scene;
   const enableGlow = opts?.enableGlow ?? true;
   const verticalPortal = opts?.verticalPortal ?? true;
 
@@ -94,10 +99,11 @@ export function createRingsPortalPreset(
   bjsScene.fogColor = new BABYLON.Color3(0.01, 0.015, 0.03);
   bjsScene.fogDensity = FOG_BASE;
 
-  let glow: BABYLON.GlowLayer | null = null;
+  let glow: GlowLayer | null = null;
   if (enableGlow) {
-    glow = new BABYLON.GlowLayer("ringsGlow", bjsScene, { blurKernelSize: 72 });
-    glow.intensity = 0.68;
+    const g = new BABYLON.GlowLayer("ringsGlow", bjsScene, { blurKernelSize: 72 });
+    g.intensity = 0.68;
+    glow = g;
   }
 
   const backGlow = BABYLON.MeshBuilder.CreateTorus(
@@ -232,11 +238,11 @@ export function createRingsPortalPreset(
   vignetteOuterMat.backFaceCulling = false;
   vignetteOuter.material = vignetteOuterMat;
 
-  const vignetteInner = vignetteOuter.clone("ringsVignetteInner") as BABYLON.Mesh;
+  const vignetteInner = vignetteOuter.clone("ringsVignetteInner") as Mesh;
   vignetteInner.scaling.setAll(0.82);
   vignetteInner.position.z = -1.98;
 
-  const vignetteInnerMat = vignetteOuterMat.clone("ringsVignetteInnerMat") as BABYLON.StandardMaterial;
+  const vignetteInnerMat = vignetteOuterMat.clone("ringsVignetteInnerMat") as StandardMaterial;
   vignetteInnerMat.alpha = VIGNETTE_ALPHA_INNER;
   vignetteInner.material = vignetteInnerMat;
 
@@ -328,7 +334,7 @@ export function createRingsPortalPreset(
     sx: number,
     sy: number,
     sz: number,
-    q: BABYLON.Quaternion,
+    q: Quaternion,
     x: number,
     y: number,
     z: number,

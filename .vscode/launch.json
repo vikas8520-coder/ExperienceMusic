@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "App: Dev",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev"
+    },
+    {
+      "name": "App: Test Mode",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run dev:test"
+    },
+    {
+      "name": "App: Preview Production Build",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "npm run build && npm run start"
+    }
+  ]
+}

@@ -1,5 +1,10 @@
 import * as BABYLON from "@babylonjs/core";
 import type { BabylonPresetRuntime } from "../types";
+import type { Scene } from "@babylonjs/core/scene";
+import type { GlowLayer } from "@babylonjs/core/Layers/glowLayer";
+import type { Color3 } from "@babylonjs/core/Maths/math.color";
+import type { Mesh } from "@babylonjs/core/Meshes/mesh";
+import type { StandardMaterial } from "@babylonjs/core/Materials/standardMaterial";
 
 type EnergyRingsOptions = {
   enableGlow?: boolean;
@@ -21,7 +26,7 @@ export function createEnergyRingsPreset(
   scene: unknown,
   opts?: EnergyRingsOptions,
 ): BabylonPresetRuntime {
-  const bjsScene = scene as BABYLON.Scene;
+  const bjsScene = scene as Scene;
   const enableGlow = opts?.enableGlow ?? true;
 
   const RING_COUNT = 9;
@@ -43,12 +48,13 @@ export function createEnergyRingsPreset(
   const root = new BABYLON.TransformNode("energyRingsRoot", bjsScene);
   root.position.y = 0.22;
 
-  let glowLayer: BABYLON.GlowLayer | null = null;
+  let glowLayer: GlowLayer | null = null;
   if (enableGlow) {
-    glowLayer = new BABYLON.GlowLayer("ringsGlow", bjsScene, {
+    const layer = new BABYLON.GlowLayer("ringsGlow", bjsScene, {
       blurKernelSize: 72,
     });
-    glowLayer.intensity = 0.65;
+    layer.intensity = 0.65;
+    glowLayer = layer;
   }
 
   const cDeep = new BABYLON.Color3(0.03, 0.10, 0.18);
@@ -56,7 +62,7 @@ export function createEnergyRingsPreset(
   const cWarm = new BABYLON.Color3(0.90, 0.72, 0.35);
   const cWhite = new BABYLON.Color3(1, 1, 1);
 
-  const makeMat = (name: string, emissive: BABYLON.Color3, alpha: number) => {
+  const makeMat = (name: string, emissive: Color3, alpha: number) => {
     const m = new BABYLON.StandardMaterial(name, bjsScene);
     m.diffuseColor = cDeep;
     m.specularColor = new BABYLON.Color3(0.06, 0.06, 0.07);
@@ -66,10 +72,10 @@ export function createEnergyRingsPreset(
     return m;
   };
 
-  const rings: BABYLON.Mesh[] = [];
-  const mats: BABYLON.StandardMaterial[] = [];
-  const ghosts: BABYLON.Mesh[] = [];
-  const ghostMats: BABYLON.StandardMaterial[] = [];
+  const rings: Mesh[] = [];
+  const mats: StandardMaterial[] = [];
+  const ghosts: Mesh[] = [];
+  const ghostMats: StandardMaterial[] = [];
 
   for (let i = 0; i < RING_COUNT; i++) {
     const t = i / Math.max(1, RING_COUNT - 1);

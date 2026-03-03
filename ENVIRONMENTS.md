@@ -43,9 +43,12 @@ DATABASE_URL="postgresql://<user>:<password>@<branch-host>/<db>?sslmode=require&
 - Frontend preview: `npm run preview`
 - Frontend preview (test): `npm run preview:test`
 - Fullstack dev (Express + API + Vite middleware): `npm run app:dev`
+- Fullstack dev over HTTPS (for secure mic on local/LAN): `PORT=5051 npm run app:dev:https`
 - Fullstack dev test mode: `npm run app:dev:test`
 - Fullstack build/start (production): `npm run app:build:production` then `npm run app:start:production`
 - Fullstack build/start (test): `npm run app:build:test` then `npm run app:start:test`
+- Predeploy smoke check (production): `npm run predeploy:production`
+- Predeploy smoke check (test): `npm run predeploy:test`
 - Push schema (dev/test/prod):
   - `npm run db:push`
   - `npm run db:push:test`
@@ -59,5 +62,8 @@ DATABASE_URL="postgresql://<user>:<password>@<branch-host>/<db>?sslmode=require&
 
 ## Notes
 - `npm run dev` is frontend-only Vite. Use `npm run app:dev` when backend `/api/*` routes are required.
+- For microphone capture, use a secure origin:
+  - local machine: `http://localhost:<port>`
+  - LAN devices: run `npm run app:dev:https` and open `https://<your-lan-ip>:<port>` after trusting the dev certificate.
 - Only `VITE_*` values are exposed to browser code.
 - Never store secrets in `VITE_*` variables.

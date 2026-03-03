@@ -238,23 +238,6 @@ export const presetCategories = [
     ],
   },
   {
-    name: "Babylon",
-    presets: [
-      { name: "Energy Rings (Babylon)" as PresetName, icon: "rings", shortName: "Rings B" },
-      { name: "Psy Tunnel (Babylon)" as PresetName, icon: "tunnel", shortName: "Psy B" },
-      { name: "Psy Extra (Babylon)" as PresetName, icon: "tunnel", shortName: "Psy+ B" },
-      { name: "Particle Field (Babylon)" as PresetName, icon: "particles", shortName: "Part B" },
-      { name: "Waveform Sphere (Babylon)" as PresetName, icon: "sphere", shortName: "Sphr B" },
-      { name: "Audio Bars (Babylon)" as PresetName, icon: "bars", shortName: "Bars B" },
-      { name: "Geometric Kaleidoscope (Babylon)" as PresetName, icon: "kaleidoscope", shortName: "Kal B" },
-      { name: "Cosmic Web (Babylon)" as PresetName, icon: "web", shortName: "Web B" },
-      { name: "Cymatic Sand Plate (Babylon)" as PresetName, icon: "sand", shortName: "Sand B" },
-      { name: "Water Membrane Orb (Babylon)" as PresetName, icon: "water", shortName: "Water B" },
-      { name: "Ritual Tapestry (Babylon)" as PresetName, icon: "kaleidoscope", shortName: "Rit B" },
-      { name: "Ritual Tapestry V3 (Babylon)" as PresetName, icon: "kaleidoscope", shortName: "Rit V3" },
-    ],
-  },
-  {
     name: "Cymatics",
     presets: [
       { name: "Cymatic Sand Plate" as PresetName, icon: "sand", shortName: "Sand" },
