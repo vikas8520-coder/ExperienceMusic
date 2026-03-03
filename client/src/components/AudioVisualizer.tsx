@@ -19,6 +19,8 @@ import type { UniformValues } from "@/engine/presets/types";
 import { createEvolutionState, evolveParams, getEvolutionSignals } from "@/engine/evolution/evolutionEngine";
 import type { AudioFrame, EvolutionSignals } from "@/engine/evolution/types";
 import { hasBabylonPreset } from "@/babylon/registry";
+import { MilkdropTextureBridge } from "@/engine/milkdrop/MilkdropTextureBridge";
+import { isMilkdropPreset } from "@/engine/milkdrop/MilkdropBridge";
 
 interface AudioVisualizerProps {
   getAudioData: () => AudioData;
@@ -48,6 +50,7 @@ interface AudioVisualizerProps {
   playbackTimeSec?: number;
   evolutionEnabled?: boolean;
   evolutionSpec?: PresetEvolutionConfig | null;
+  onEvolutionSignals?: (signals: EvolutionSignals) => void;
 }
 
 type ThreeSceneProps = AudioVisualizerProps & {
@@ -116,6 +119,7 @@ function resolveThreePresetName(presetName: string): string {
 }
 
 function presetRequiresWebGL(presetName: string): boolean {
+  if (isMilkdropPreset(presetName)) return true;
   if (!isFractalPreset(presetName)) {
     return !WEBGPU_PRESET_NAMES.has(presetName);
   }
@@ -4979,6 +4983,7 @@ function ThreeScene({
   playbackTimeSec = 0,
   evolutionEnabled = false,
   evolutionSpec = null,
+  onEvolutionSignals,
   useWebGPU,
 }: ThreeSceneProps) {
   const [hasError, setHasError] = useState(false);
@@ -5087,6 +5092,7 @@ function ThreeScene({
       tSec,
     );
     evolutionSignalsRef.current = signals;
+    onEvolutionSignals?.(signals);
 
     const dropBoost = settings.aiDropBoost !== false && signals.isDrop ? clamp01(signals.dropIntensity) : 0;
 
@@ -5203,6 +5209,17 @@ function ThreeScene({
       const fp = getFractalPreset(resolvedPresetName);
       if (!fp) return null;
       return <FractalPresetBridge preset={fp} getAudioData={getEvolvedAudioData} uniforms={effectiveFractalUniforms || {}} />;
+    }
+
+    if (isMilkdropPreset(resolvedPresetName)) {
+      return (
+        <MilkdropTextureBridge
+          presetName={resolvedPresetName}
+          getAudioData={getEvolvedAudioData}
+          intensity={blendedSettings.intensity}
+          imageFilters={settings.imageFilters || ["none"]}
+        />
+      );
     }
 
     return null;
@@ -5358,6 +5375,7 @@ export function AudioVisualizer({
   playbackTimeSec = 0,
   evolutionEnabled = false,
   evolutionSpec = null,
+  onEvolutionSignals,
 }: AudioVisualizerProps) {
   const [webGPUAvailable] = useState(() => hasWebGPU());
   const [rendererSupported] = useState(() => hasCompatibleRenderer());
@@ -5368,6 +5386,7 @@ export function AudioVisualizer({
     BABYLON_EXPERIMENT_ENABLED &&
     !forceThreeFallback &&
     settings.presetEnabled !== false &&
+    !isMilkdropPreset(settings.presetName) &&
     !isFractalPreset(settings.presetName) &&
     hasBabylonPreset(settings.presetName);
 
@@ -5435,6 +5454,7 @@ export function AudioVisualizer({
         playbackTimeSec={playbackTimeSec}
         evolutionEnabled={evolutionEnabled}
         evolutionSpec={evolutionSpec}
+        onEvolutionSignals={onEvolutionSignals}
         useWebGPU={useWebGPU}
       />
       {forceThreeFallback && (

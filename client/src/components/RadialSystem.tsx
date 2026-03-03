@@ -16,6 +16,8 @@ import {
 } from "@/lib/visualizer-presets";
 import { isFractalPreset } from "@/engine/presets/registry";
 import type { UniformSpec, UniformValues } from "@/engine/presets/types";
+import type { AutoEvolveConfig, AutoEvolveOutput } from "@/engine/autoevolve/moodPresetMap";
+import { presets as allPresetNames } from "@/lib/visualizer-presets";
 import { describeRingSlice } from "@/ui/radial/radialPaths";
 import { RadialTooltip } from "@/ui/radial/RadialTooltip";
 import { useFps } from "@/ui/radial/useFps";
@@ -134,6 +136,9 @@ type RadialSystemProps = {
   onVisibilityStateChange?: (state: { radialMounted: boolean; settingsPanelOpen: boolean; isPinned: boolean }) => void;
   openRequestToken?: number;
   closeRequestToken?: number;
+  autoEvolveConfig?: AutoEvolveConfig;
+  setAutoEvolveConfig?: (next: AutoEvolveConfig | ((prev: AutoEvolveConfig) => AutoEvolveConfig)) => void;
+  autoEvolveOutput?: AutoEvolveOutput;
 };
 
 const FRACTAL_PRECISION_TABS: { id: FractalPrecisionTab; label: string }[] = [
@@ -151,6 +156,20 @@ const AI_MODE_OPTIONS: Array<{ id: NonNullable<UISettings["aiEvolutionMode"]>; l
   { id: "musical", label: "Musical" },
   { id: "aggressive", label: "Aggressive" },
 ];
+
+const CHAOS_LEVEL_OPTIONS: Array<{ id: "subtle" | "medium" | "aggressive"; label: string; desc: string }> = [
+  { id: "subtle", label: "Subtle", desc: "Live VJ — phrase boundaries only" },
+  { id: "medium", label: "Medium", desc: "Alive — responds to drops & tension" },
+  { id: "aggressive", label: "Aggressive", desc: "Psychedelic — rapid & wild" },
+];
+
+const MOOD_LABELS: Record<string, string> = {
+  calm: "Calm",
+  groove: "Groove",
+  lift: "Lift",
+  hype: "Hype",
+  spark: "Spark",
+};
 
 const AI_BIAS_OPTIONS: Array<{ id: NonNullable<UISettings["aiReactivityBias"]>; label: string }> = [
   { id: "structure", label: "Structure" },
@@ -444,6 +463,93 @@ function ContextualSecondaryLayer({
         );
       })}
     </g>
+  );
+}
+
+function MoodPresetEditor({
+  moodMap,
+  onChange,
+}: {
+  moodMap: Record<string, string[]>;
+  onChange: (map: Record<string, string[]>) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const moods = ["calm", "groove", "lift", "hype", "spark"] as const;
+
+  const removePreset = (mood: string, preset: string) => {
+    const updated = { ...moodMap, [mood]: moodMap[mood].filter((p) => p !== preset) };
+    onChange(updated);
+  };
+
+  const addPreset = (mood: string, preset: string) => {
+    if (moodMap[mood].includes(preset)) return;
+    onChange({ ...moodMap, [mood]: [...moodMap[mood], preset] });
+  };
+
+  // Available presets not assigned to this mood
+  const getAvailable = (mood: string) =>
+    allPresetNames.filter(
+      (p) => !p.includes("(Babylon)") && !moodMap[mood].includes(p),
+    );
+
+  return (
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center justify-between text-[10px] uppercase tracking-widest text-white/55 transition hover:text-white/75"
+        data-radial-node="true"
+      >
+        <span>Mood Preset Map</span>
+        <span className="text-[9px]">{expanded ? "▲" : "▼"}</span>
+      </button>
+      {expanded && (
+        <div className="space-y-2 pt-1">
+          {moods.map((mood) => (
+            <div key={mood} className="space-y-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-white/60">
+                {MOOD_LABELS[mood]}
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {moodMap[mood]?.map((preset) => (
+                  <span
+                    key={preset}
+                    className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[9px] text-white/70"
+                  >
+                    {preset}
+                    <button
+                      type="button"
+                      onClick={() => removePreset(mood, preset)}
+                      className="ml-0.5 text-white/40 hover:text-red-400"
+                      data-radial-node="true"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {/* Add preset dropdown */}
+                <select
+                  className="h-5 rounded border border-white/15 bg-white/5 px-1 text-[9px] text-white/60"
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) addPreset(mood, e.target.value);
+                    e.target.value = "";
+                  }}
+                  data-radial-node="true"
+                >
+                  <option value="">+ Add</option>
+                  {getAvailable(mood).map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -825,6 +931,9 @@ export function RadialSystem({
   onVisibilityStateChange,
   openRequestToken = 0,
   closeRequestToken = 0,
+  autoEvolveConfig,
+  setAutoEvolveConfig,
+  autoEvolveOutput,
 }: RadialSystemProps) {
   const isCreateOrPerform = activeTab === "create" || activeTab === "perform";
   const isFractal = isFractalPreset(settings.presetName);
@@ -2598,6 +2707,126 @@ export function RadialSystem({
                               </div>
                             )}
                           </div>
+                        </div>
+                      )}
+
+                      {/* Auto-Evolve Panel — universally visible */}
+                      {autoEvolveConfig && setAutoEvolveConfig && (
+                        <div className="radial-settings-section mt-3 space-y-3" data-radial-node="true">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-white/70">Auto-Evolve</p>
+                            <Switch
+                              checked={autoEvolveConfig.enabled}
+                              onCheckedChange={(checked) =>
+                                setAutoEvolveConfig((prev) => ({ ...prev, enabled: checked }))
+                              }
+                              data-testid="switch-auto-evolve"
+                            />
+                          </div>
+
+                          {/* Chaos Level */}
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between text-xs">
+                              <span className="uppercase tracking-widest text-white/55">Chaos Level</span>
+                              <span className="radial-value-chip text-[10px] font-mono text-white/90">
+                                {autoEvolveConfig.chaos.toUpperCase()}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {CHAOS_LEVEL_OPTIONS.map((opt) => {
+                                const active = autoEvolveConfig.chaos === opt.id;
+                                return (
+                                  <button
+                                    key={opt.id}
+                                    type="button"
+                                    onClick={() =>
+                                      setAutoEvolveConfig((prev) => ({ ...prev, chaos: opt.id }))
+                                    }
+                                    disabled={!autoEvolveConfig.enabled}
+                                    className={`rounded border px-2 py-1 text-[10px] uppercase tracking-[0.12em] transition ${
+                                      active
+                                        ? "border-cyan-300/60 bg-gradient-to-r from-fuchsia-500/20 to-cyan-400/20 text-white"
+                                        : "border-white/15 bg-white/5 text-white/65 hover:bg-white/10"
+                                    } ${!autoEvolveConfig.enabled ? "opacity-45" : ""}`}
+                                    data-radial-node="true"
+                                    data-testid={`button-chaos-${opt.id}`}
+                                    title={opt.desc}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Status indicators (shown when enabled) */}
+                          {autoEvolveConfig.enabled && autoEvolveOutput && (
+                            <div className="space-y-2 rounded border border-white/10 bg-white/[0.03] p-2.5">
+                              {/* Tension bar */}
+                              <div className="space-y-1">
+                                <div className="flex justify-between text-[10px]">
+                                  <span className="uppercase tracking-widest text-white/55">Tension</span>
+                                  <span className="font-mono text-white/80">
+                                    {Math.round(autoEvolveOutput.tensionLevel * 100)}%
+                                  </span>
+                                </div>
+                                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                                  <div
+                                    className="h-full rounded-full transition-all duration-200"
+                                    style={{
+                                      width: `${autoEvolveOutput.tensionLevel * 100}%`,
+                                      background: `linear-gradient(90deg, #22d3ee, #d946ef)`,
+                                    }}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Phase + Mood row */}
+                              <div className="flex items-center justify-between gap-2 text-[10px]">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="uppercase tracking-widest text-white/55">Phase</span>
+                                  <span
+                                    className={`rounded-sm border px-1.5 py-0.5 font-mono uppercase tracking-wider ${
+                                      autoEvolveOutput.tensionPhase === "peak"
+                                        ? "border-fuchsia-400/50 bg-fuchsia-500/20 text-fuchsia-300"
+                                        : autoEvolveOutput.tensionPhase === "building"
+                                          ? "border-amber-400/50 bg-amber-500/20 text-amber-300"
+                                          : autoEvolveOutput.tensionPhase === "releasing"
+                                            ? "border-cyan-400/50 bg-cyan-500/20 text-cyan-300"
+                                            : "border-white/20 bg-white/5 text-white/60"
+                                    }`}
+                                  >
+                                    {autoEvolveOutput.tensionPhase}
+                                  </span>
+                                </div>
+                                {autoEvolveOutput.currentMood && (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="uppercase tracking-widest text-white/55">Mood</span>
+                                    <span className="rounded-sm border border-white/20 bg-white/5 px-1.5 py-0.5 font-mono uppercase tracking-wider text-white/70">
+                                      {autoEvolveOutput.currentMood}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Last switch reason */}
+                              {autoEvolveOutput.lastSwitchReason && (
+                                <div className="text-[9px] italic text-white/40">
+                                  Last: {autoEvolveOutput.lastSwitchReason}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Mood-preset mapping editor (collapsible) */}
+                          {autoEvolveConfig.enabled && (
+                            <MoodPresetEditor
+                              moodMap={autoEvolveConfig.moodMap}
+                              onChange={(moodMap) =>
+                                setAutoEvolveConfig((prev) => ({ ...prev, moodMap }))
+                              }
+                            />
+                          )}
                         </div>
                       )}
                     </ResizablePanel>

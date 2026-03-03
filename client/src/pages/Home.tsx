@@ -37,6 +37,10 @@ import { ActionCluster } from "@/components/layout/ActionCluster";
 import { MiniPlayer } from "@/components/player/MiniPlayer";
 import { ProjectionButton } from "@/components/layout/ProjectionButton";
 import { useProjection } from "@/hooks/useProjection";
+import { useAutoEvolve } from "@/hooks/use-auto-evolve";
+import type { EvolutionSignals } from "@/engine/evolution/types";
+import { createDefaultAutoEvolveConfig, saveMoodPresetMap } from "@/engine/autoevolve/moodPresetMap";
+import type { AutoEvolveConfig } from "@/engine/autoevolve/moodPresetMap";
 
 export interface SavedTrack {
   id: string;
@@ -346,6 +350,16 @@ export default function Home() {
     glowEnabled: true,
     glowIntensity: 1.0,
   });
+
+  // Auto-Evolve state
+  const [autoEvolveConfig, setAutoEvolveConfig] = useState<AutoEvolveConfig>(createDefaultAutoEvolveConfig);
+  const evolutionSignalsRef = useRef<EvolutionSignals | null>(null);
+  const handleEvolutionSignals = useCallback((signals: EvolutionSignals) => {
+    evolutionSignalsRef.current = signals;
+  }, []);
+  const handleAutoEvolveSwitch = useCallback((presetName: string) => {
+    setSettings((prev: any) => ({ ...prev, presetName }));
+  }, []);
 
   const [fractalUniforms, setFractalUniforms] = useState<UniformValues>({});
   const [fractalSpecs, setFractalSpecs] = useState<UniformSpec[]>([]);
@@ -841,6 +855,20 @@ export default function Home() {
       modeIndex,
     };
   }, [getAudioData, micReactiveEnabled, micStatus, micFeatures]);
+
+  // Auto-Evolve hook
+  const autoEvolveOutput = useAutoEvolve({
+    config: autoEvolveConfig,
+    currentPreset: settings.presetName,
+    getAudioData: getReactiveAudioData,
+    evolutionSignalsRef,
+    onSwitchPreset: handleAutoEvolveSwitch,
+  });
+
+  // Persist mood map changes
+  useEffect(() => {
+    saveMoodPresetMap(autoEvolveConfig.moodMap);
+  }, [autoEvolveConfig.moodMap]);
 
   const toggleRadial = useCallback(() => {
     setShowRadial(prev => {
@@ -1385,6 +1413,7 @@ export default function Home() {
         fractalUniforms={fractalUniforms}
         renderProfile={renderProfile}
         adaptiveQualityTier={adaptiveQualityTier}
+        onEvolutionSignals={handleEvolutionSignals}
       />
 
       {/* Canvas interaction layer */}
@@ -1620,6 +1649,9 @@ export default function Home() {
           onToggleMicReactivity={toggleMicReactivity}
           openRequestToken={radialOpenRequestToken}
           closeRequestToken={radialCloseRequestToken}
+          autoEvolveConfig={autoEvolveConfig}
+          setAutoEvolveConfig={setAutoEvolveConfig}
+          autoEvolveOutput={autoEvolveOutput}
         />
       )}
 
