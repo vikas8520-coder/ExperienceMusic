@@ -211,6 +211,18 @@ export const presets = [
   "Premium Field",
   "Mandelbrot Explorer",
   "Julia Orbit Trap",
+  "Burning Ship",
+  "Multibrot",
+  "Phoenix",
+  "Newton",
+  "Living Tunnel",
+  "Gray Scott",
+  "Curl Flow",
+  "MilkDrop: Bass Kicks",
+  "MilkDrop: Cosmic Dust",
+  "MilkDrop: Drain to Heaven",
+  "MilkDrop: Chasers",
+  "MilkDrop: Fractopia",
 ] as const;
 
 export type PresetName = typeof presets[number];
@@ -222,6 +234,13 @@ export const presetCategories = [
     presets: [
       { name: "Mandelbrot Explorer" as PresetName, icon: "mandelbrot", shortName: "Mandelbrot" },
       { name: "Julia Orbit Trap" as PresetName, icon: "juliaorbittrap", shortName: "Orbit Trap" },
+      { name: "Burning Ship" as PresetName, icon: "fractal", shortName: "BurningShip" },
+      { name: "Multibrot" as PresetName, icon: "fractal", shortName: "Multibrot" },
+      { name: "Phoenix" as PresetName, icon: "fractal", shortName: "Phoenix" },
+      { name: "Newton" as PresetName, icon: "fractal", shortName: "Newton" },
+      { name: "Living Tunnel" as PresetName, icon: "fractal", shortName: "Tunnel" },
+      { name: "Gray Scott" as PresetName, icon: "fractal", shortName: "GrayScott" },
+      { name: "Curl Flow" as PresetName, icon: "fractal", shortName: "CurlFlow" },
     ],
   },
   {
@@ -245,6 +264,16 @@ export const presetCategories = [
       { name: "Chladni Geometry" as PresetName, icon: "geometry", shortName: "Chladni" },
       { name: "Resonant Field Lines" as PresetName, icon: "field", shortName: "Field" },
       { name: "Premium Field" as PresetName, icon: "field", shortName: "Premium" },
+    ],
+  },
+  {
+    name: "MilkDrop",
+    presets: [
+      { name: "MilkDrop: Bass Kicks" as PresetName, icon: "milkdrop", shortName: "BassKick" },
+      { name: "MilkDrop: Cosmic Dust" as PresetName, icon: "milkdrop", shortName: "Cosmic" },
+      { name: "MilkDrop: Drain to Heaven" as PresetName, icon: "milkdrop", shortName: "Drain" },
+      { name: "MilkDrop: Chasers" as PresetName, icon: "milkdrop", shortName: "Chasers" },
+      { name: "MilkDrop: Fractopia" as PresetName, icon: "milkdrop", shortName: "Fractopia" },
     ],
   },
 ] as const;
@@ -476,6 +505,13 @@ const presetEvolutionMap: Partial<Record<PresetName, { preset: EvolutionPreset; 
   "Chladni Geometry": { preset: CHLADNI_EVOLUTION, defaultBpm: 130 },
   "Mandelbrot Explorer": { preset: FRACTAL_AI_EVOLUTION, defaultBpm: 128 },
   "Julia Orbit Trap": { preset: FRACTAL_AI_EVOLUTION, defaultBpm: 128 },
+  "Burning Ship": { preset: FRACTAL_AI_EVOLUTION, defaultBpm: 130 },
+  "Multibrot": { preset: FRACTAL_AI_EVOLUTION, defaultBpm: 128 },
+  "Phoenix": { preset: FRACTAL_AI_EVOLUTION, defaultBpm: 132 },
+  "Newton": { preset: FRACTAL_AI_EVOLUTION, defaultBpm: 126 },
+  "Living Tunnel": { preset: FRACTAL_AI_EVOLUTION, defaultBpm: 134 },
+  "Gray Scott": { preset: FRACTAL_AI_EVOLUTION, defaultBpm: 128 },
+  "Curl Flow": { preset: FRACTAL_AI_EVOLUTION, defaultBpm: 130 },
 };
 
 export function getPresetEvolutionConfig(

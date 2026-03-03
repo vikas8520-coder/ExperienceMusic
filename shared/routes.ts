@@ -83,12 +83,60 @@ export const api = {
         200: z.array(z.custom<typeof presets.$inferSelect>()),
       },
     },
+    get: {
+      method: 'GET' as const,
+      path: '/api/presets/:id',
+      responses: {
+        200: z.custom<typeof presets.$inferSelect>(),
+        404: z.object({ message: z.string() }),
+      },
+    },
     create: {
       method: 'POST' as const,
       path: '/api/presets',
       input: insertPresetSchema,
       responses: {
         201: z.custom<typeof presets.$inferSelect>(),
+      },
+    },
+    update: {
+      method: 'PUT' as const,
+      path: '/api/presets/:id',
+      input: insertPresetSchema.partial(),
+      responses: {
+        200: z.custom<typeof presets.$inferSelect>(),
+        404: z.object({ message: z.string() }),
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/presets/:id',
+      responses: {
+        200: z.object({ message: z.string() }),
+        404: z.object({ message: z.string() }),
+      },
+    },
+    share: {
+      method: 'POST' as const,
+      path: '/api/presets/:id/share',
+      responses: {
+        200: z.object({ shareCode: z.string() }),
+        404: z.object({ message: z.string() }),
+      },
+    },
+    getByShareCode: {
+      method: 'GET' as const,
+      path: '/api/presets/shared/:code',
+      responses: {
+        200: z.custom<typeof presets.$inferSelect>(),
+        404: z.object({ message: z.string() }),
+      },
+    },
+    listPublic: {
+      method: 'GET' as const,
+      path: '/api/presets/public',
+      responses: {
+        200: z.array(z.custom<typeof presets.$inferSelect>()),
       },
     },
   },

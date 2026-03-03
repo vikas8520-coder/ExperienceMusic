@@ -1,0 +1,95 @@
+import { describe, it, expect } from "vitest";
+import { convertAudioForButterchurn, MILKDROP_PRESET_NAMES } from "@/engine/milkdrop/MilkdropBridge";
+import type { AudioData } from "@/hooks/use-audio-analyzer";
+
+function createMockAudioData(overrides: Partial<AudioData> = {}): AudioData {
+  return {
+    sub: 0.5,
+    bass: 0.6,
+    mid: 0.4,
+    high: 0.3,
+    energy: 0.5,
+    kick: 0.2,
+    dominantFreq: 200,
+    modeIndex: 4,
+    frequencyData: new Uint8Array(1024).fill(128),
+    bpm: 120,
+    beatPhase: 0.5,
+    bpmSin1: 0,
+    bpmSin2: 0,
+    bpmSin4: 0,
+    bpmCos1: -1,
+    bassHits: 2,
+    bassPresence: 0.5,
+    ...overrides,
+  };
+}
+
+describe("MilkdropBridge — Audio Conversion", () => {
+  it("produces 512-bin frequency data", () => {
+    const audioData = createMockAudioData();
+    const { frequencyData } = convertAudioForButterchurn(audioData);
+
+    expect(frequencyData).toBeInstanceOf(Uint8Array);
+    expect(frequencyData.length).toBe(512);
+  });
+
+  it("produces 512-sample waveform data", () => {
+    const audioData = createMockAudioData();
+    const { waveformData } = convertAudioForButterchurn(audioData);
+
+    expect(waveformData).toBeInstanceOf(Uint8Array);
+    expect(waveformData.length).toBe(512);
+  });
+
+  it("handles empty frequency data gracefully", () => {
+    const audioData = createMockAudioData({
+      frequencyData: new Uint8Array(0),
+    });
+
+    const { frequencyData, waveformData } = convertAudioForButterchurn(audioData);
+    expect(frequencyData.length).toBe(512);
+    expect(waveformData.length).toBe(512);
+    // With no frequency data, all bins should be 0
+    expect(frequencyData.every((v) => v === 0)).toBe(true);
+  });
+
+  it("resamples 1024 bins to 512 correctly", () => {
+    const inputData = new Uint8Array(1024);
+    inputData[0] = 255;
+    inputData[1] = 200;
+
+    const audioData = createMockAudioData({ frequencyData: inputData });
+    const { frequencyData } = convertAudioForButterchurn(audioData);
+
+    // First bin should be from index 0 of source (ratio = 2)
+    expect(frequencyData[0]).toBe(255);
+  });
+
+  it("waveform values stay within 0-255 range", () => {
+    const audioData = createMockAudioData({
+      bass: 1.0,
+      mid: 1.0,
+      high: 1.0,
+    });
+
+    const { waveformData } = convertAudioForButterchurn(audioData);
+    for (const val of waveformData) {
+      expect(val).toBeGreaterThanOrEqual(0);
+      expect(val).toBeLessThanOrEqual(255);
+    }
+  });
+});
+
+describe("MilkDrop Preset Names", () => {
+  it("has at least 20 curated presets", () => {
+    expect(MILKDROP_PRESET_NAMES.length).toBe(20);
+  });
+
+  it("all entries are non-empty strings", () => {
+    for (const name of MILKDROP_PRESET_NAMES) {
+      expect(typeof name).toBe("string");
+      expect(name.length).toBeGreaterThan(0);
+    }
+  });
+});

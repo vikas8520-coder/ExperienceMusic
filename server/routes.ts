@@ -256,6 +256,54 @@ Respond in JSON format:
     res.status(201).json(preset);
   });
 
+  // Single preset
+  app.get(api.presets.get.path, async (req, res) => {
+    const id = Number(req.params.id);
+    const preset = await storage.getPreset(id);
+    if (!preset) return res.status(404).json({ message: "Preset not found" });
+    res.json(preset);
+  });
+
+  // Update preset
+  app.put(api.presets.update.path, async (req, res) => {
+    const id = Number(req.params.id);
+    const preset = await storage.updatePreset(id, req.body);
+    if (!preset) return res.status(404).json({ message: "Preset not found" });
+    res.json(preset);
+  });
+
+  // Delete preset
+  app.delete(api.presets.delete.path, async (req, res) => {
+    const id = Number(req.params.id);
+    const deleted = await storage.deletePreset(id);
+    if (!deleted) return res.status(404).json({ message: "Preset not found" });
+    res.json({ message: "Preset deleted" });
+  });
+
+  // Share preset (generate share code)
+  app.post(api.presets.share.path, async (req, res) => {
+    const id = Number(req.params.id);
+    const existing = await storage.getPreset(id);
+    if (!existing) return res.status(404).json({ message: "Preset not found" });
+    const shareCode = Math.random().toString(36).substring(2, 10);
+    await storage.setShareCode(id, shareCode);
+    res.json({ shareCode });
+  });
+
+  // Get preset by share code
+  app.get(api.presets.getByShareCode.path, async (req, res) => {
+    const code = req.params.code;
+    const preset = await storage.getPresetByShareCode(code);
+    if (!preset) return res.status(404).json({ message: "Preset not found" });
+    res.json(preset);
+  });
+
+  // List public presets
+  app.get(api.presets.listPublic.path, async (req, res) => {
+    const publicPresets = await storage.getPublicPresets();
+    res.json(publicPresets);
+  });
+
   // Seed default data if none exists. Do not block app startup when DB is unavailable.
   try {
     const existingTracks = await storage.getTracks();

@@ -24,6 +24,10 @@ import type { UniformValues, UniformSpec } from "@/engine/presets/types";
 import { createCanvasRecorder } from "@/lib/canvasRecorder";
 import { useAudioFeatures } from "@/audio/useAudioFeatures";
 import { parseBlob } from "music-metadata";
+import { CommandPalette } from "@/components/CommandPalette";
+import { SessionStats } from "@/components/SessionStats";
+import { useSessionStats } from "@/hooks/useSessionStats";
+import { startVirtualCamera, stopVirtualCamera } from "@/lib/virtualCamera";
 
 export interface SavedTrack {
   id: string;
@@ -71,6 +75,11 @@ export default function Home() {
   const [adaptiveQualityTier, setAdaptiveQualityTier] = useState<0 | 1 | 2>(1);
   const [micReactiveEnabled, setMicReactiveEnabled] = useState(false);
   const [radialOpenRequestToken, setRadialOpenRequestToken] = useState(0);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [ambientMode, setAmbientMode] = useState(false);
+  const ambientTimerRef = useRef<number | null>(null);
+  const [virtualCameraOn, setVirtualCameraOn] = useState(false);
+  const virtualCameraStreamRef = useRef<MediaStream | null>(null);
   const lastTapRef = useRef(0);
   const hideTimerRef = useRef<number | null>(null);
   const pinchRef = useRef<{ startDist: number; startZoom: number; mode: "fractal" | "scene"; min: number; max: number } | null>(null);
@@ -376,12 +385,20 @@ export default function Home() {
 
   const markUiActivity = useCallback(() => {
     setUiAutoHidden(false);
+    setAmbientMode(false);
     if (hideTimerRef.current !== null) {
       window.clearTimeout(hideTimerRef.current);
     }
     hideTimerRef.current = window.setTimeout(() => {
       setUiAutoHidden(true);
     }, 1800);
+    // Ambient mode: hide controls after 4s idle when playing
+    if (ambientTimerRef.current !== null) {
+      window.clearTimeout(ambientTimerRef.current);
+    }
+    ambientTimerRef.current = window.setTimeout(() => {
+      setAmbientMode(true);
+    }, 4000);
   }, []);
 
   const handleCanvasClick = useCallback((e: MouseEvent<HTMLDivElement>) => {
@@ -723,6 +740,13 @@ export default function Home() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+K / Ctrl+K: open command palette (works from anywhere)
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
       // Ignore if user is interacting with form elements, dropdowns, or dialogs
       const target = e.target as HTMLElement;
       if (
@@ -1251,7 +1275,22 @@ export default function Home() {
         data-testid="canvas-click-catcher"
       />
 
-      <div className={uiAutoHidden ? "opacity-0 pointer-events-none transition-opacity duration-300" : "opacity-100 transition-opacity duration-300"}>
+      {/* Ambient mode peek bar */}
+      {ambientMode && isPlaying && (
+        <div
+          className="fixed bottom-0 left-0 right-0 h-1 z-50 bg-white/10 hover:bg-white/30 transition-colors cursor-pointer"
+          onMouseEnter={() => { setAmbientMode(false); markUiActivity(); }}
+          data-testid="ambient-peek-bar"
+        />
+      )}
+
+      <div className={
+        (ambientMode && isPlaying)
+          ? "opacity-0 translate-y-4 pointer-events-none transition-all duration-700"
+          : uiAutoHidden
+            ? "opacity-0 pointer-events-none transition-opacity duration-300"
+            : "opacity-100 transition-all duration-300"
+      }>
         <RadialSystem
           activeTab={activeTab}
           settings={settings}
@@ -1336,7 +1375,29 @@ export default function Home() {
           onPlayTrack={handleSoundCloudTrack}
         />
       </div>
-      
+
+      {/* Command Palette (Cmd+K) */}
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        onSelectPreset={(name) => setSettings((s) => ({ ...s, presetName: name }))}
+        onTogglePlay={togglePlay}
+        onSavePreset={handleSavePreset}
+        onToggleTrails={() => setSettings((s) => ({ ...s, trailsOn: !s.trailsOn }))}
+        onToggleDarkOverlay={() => setSettings((s) => ({ ...s, darkOverlay: !s.darkOverlay }))}
+        onToggleLibrary={() => setShowLibrary((v) => !v)}
+        isPlaying={isPlaying}
+        trailsOn={settings.trailsOn}
+        darkOverlay={settings.darkOverlay}
+      />
+
+      {/* Session Stats */}
+      <SessionStats
+        isPlaying={isPlaying}
+        presetName={settings.presetName}
+        getAudioData={getReactiveAudioData}
+      />
+
     </div>
   );
 }

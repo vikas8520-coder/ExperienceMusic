@@ -67,7 +67,7 @@ function PsyPresetWrapper({
   opacity?: number;
   blending?: THREE.Blending;
 }) {
-  const audioDataRef = useRef<AudioData>({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, dominantFreq: 200, modeIndex: 1, frequencyData: new Uint8Array(0) });
+  const audioDataRef = useRef<AudioData>({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, dominantFreq: 200, modeIndex: 1, frequencyData: new Uint8Array(0), bpm: 0, beatPhase: 0, bpmSin1: 0, bpmSin2: 0, bpmSin4: 0, bpmCos1: 1, bassHits: 0, bassPresence: 0 });
 
   useFrame(() => {
     audioDataRef.current = getAudioData();
@@ -4760,7 +4760,7 @@ function ZoomableScene({
 }
 
 function AudioReactiveEffects({ getAudioData, settings }: { getAudioData: () => AudioData; settings: any }) {
-  const audioDataRef = useRef<AudioData>({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, dominantFreq: 200, modeIndex: 1, frequencyData: new Uint8Array(0) });
+  const audioDataRef = useRef<AudioData>({ sub: 0, bass: 0, mid: 0, high: 0, energy: 0, kick: 0, dominantFreq: 200, modeIndex: 1, frequencyData: new Uint8Array(0), bpm: 0, beatPhase: 0, bpmSin1: 0, bpmSin2: 0, bpmSin4: 0, bpmCos1: 1, bassHits: 0, bassPresence: 0 });
   
   useFrame(() => {
     audioDataRef.current = getAudioData();

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, jsonb, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, jsonb, timestamp, integer, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
@@ -19,6 +19,15 @@ export const presets = pgTable("presets", {
   trackId: integer("track_id").references(() => tracks.id),
   settings: jsonb("settings").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+  // Marketplace fields
+  author: text("author"),
+  description: text("description"),
+  tags: jsonb("tags").$type<string[]>(),
+  thumbnail: text("thumbnail"),
+  shareCode: text("share_code"),
+  version: integer("version").default(1),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  isPublic: boolean("is_public").default(false),
 });
 
 export const conversations = pgTable("conversations", {

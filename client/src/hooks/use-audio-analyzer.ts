@@ -10,6 +10,15 @@ export interface AudioData {
   dominantFreq: number;  // Dominant frequency in Hz for cymatics mode selection
   modeIndex: number;     // Quantized mode index (1-8) for resonance snapping
   frequencyData: Uint8Array;
+  // BPM & beat-phase tracking
+  bpm: number;          // Detected BPM (0 if unknown)
+  beatPhase: number;    // Phase within current beat (0→1)
+  bpmSin1: number;      // sin(2π * beatPhase)
+  bpmSin2: number;      // sin(4π * beatPhase) — half-beat
+  bpmSin4: number;      // sin(8π * beatPhase) — quarter-beat
+  bpmCos1: number;      // cos(2π * beatPhase)
+  bassHits: number;     // Exponential decay bass hit counter
+  bassPresence: number; // Smoothed bass energy
 }
 
 // Smooth value with EMA (exponential moving average)
@@ -26,10 +35,16 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
   const lastAudioElementRef = useRef<HTMLAudioElement | null>(null);
   
   // Smoothed values for each band with fallback decay
-  const smoothedRef = useRef({ 
-    sub: 0, bass: 0, mid: 0, high: 0, kick: 0, lastBass: 0, 
+  const smoothedRef = useRef({
+    sub: 0, bass: 0, mid: 0, high: 0, kick: 0, lastBass: 0,
     dominantFreq: 200, modeIndex: 1,
-    lastUpdateTime: Date.now()
+    lastUpdateTime: Date.now(),
+    // BPM detection state
+    onsetTimes: [] as number[],   // Circular buffer of onset timestamps
+    bpm: 0,
+    lastBeatTime: 0,
+    bassHits: 0,
+    bassPresence: 0,
   });
 
   const getAudioData = useCallback((): AudioData => {
@@ -52,16 +67,28 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
       // Keep minimum fallback values to prevent shader artifacts
       const minFallback = 0.02;
       
-      return { 
-        sub: Math.max(s.sub, minFallback), 
-        bass: Math.max(s.bass, minFallback), 
-        mid: Math.max(s.mid, minFallback), 
-        high: Math.max(s.high, minFallback), 
-        energy: Math.max((s.sub + s.bass + s.mid + s.high) * 0.25, minFallback), 
-        kick: s.kick, 
-        dominantFreq: s.dominantFreq, 
-        modeIndex: s.modeIndex, 
-        frequencyData: new Uint8Array(0) 
+      s.bassHits *= 0.95;
+      const beatPhase = s.bpm > 0 && s.lastBeatTime > 0
+        ? ((now - s.lastBeatTime) * s.bpm / 60000) % 1
+        : 0;
+      return {
+        sub: Math.max(s.sub, minFallback),
+        bass: Math.max(s.bass, minFallback),
+        mid: Math.max(s.mid, minFallback),
+        high: Math.max(s.high, minFallback),
+        energy: Math.max((s.sub + s.bass + s.mid + s.high) * 0.25, minFallback),
+        kick: s.kick,
+        dominantFreq: s.dominantFreq,
+        modeIndex: s.modeIndex,
+        frequencyData: new Uint8Array(0),
+        bpm: s.bpm,
+        beatPhase,
+        bpmSin1: Math.sin(2 * Math.PI * beatPhase),
+        bpmSin2: Math.sin(4 * Math.PI * beatPhase),
+        bpmSin4: Math.sin(8 * Math.PI * beatPhase),
+        bpmCos1: Math.cos(2 * Math.PI * beatPhase),
+        bassHits: s.bassHits,
+        bassPresence: Math.max(s.bass, minFallback),
       };
     }
 
@@ -122,10 +149,44 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
     const kickThreshold = 0.15;
     if (bassJump > kickThreshold) {
       s.kick = Math.min(s.kick + bassJump * 2, 1);
+      // Record onset for BPM detection
+      s.onsetTimes.push(now);
+      if (s.onsetTimes.length > 50) s.onsetTimes.shift();
+      s.lastBeatTime = now;
+      s.bassHits = Math.min(s.bassHits + 1, 10);
+      // Compute BPM from onset intervals
+      if (s.onsetTimes.length >= 4) {
+        const intervals: number[] = [];
+        for (let i = 1; i < s.onsetTimes.length; i++) {
+          const interval = s.onsetTimes[i] - s.onsetTimes[i - 1];
+          if (interval > 200 && interval < 2000) intervals.push(interval);
+        }
+        if (intervals.length >= 3) {
+          // Histogram approach: bucket intervals and find dominant
+          const buckets = new Map<number, number>();
+          for (const iv of intervals) {
+            const bucket = Math.round(iv / 20) * 20; // 20ms buckets
+            buckets.set(bucket, (buckets.get(bucket) || 0) + 1);
+          }
+          let bestBucket = 0, bestCount = 0;
+          buckets.forEach((count, bucket) => {
+            if (count > bestCount) { bestCount = count; bestBucket = bucket; }
+          });
+          if (bestBucket > 0) {
+            const candidateBpm = 60000 / bestBucket;
+            // Only accept reasonable BPMs (60-200)
+            if (candidateBpm >= 60 && candidateBpm <= 200) {
+              s.bpm = ema(candidateBpm, s.bpm || candidateBpm, 0.15);
+            }
+          }
+        }
+      }
     } else {
       s.kick = Math.max(s.kick * 0.85, 0); // Decay
+      s.bassHits *= 0.97;
     }
     s.lastBass = bassRaw;
+    s.bassPresence = ema(bassRaw, s.bassPresence, 0.2);
 
     // Energy is weighted average (bass/sub matter more for "feel")
     const energy = s.sub * 0.3 + s.bass * 0.35 + s.mid * 0.2 + s.high * 0.15;
@@ -162,16 +223,29 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
     // Slowly transition mode index to avoid rapid flipping
     s.modeIndex = Math.round(ema(newModeIndex, s.modeIndex, 0.15));
 
-    return { 
+    // Beat phase calculation
+    const beatPhase = s.bpm > 0 && s.lastBeatTime > 0
+      ? ((now - s.lastBeatTime) * s.bpm / 60000) % 1
+      : 0;
+
+    return {
       sub: Math.min(s.sub, 1),
-      bass: Math.min(s.bass, 1), 
-      mid: Math.min(s.mid, 1), 
-      high: Math.min(s.high, 1), 
+      bass: Math.min(s.bass, 1),
+      mid: Math.min(s.mid, 1),
+      high: Math.min(s.high, 1),
       energy: Math.min(energy, 1),
       kick: Math.min(s.kick, 1),
       dominantFreq: s.dominantFreq,
       modeIndex: Math.max(1, Math.min(8, s.modeIndex)),
-      frequencyData: data 
+      frequencyData: data,
+      bpm: Math.round(s.bpm),
+      beatPhase,
+      bpmSin1: Math.sin(2 * Math.PI * beatPhase),
+      bpmSin2: Math.sin(4 * Math.PI * beatPhase),
+      bpmSin4: Math.sin(8 * Math.PI * beatPhase),
+      bpmCos1: Math.cos(2 * Math.PI * beatPhase),
+      bassHits: s.bassHits,
+      bassPresence: s.bassPresence,
     };
   }, []);
 

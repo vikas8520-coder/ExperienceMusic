@@ -5,6 +5,14 @@ export type AudioFeatures = {
   treble: number;
   beat: number;
   spectrum?: Float32Array;
+  bpm: number;
+  beatPhase: number;
+  bpmSin1: number;
+  bpmSin2: number;
+  bpmSin4: number;
+  bpmCos1: number;
+  bassHits: number;
+  bassPresence: number;
 };
 
 export type PresetContext = {

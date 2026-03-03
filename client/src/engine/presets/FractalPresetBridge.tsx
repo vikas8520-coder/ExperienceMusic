@@ -10,6 +10,14 @@ function audioDataToFeatures(ad: AudioData): AudioFeatures {
     mid: ad.mid,
     treble: ad.high,
     beat: ad.kick,
+    bpm: ad.bpm,
+    beatPhase: ad.beatPhase,
+    bpmSin1: ad.bpmSin1,
+    bpmSin2: ad.bpmSin2,
+    bpmSin4: ad.bpmSin4,
+    bpmCos1: ad.bpmCos1,
+    bassHits: ad.bassHits,
+    bassPresence: ad.bassPresence,
   };
 }
 
