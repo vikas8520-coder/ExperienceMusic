@@ -1,4 +1,4 @@
-import { useRef, useMemo, useState, useEffect, useCallback } from "react";
+import { useRef, useMemo, useState, useEffect, useCallback, Component } from "react";
 import { Canvas, useFrame, useThree, extend } from "@react-three/fiber";
 import { OrbitControls, Sphere, shaderMaterial } from "@react-three/drei";
 import * as THREE from "three";
@@ -39,6 +39,8 @@ interface AudioVisualizerProps {
     psyOverlays?: PsyOverlayId[];
   };
   backgroundImage?: string | null;
+  artworkLayerMode?: "behind" | "screen" | "multiply" | "overlay";
+  artworkSizing?: "cover" | "contain" | "stretch";
   zoom?: number;
   fractalUniforms?: UniformValues;
   renderProfile?: "mobile60" | "desktopCinematic" | "exportQuality";
@@ -4663,59 +4665,122 @@ const filterIdToType: Record<string, number> = {
 };
 
 // Background plane for thumbnail with psy trance filters - with smooth filter transitions
-function BackgroundImage({ 
-  imageUrl, 
-  filterId = "none", 
-  intensity = 1, 
+function BackgroundImage({
+  imageUrl,
+  filterId = "none",
+  intensity = 1,
   getAudioData,
-  layerOffset = 0
-}: { 
-  imageUrl: string; 
+  layerOffset = 0,
+  layerMode = "behind",
+  sizing = "cover",
+}: {
+  imageUrl: string;
   filterId?: string;
   intensity?: number;
   getAudioData?: () => AudioData;
   layerOffset?: number;
+  layerMode?: "behind" | "screen" | "multiply" | "overlay";
+  sizing?: "cover" | "contain" | "stretch";
 }) {
   const materialRef = useRef<any>(null);
   const prevFilterRef = useRef(filterId);
   const transitionRef = useRef({ progress: 1, targetFilter: filterId, prevFilter: filterId });
-  
+  const [imageAspect, setImageAspect] = useState(16 / 9);
+  const { viewport } = useThree();
+
+  // Load texture and track image aspect ratio
   const texture = useMemo(() => {
     const loader = new THREE.TextureLoader();
-    const tex = loader.load(imageUrl);
+    const tex = loader.load(imageUrl, (loaded) => {
+      if (loaded.image) {
+        setImageAspect(loaded.image.width / loaded.image.height);
+      }
+    });
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, [imageUrl]);
 
+  // Compute mesh scale based on sizing mode
+  // Camera at z=15, FOV 45° → visible height at z=-30 (distance=45): 2*45*tan(22.5°) ≈ 37.28
+  const meshScale = useMemo(() => {
+    const distance = 45; // camera z=15, plane z=-30
+    const visibleHeight = 2 * distance * Math.tan((45 * Math.PI) / 360);
+    const viewAspect = viewport.width / viewport.height;
+    const visibleWidth = visibleHeight * viewAspect;
+
+    if (sizing === "stretch") {
+      return [visibleWidth, visibleHeight, 1] as [number, number, number];
+    }
+    if (sizing === "contain") {
+      // Fit image inside visible area
+      if (imageAspect > viewAspect) {
+        // Image wider than viewport → constrain by width
+        const w = visibleWidth;
+        const h = w / imageAspect;
+        return [w, h, 1] as [number, number, number];
+      } else {
+        const h = visibleHeight;
+        const w = h * imageAspect;
+        return [w, h, 1] as [number, number, number];
+      }
+    }
+    // cover (default): fill visible area, may crop
+    if (imageAspect > viewAspect) {
+      // Image wider → constrain by height (crop sides)
+      const h = visibleHeight;
+      const w = h * imageAspect;
+      return [w, h, 1] as [number, number, number];
+    } else {
+      const w = visibleWidth;
+      const h = w / imageAspect;
+      return [w, h, 1] as [number, number, number];
+    }
+  }, [sizing, imageAspect, viewport.width, viewport.height]);
+
+  // Compute blend mode properties
+  const blendProps = useMemo(() => {
+    switch (layerMode) {
+      case "screen":
+        return { renderOrder: 100, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, z: -29.9 + layerOffset * 0.1, opacity: 1 };
+      case "multiply":
+        return { renderOrder: 100, blending: THREE.MultiplyBlending, depthTest: false, depthWrite: false, z: -29.9 + layerOffset * 0.1, opacity: 1 };
+      case "overlay":
+        return { renderOrder: 100, blending: THREE.NormalBlending, depthTest: false, depthWrite: false, z: -29.9 + layerOffset * 0.1, opacity: 0.5 };
+      case "behind":
+      default:
+        return { renderOrder: -10, blending: THREE.NormalBlending, depthTest: true, depthWrite: true, z: -30 + layerOffset * 0.1, opacity: layerOffset > 0 ? 0.4 : 1 };
+    }
+  }, [layerMode, layerOffset]);
+
   useFrame((state, delta) => {
     if (materialRef.current) {
       const t = transitionRef.current;
-      
+
       // Detect filter change and start transition
       if (filterId !== t.targetFilter) {
         t.prevFilter = t.targetFilter;
         t.targetFilter = filterId;
         t.progress = 0;
       }
-      
+
       // Smooth transition progress (200-400ms depending on delta)
       if (t.progress < 1) {
         t.progress = Math.min(1, t.progress + delta * 4);
       }
-      
+
       // Smoothly interpolate between filter types using eased progress
-      const eased = t.progress < 0.5 
-        ? 2 * t.progress * t.progress 
+      const eased = t.progress < 0.5
+        ? 2 * t.progress * t.progress
         : 1 - Math.pow(-2 * t.progress + 2, 2) / 2;
-      
+
       const prevType = filterIdToType[t.prevFilter] || 0;
       const targetType = filterIdToType[t.targetFilter] || 0;
-      
+
       materialRef.current.uTime = state.clock.getElapsedTime() + layerOffset;
       materialRef.current.uFilterType = targetType;
       materialRef.current.uIntensity = intensity * eased + (intensity * 0.5 * (1 - eased));
-      
+
       if (getAudioData) {
         const audioData = getAudioData();
         materialRef.current.uEnergy = audioData.energy;
@@ -4726,16 +4791,17 @@ function BackgroundImage({
     }
   });
 
-  const opacity = layerOffset > 0 ? 0.4 : 1;
-
   return (
-    <mesh position={[0, 0, -30 + layerOffset * 0.1]} scale={[60, 40, 1]}>
+    <mesh position={[0, 0, blendProps.z]} scale={meshScale} renderOrder={blendProps.renderOrder}>
       <planeGeometry />
-      <psyFilterMaterial 
+      <psyFilterMaterial
         ref={materialRef}
         uTexture={texture}
         transparent
-        opacity={opacity}
+        opacity={blendProps.opacity}
+        blending={blendProps.blending}
+        depthTest={blendProps.depthTest}
+        depthWrite={blendProps.depthWrite}
       />
     </mesh>
   );
@@ -4757,6 +4823,42 @@ function ZoomableScene({
   });
   
   return <group ref={groupRef}>{children}</group>;
+}
+
+// Lightweight error boundary for the post-processing pipeline.
+// Catches "Cannot read properties of null" crashes that can happen when
+// the postprocessing library's internal passes access disposed materials
+// during rapid setting changes, and auto-recovers on the next frame.
+class EffectsSafeBoundary extends Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.warn("[Effects] Post-processing error caught, auto-recovering:", error.message);
+  }
+
+  componentDidUpdate(_: any, prevState: { hasError: boolean }) {
+    if (this.state.hasError && !prevState.hasError) {
+      // Auto-recover after a single frame so the canvas keeps running
+      this.recoveryTimer = setTimeout(() => this.setState({ hasError: false }), 50);
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.recoveryTimer) clearTimeout(this.recoveryTimer);
+  }
+
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
 }
 
 function AudioReactiveEffects({ getAudioData, settings }: { getAudioData: () => AudioData; settings: any }) {
@@ -4868,6 +4970,8 @@ function ThreeScene({
   getAudioData,
   settings,
   backgroundImage,
+  artworkLayerMode = "behind",
+  artworkSizing = "cover",
   zoom = 1,
   fractalUniforms,
   renderProfile = "desktopCinematic",
@@ -5186,13 +5290,15 @@ function ThreeScene({
         <color attach="background" args={['#050508']} />
       
       {backgroundImage && activeFilters.map((filterId, index) => (
-        <BackgroundImage 
+        <BackgroundImage
           key={`filter-layer-${index}`}
-          imageUrl={backgroundImage} 
+          imageUrl={backgroundImage}
           filterId={filterId}
           intensity={settings.intensity}
           getAudioData={getEvolvedAudioData}
           layerOffset={index * 0.5}
+          layerMode={artworkLayerMode}
+          sizing={artworkSizing}
         />
       ))}
       
@@ -5230,7 +5336,9 @@ function ThreeScene({
       ))}
 
       {!fractalPresetActive && !useWebGPUForThisFrame && (
-        <AudioReactiveEffects getAudioData={getEvolvedAudioData} settings={settings} />
+        <EffectsSafeBoundary>
+          <AudioReactiveEffects getAudioData={getEvolvedAudioData} settings={settings} />
+        </EffectsSafeBoundary>
       )}
     </Canvas>
     </div>
@@ -5241,6 +5349,8 @@ export function AudioVisualizer({
   getAudioData,
   settings,
   backgroundImage,
+  artworkLayerMode = "behind",
+  artworkSizing = "cover",
   zoom = 1,
   fractalUniforms,
   renderProfile = "desktopCinematic",
@@ -5316,6 +5426,8 @@ export function AudioVisualizer({
         getAudioData={getAudioData}
         settings={settings}
         backgroundImage={backgroundImage}
+        artworkLayerMode={artworkLayerMode}
+        artworkSizing={artworkSizing}
         zoom={zoom}
         fractalUniforms={fractalUniforms}
         renderProfile={renderProfile}

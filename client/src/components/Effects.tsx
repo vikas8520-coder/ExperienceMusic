@@ -1,8 +1,8 @@
 import { EffectComposer, Bloom, ChromaticAberration, Noise, Vignette } from "@react-three/postprocessing";
 import { BlendFunction, KernelSize } from "postprocessing";
 import * as THREE from "three";
-import { useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useMemo, useRef, useEffect, useState } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
 import { Kaleidoscope } from "./KaleidoscopeEffect";
 import { Afterimage } from "./AfterimageEffect";
 
@@ -50,6 +50,45 @@ export function Effects({
   vignetteStrength = 0.35,
   kaleidoStrength = 0.6,
 }: Props) {
+  // Guard against WebGL context loss.
+  // The postprocessing library calls renderer.getContext().getContextAttributes().alpha
+  // in both EffectComposerImpl constructor and addPass(). When the WebGL context is
+  // lost (GPU pressure from rapid setting changes), getContext() returns null and crashes.
+  // We monkey-patch it to return a safe fallback object instead.
+  const { gl } = useThree();
+  const [contextLost, setContextLost] = useState(false);
+
+  useEffect(() => {
+    const canvas = gl.domElement;
+    const onLost = (e: Event) => {
+      e.preventDefault();
+      console.warn("[Effects] WebGL context lost, pausing effects");
+      setContextLost(true);
+    };
+    const onRestored = () => {
+      console.warn("[Effects] WebGL context restored, resuming effects");
+      setContextLost(false);
+    };
+    canvas.addEventListener("webglcontextlost", onLost);
+    canvas.addEventListener("webglcontextrestored", onRestored);
+
+    // Patch getContext to never return null — the postprocessing library doesn't guard it.
+    const origGetContext = gl.getContext.bind(gl);
+    const safeGetContext = () => {
+      const ctx = origGetContext();
+      if (ctx) return ctx;
+      // Return a minimal stand-in so getContextAttributes().alpha doesn't crash.
+      return { getContextAttributes: () => ({ alpha: true }) } as any;
+    };
+    gl.getContext = safeGetContext;
+
+    return () => {
+      canvas.removeEventListener("webglcontextlost", onLost);
+      canvas.removeEventListener("webglcontextrestored", onRestored);
+      gl.getContext = origGetContext;
+    };
+  }, [gl]);
+
   const kaleidoRef = useRef<any>(null);
   const afterimageRef = useRef<any>(null);
   const angleRef = useRef(0);
@@ -118,18 +157,22 @@ export function Effects({
   const afterimageDecay = clamp01(trails * (0.98 - sb * 0.08 - sh * 0.04));
   const afterimageBlend = clamp01(trails * 0.85);
 
-  if (!enabled) return null;
+  // Never unmount the EffectComposer — toggling `enabled` off just zeros all values.
+  // Unmounting/remounting causes render target disposal race conditions when settings
+  // change rapidly, leading to "Cannot read properties of null (reading 'alpha')".
+  // Also skip rendering entirely if WebGL context is lost.
+  const active = enabled && !contextLost;
 
   return (
     <EffectComposer multisampling={4}>
       <Afterimage
         ref={afterimageRef}
-        enabled={afterimageOn}
-        decay={afterimageDecay}
-        blend={afterimageBlend}
+        enabled={active && afterimageOn}
+        decay={active && afterimageOn ? afterimageDecay : 0}
+        blend={active && afterimageOn ? afterimageBlend : 0}
       />
       <Bloom
-        intensity={bloomOn ? bloomIntensity : 0}
+        intensity={active && bloomOn ? bloomIntensity : 0}
         luminanceThreshold={bloomLuminanceThreshold}
         luminanceSmoothing={0.9}
         mipmapBlur
@@ -137,26 +180,26 @@ export function Effects({
         blendFunction={BlendFunction.ADD}
       />
       <ChromaticAberration
-        offset={chromaOn ? chromaOffset : new THREE.Vector2(0, 0)}
+        offset={active && chromaOn ? chromaOffset : new THREE.Vector2(0, 0)}
         radialModulation
         modulationOffset={0.4}
       />
-      <Noise 
-        opacity={noiseOn ? noiseAmount : 0} 
+      <Noise
+        opacity={active && noiseOn ? noiseAmount : 0}
         blendFunction={BlendFunction.SOFT_LIGHT}
       />
       <Vignette
         eskil={false}
         offset={0.25}
-        darkness={vignetteOn ? vignetteAmount : 0}
+        darkness={active && vignetteOn ? vignetteAmount : 0}
         blendFunction={BlendFunction.NORMAL}
       />
       <Kaleidoscope
         ref={kaleidoRef}
-        enabled={kaleidoOn}
+        enabled={active && kaleidoOn}
         sides={kaleidoSides}
         angle={0}
-        intensity={kaleidoOn ? kaleidoIntensity : 0}
+        intensity={active && kaleidoOn ? kaleidoIntensity : 0}
       />
     </EffectComposer>
   );

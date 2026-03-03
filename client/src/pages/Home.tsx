@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback, useEffect, type MouseEvent, type TouchEvent, type WheelEvent, type PointerEvent } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, type MouseEvent, type TouchEvent, type WheelEvent, type PointerEvent, type ChangeEvent } from "react";
 import { AnimatePresence } from "framer-motion";
 import { AudioVisualizer } from "@/components/AudioVisualizer";
-import { UIControls, type ThumbnailAnalysis } from "@/components/UIControls";
+import type { ThumbnailAnalysis } from "@/components/UIControls";
 import { RadialSystem } from "@/components/RadialSystem";
 import { TrackLibrary } from "@/components/TrackLibrary";
 import { SoundCloudPanel } from "@/components/SoundCloudPanel";
@@ -15,7 +15,11 @@ import {
   type ColorModeId,
   type MoodPresetId,
   defaultColorSettings,
-  generateColorPalette
+  generateColorPalette,
+  presetCategories,
+  categoryColors,
+  imageFilters,
+  psyOverlays,
 } from "@/lib/visualizer-presets";
 import { useCreatePreset } from "@/hooks/use-presets";
 import { useToast } from "@/hooks/use-toast";
@@ -28,9 +32,9 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { SessionStats } from "@/components/SessionStats";
 import { useSessionStats } from "@/hooks/useSessionStats";
 import { startVirtualCamera, stopVirtualCamera } from "@/lib/virtualCamera";
-import { ZenMode } from "@/components/layout/ZenMode";
-import { CommandCenter } from "@/components/layout/CommandCenter";
-import { ModeToggle, type LayoutMode } from "@/components/layout/ModeToggle";
+import { SlideTray } from "@/components/layout/SlideTray";
+import { ActionCluster } from "@/components/layout/ActionCluster";
+import { MiniPlayer } from "@/components/player/MiniPlayer";
 import { ProjectionButton } from "@/components/layout/ProjectionButton";
 import { useProjection } from "@/hooks/useProjection";
 
@@ -73,19 +77,16 @@ export default function Home() {
   const [showSoundCloud, setShowSoundCloud] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [visualizationZoom, setVisualizationZoom] = useState(1);
-  const [activeTab, setActiveTab] = useState<"listen" | "create" | "perform" | "record">("listen");
-  const [isCreatePanelCollapsed, setIsCreatePanelCollapsed] = useState(false);
+  const [activeTab] = useState<"listen" | "create" | "perform" | "record">("listen");
   const [uiAutoHidden, setUiAutoHidden] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
   const [adaptiveQualityTier, setAdaptiveQualityTier] = useState<0 | 1 | 2>(1);
   const [micReactiveEnabled, setMicReactiveEnabled] = useState(false);
+  const [showRadial, setShowRadial] = useState(false);
   const [radialOpenRequestToken, setRadialOpenRequestToken] = useState(0);
+  const [radialCloseRequestToken, setRadialCloseRequestToken] = useState(0);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => {
-    try {
-      return (localStorage.getItem("experience-layout-mode") as LayoutMode) || "zen";
-    } catch { return "zen"; }
-  });
+  // layoutMode removed — single immersive mode only
   const { isProjecting, toggleProjection } = useProjection();
   const [ambientMode, setAmbientMode] = useState(false);
   const ambientTimerRef = useRef<number | null>(null);
@@ -111,7 +112,19 @@ export default function Home() {
   const fractalCenterRef = useRef<[number, number]>([0, 0]);
   const fractalZoomTargetRef = useRef<[number, number]>([0, 0]);
   const fractalRotationRef = useRef(0);
-  
+
+  // Artwork tray state
+  const [artworkSettings, setArtworkSettings] = useState({
+    visible: true,
+    layerMode: "behind" as "behind" | "screen" | "multiply" | "overlay",
+    sizing: "cover" as "cover" | "contain" | "stretch",
+  });
+  const [artworkAnalysis, setArtworkAnalysis] = useState<ThumbnailAnalysis | null>(null);
+  const [isAnalyzingArtwork, setIsAnalyzingArtwork] = useState(false);
+  const [openTrays, setOpenTrays] = useState<Set<number>>(new Set());
+  const [windowHeight, setWindowHeight] = useState(typeof window !== "undefined" ? window.innerHeight : 800);
+  const artworkInputRef = useRef<HTMLInputElement>(null);
+
   const [savedTracks, setSavedTracks] = useState<SavedTrack[]>(() => {
     try {
       const stored = localStorage.getItem(LIBRARY_STORAGE_KEY);
@@ -132,6 +145,46 @@ export default function Home() {
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
+
+  // Track window height for tray positioning
+  useEffect(() => {
+    const onResize = () => setWindowHeight(window.innerHeight);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Tray positioning
+  const TRAY_TOP = 64;
+  const TRAY_BOTTOM_MARGIN = 24;
+  const COLLAPSED_TRAY_HEIGHT = 40;
+  const TOTAL_TRAYS = 4;
+
+  const handleTrayToggle = useCallback((position: number, isOpen: boolean) => {
+    setOpenTrays(prev => {
+      const next = new Set(prev);
+      if (isOpen) next.add(position);
+      else next.delete(position);
+      return next;
+    });
+  }, []);
+
+  const { trayOffsets, trayHeights } = useMemo(() => {
+    const openCount = openTrays.size;
+    const totalAvailable = windowHeight - TRAY_TOP - TRAY_BOTTOM_MARGIN;
+    const collapsedSpace = (TOTAL_TRAYS - openCount) * COLLAPSED_TRAY_HEIGHT;
+    const perOpenTray = openCount > 0 ? Math.max(120, (totalAvailable - collapsedSpace) / openCount) : 0;
+
+    const offsets: number[] = [];
+    const heights: number[] = [];
+    let top = TRAY_TOP;
+    for (let i = 0; i < TOTAL_TRAYS; i++) {
+      offsets.push(top);
+      const h = openTrays.has(i) ? perOpenTray : COLLAPSED_TRAY_HEIGHT;
+      heights.push(h);
+      top += h;
+    }
+    return { trayOffsets: offsets, trayHeights: heights };
+  }, [openTrays, windowHeight]);
 
   const renderProfile: RenderProfile = isRecording
     ? "exportQuality"
@@ -226,6 +279,48 @@ export default function Home() {
 
   const [colorSettings, setColorSettings] = useState<ColorSettings>(defaultColorSettings);
   const [colorTime, setColorTime] = useState(0);
+
+  // Artwork upload + AI analysis
+  const handleArtworkUpload = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result;
+      if (typeof dataUrl !== "string") return;
+      const base64 = dataUrl.split(",")[1];
+      if (!base64) return;
+
+      setThumbnailUrl(dataUrl);
+      setIsAnalyzingArtwork(true);
+      setArtworkAnalysis(null);
+
+      try {
+        const response = await fetch("/api/analyze-thumbnail", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: base64 }),
+        });
+        const contentType = response.headers.get("content-type") ?? "";
+        if (response.ok && contentType.includes("application/json")) {
+          const data: ThumbnailAnalysis = await response.json();
+          setArtworkAnalysis(data);
+        }
+      } catch (error) {
+        console.error("Artwork analysis failed:", error);
+      } finally {
+        setIsAnalyzingArtwork(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const applyAIColors = useCallback(() => {
+    if (artworkAnalysis?.colorPalette) {
+      setColorSettings(prev => ({ ...prev, mode: "ai" as ColorModeId, aiColors: artworkAnalysis.colorPalette }));
+    }
+  }, [artworkAnalysis, setColorSettings]);
   
   // Update color time for spectrum mode
   useEffect(() => {
@@ -386,10 +481,9 @@ export default function Home() {
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  const isUIOpen = activeTab !== "listen" || showLibrary || showSoundCloud;
+  const isUIOpen = showLibrary || showSoundCloud;
 
   const closeAllUI = useCallback(() => {
-    setActiveTab("listen");
     setShowLibrary(false);
     setShowSoundCloud(false);
   }, []);
@@ -748,11 +842,14 @@ export default function Home() {
     };
   }, [getAudioData, micReactiveEnabled, micStatus, micFeatures]);
 
-  const cycleLayoutMode = useCallback(() => {
-    setLayoutMode(prev => {
-      const next = prev === "zen" ? "command" : "zen";
-      try { localStorage.setItem("experience-layout-mode", next); } catch {}
-      return next;
+  const toggleRadial = useCallback(() => {
+    setShowRadial(prev => {
+      if (!prev) {
+        setRadialOpenRequestToken(t => t + 1);
+      } else {
+        setRadialCloseRequestToken(t => t + 1);
+      }
+      return !prev;
     });
   }, []);
 
@@ -768,13 +865,6 @@ export default function Home() {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setCommandPaletteOpen((prev) => !prev);
-        return;
-      }
-
-      // Ctrl+Shift+L: cycle layout mode
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "L") {
-        e.preventDefault();
-        cycleLayoutMode();
         return;
       }
 
@@ -864,16 +954,24 @@ export default function Home() {
             }
           });
           break;
+        case 'KeyR':
+          e.preventDefault();
+          toggleRadial();
+          break;
         case 'Escape':
           e.preventDefault();
-          closeAllUI();
+          if (showRadial) {
+            toggleRadial();
+          } else {
+            closeAllUI();
+          }
           break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [audioFile, isPlaying, duration, toggleFullscreen, closeAllUI, cycleLayoutMode, handleToggleProjection]);
+  }, [audioFile, isPlaying, duration, toggleFullscreen, closeAllUI, handleToggleProjection, toggleRadial, showRadial]);
 
   // Audio time/duration tracking
   useEffect(() => {
@@ -1257,57 +1355,6 @@ export default function Home() {
     }
   };
 
-  const sharedCanvasProps = {
-    screenZoomLayerRef,
-    onCanvasClick: handleCanvasClick,
-    onCanvasPointerDown: handleCanvasPointerDown,
-    onCanvasPointerMove: handleCanvasPointerMove,
-    onCanvasPointerUp: handleCanvasPointerUp,
-    onCanvasDoubleClick: handleCanvasDoubleClick,
-    onScreenTouchStart: handleScreenTouchStart,
-    onScreenTouchMove: handleScreenTouchMove,
-    onScreenTouchEnd: handleScreenTouchEnd,
-  };
-
-  const sharedProps = {
-    getAudioData: getReactiveAudioData,
-    isPlaying,
-    onPlayPause: togglePlay,
-    onFileUpload: handleFileUpload,
-    trackName: audioFileName,
-    currentTime,
-    duration,
-    onSeek: handleSeek,
-    volume,
-    onVolumeChange: handleVolumeChange,
-    onPreviousTrack: handlePreviousTrack,
-    onNextTrack: handleNextTrack,
-    hasLibraryTracks: savedTracks.length > 0,
-    settings,
-    setSettings,
-    backgroundImage: thumbnailUrl,
-    zoom: visualizationZoom,
-    onZoomChange: setVisualizationZoom,
-    fractalUniforms,
-    fractalSpecs,
-    fractalMacros,
-    onFractalUniformChange: setFractalUniform,
-    renderProfile,
-    adaptiveQualityTier,
-    colorSettings,
-    setColorSettings,
-    isRecording,
-    onToggleRecording: toggleRecording,
-    recordingQuality,
-    onRecordingQualityChange: setRecordingQuality,
-    onSavePreset: handleSavePreset,
-    isFullscreen,
-    onToggleFullscreen: toggleFullscreen,
-    micStatus,
-    onToggleMicReactivity: toggleMicReactivity,
-    ...sharedCanvasProps,
-  };
-
   return (
     <div
       className="w-full h-screen relative bg-background overflow-hidden selection:bg-primary/30"
@@ -1327,65 +1374,293 @@ export default function Home() {
         />
       )}
 
-      {/* Mode Toggle + Projection Button (always visible) */}
-      <ModeToggle mode={layoutMode} onToggle={cycleLayoutMode} />
-      <ProjectionButton isProjecting={isProjecting} onToggle={handleToggleProjection} />
+      {/* Full-viewport canvas */}
+      <AudioVisualizer
+        getAudioData={getReactiveAudioData}
+        settings={settings}
+        backgroundImage={artworkSettings.visible ? thumbnailUrl : null}
+        artworkLayerMode={artworkSettings.layerMode}
+        artworkSizing={artworkSettings.sizing}
+        zoom={visualizationZoom}
+        fractalUniforms={fractalUniforms}
+        renderProfile={renderProfile}
+        adaptiveQualityTier={adaptiveQualityTier}
+      />
 
-      {/* Layout Modes */}
-      {layoutMode === "zen" ? (
-        <ZenMode
-          {...sharedProps}
-          onSaveToLibrary={handleSaveToLibrary}
-          savedTracks={savedTracks}
-          onLoadTrack={handleLoadTrack}
-          onDeleteTrack={handleDeleteTrack}
-          showSoundCloud={showSoundCloud}
-          onToggleSoundCloud={() => setShowSoundCloud(!showSoundCloud)}
-          onPlaySoundCloudTrack={handleSoundCloudTrack}
-        />
-      ) : (
-        <CommandCenter
-          {...sharedProps}
-          onSavePreset={handleSavePreset}
+      {/* Canvas interaction layer */}
+      <div
+        ref={screenZoomLayerRef}
+        className="absolute inset-0 z-10"
+        onPointerDown={handleCanvasPointerDown}
+        onPointerMove={handleCanvasPointerMove}
+        onPointerUp={handleCanvasPointerUp}
+        onPointerCancel={handleCanvasPointerUp}
+        onClick={handleCanvasClick}
+        onDoubleClick={handleCanvasDoubleClick}
+        onTouchStart={handleScreenTouchStart}
+        onTouchMove={handleScreenTouchMove}
+        onTouchEnd={handleScreenTouchEnd}
+        onTouchCancel={handleScreenTouchEnd}
+        style={{ pointerEvents: "auto", touchAction: "none" }}
+        data-testid="canvas-interaction-layer"
+      />
+
+      {/* Right-side trays */}
+      <SlideTray label="Presets" position={0} topOffset={trayOffsets[0]} availableHeight={trayHeights[0]} onToggle={handleTrayToggle} toggleChecked={settings.presetEnabled !== false} onToggleChange={(checked) => setSettings(s => ({ ...s, presetEnabled: checked }))}>
+        {presetCategories.map((cat) => {
+          const colors = categoryColors[cat.name];
+          return (
+            <div key={cat.name} className="mb-2">
+              <div className="text-[11px] uppercase tracking-wider font-bold text-white/40 mb-1 px-1">{cat.name}</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {cat.presets.map((preset) => (
+                  <button
+                    key={preset.name}
+                    onClick={() => setSettings((s: typeof settings) => ({ ...s, presetName: preset.name }))}
+                    className={`relative px-2.5 py-2 rounded-lg text-xs font-bold text-left truncate transition-all overflow-hidden ${
+                      settings.presetName === preset.name
+                        ? "bg-violet-500/30 border border-violet-400/60 text-violet-200 shadow-[0_0_12px_rgba(139,92,246,0.4),inset_0_1px_0_rgba(139,92,246,0.3)]"
+                        : "bg-white/[0.06] border border-white/[0.1] text-white/70 hover:bg-white/[0.1] hover:text-white hover:-translate-y-px"
+                    }`}
+                    style={{ boxShadow: settings.presetName !== preset.name ? "inset 0 1px 0 0 rgba(255,255,255,0.06)" : undefined }}
+                    data-testid={`preset-${preset.shortName}`}
+                  >
+                    {colors && (
+                      <span
+                        className="absolute top-0 left-0 right-0 h-[3px] rounded-t-lg"
+                        style={{ background: `linear-gradient(90deg, ${colors[0]}, ${colors[1]})` }}
+                      />
+                    )}
+                    {preset.shortName}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </SlideTray>
+
+      <SlideTray label="Filters" position={1} topOffset={trayOffsets[1]} availableHeight={trayHeights[1]} onToggle={handleTrayToggle}>
+        <div className="grid grid-cols-2 gap-1.5">
+          {imageFilters.map((filter) => (
+            <button
+              key={filter.id}
+              onClick={() =>
+                setSettings((s: typeof settings) => ({
+                  ...s,
+                  imageFilters: s.imageFilters.includes(filter.id)
+                    ? s.imageFilters.filter((f: ImageFilterId) => f !== filter.id)
+                    : [...s.imageFilters.filter((f: ImageFilterId) => f !== "none"), filter.id],
+                }))
+              }
+              className={`px-2.5 py-2 rounded-lg text-xs font-bold text-left truncate transition-all ${
+                settings.imageFilters.includes(filter.id) && filter.id !== "none"
+                  ? "bg-amber-500/30 border border-amber-400/60 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.4),inset_0_1px_0_rgba(245,158,11,0.3)]"
+                  : "bg-white/[0.06] border border-white/[0.1] text-white/70 hover:bg-white/[0.1] hover:text-white hover:-translate-y-px"
+              }`}
+              style={{ boxShadow: !(settings.imageFilters.includes(filter.id) && filter.id !== "none") ? "inset 0 1px 0 0 rgba(255,255,255,0.08)" : undefined }}
+              data-testid={`filter-${filter.id}`}
+            >
+              {filter.name}
+            </button>
+          ))}
+        </div>
+      </SlideTray>
+
+      <SlideTray label="Overlays" position={2} topOffset={trayOffsets[2]} availableHeight={trayHeights[2]} onToggle={handleTrayToggle}>
+        <div className="grid grid-cols-2 gap-1.5">
+          {psyOverlays.map((overlay) => (
+            <button
+              key={overlay.id}
+              onClick={() =>
+                setSettings((s: typeof settings) => ({
+                  ...s,
+                  psyOverlays: (s.psyOverlays ?? []).includes(overlay.id)
+                    ? (s.psyOverlays ?? []).filter((o: PsyOverlayId) => o !== overlay.id)
+                    : [...(s.psyOverlays ?? []), overlay.id],
+                }))
+              }
+              className={`px-2.5 py-2 rounded-lg text-xs font-bold text-left truncate transition-all ${
+                (settings.psyOverlays ?? []).includes(overlay.id)
+                  ? "bg-cyan-500/30 border border-cyan-400/60 text-cyan-200 shadow-[0_0_12px_rgba(6,182,212,0.4),inset_0_1px_0_rgba(6,182,212,0.3)]"
+                  : "bg-white/[0.06] border border-white/[0.1] text-white/70 hover:bg-white/[0.1] hover:text-white hover:-translate-y-px"
+              }`}
+              style={{ boxShadow: !(settings.psyOverlays ?? []).includes(overlay.id) ? "inset 0 1px 0 0 rgba(255,255,255,0.08)" : undefined }}
+              data-testid={`overlay-${overlay.id}`}
+            >
+              {overlay.name}
+            </button>
+          ))}
+        </div>
+      </SlideTray>
+
+      <SlideTray label="Artwork" position={3} topOffset={trayOffsets[3]} availableHeight={trayHeights[3]} onToggle={handleTrayToggle} toggleChecked={artworkSettings.visible} onToggleChange={(checked) => setArtworkSettings(s => ({ ...s, visible: checked }))}>
+        <div className="space-y-2">
+          <input type="file" accept="image/*" hidden ref={artworkInputRef} onChange={handleArtworkUpload} />
+          {thumbnailUrl && (
+            <img src={thumbnailUrl} className="w-full rounded-lg aspect-video object-cover" alt="Artwork" />
+          )}
+          {thumbnailUrl && (
+            <>
+              <div className="text-[11px] uppercase tracking-wider font-bold text-white/40 mb-1 px-1">Layer Mode</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {([["behind", "Behind Preset"], ["screen", "Screen"], ["multiply", "Multiply"], ["overlay", "Overlay"]] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    onClick={() => setArtworkSettings(s => ({ ...s, layerMode: mode }))}
+                    className={`px-2.5 py-2 rounded-lg text-xs font-bold text-left truncate transition-all ${
+                      artworkSettings.layerMode === mode
+                        ? "bg-emerald-500/30 border border-emerald-400/60 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.4),inset_0_1px_0_rgba(16,185,129,0.3)]"
+                        : "bg-white/[0.06] border border-white/[0.1] text-white/70 hover:bg-white/[0.1] hover:text-white hover:-translate-y-px"
+                    }`}
+                    style={{ boxShadow: artworkSettings.layerMode !== mode ? "inset 0 1px 0 0 rgba(255,255,255,0.08)" : undefined }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="text-[11px] uppercase tracking-wider font-bold text-white/40 mb-1 px-1 mt-2">Sizing</div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([["cover", "Cover"], ["contain", "Contain"], ["stretch", "Stretch"]] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    onClick={() => setArtworkSettings(s => ({ ...s, sizing: mode }))}
+                    className={`px-2.5 py-2 rounded-lg text-xs font-bold text-center truncate transition-all ${
+                      artworkSettings.sizing === mode
+                        ? "bg-emerald-500/30 border border-emerald-400/60 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.4),inset_0_1px_0_rgba(16,185,129,0.3)]"
+                        : "bg-white/[0.06] border border-white/[0.1] text-white/70 hover:bg-white/[0.1] hover:text-white hover:-translate-y-px"
+                    }`}
+                    style={{ boxShadow: artworkSettings.sizing !== mode ? "inset 0 1px 0 0 rgba(255,255,255,0.08)" : undefined }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <button
+            onClick={() => artworkInputRef.current?.click()}
+            className="w-full px-3 py-2 rounded-lg text-xs bg-white/[0.04] border border-white/[0.08] text-white/70 hover:bg-white/[0.07] hover:text-white hover:-translate-y-px transition-all"
+            style={{ boxShadow: "inset 0 1px 0 0 rgba(255,255,255,0.06)" }}
+          >
+            Upload Artwork
+          </button>
+          {isAnalyzingArtwork && (
+            <div className="text-xs font-semibold text-emerald-300/70 animate-pulse">Analyzing artwork...</div>
+          )}
+          {artworkAnalysis && (
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-white/70">
+                Theme: {artworkAnalysis.theme} &bull; Mood: {artworkAnalysis.mood}
+              </div>
+              <div className="flex gap-1">
+                {artworkAnalysis.colorPalette.map((color, i) => (
+                  <div key={i} className="w-5 h-5 rounded-full border border-white/20" style={{ backgroundColor: color }} />
+                ))}
+              </div>
+              <button
+                onClick={applyAIColors}
+                className="w-full px-3 py-2 rounded-lg text-xs bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 hover:bg-emerald-500/30 hover:-translate-y-px transition-all"
+              >
+                Apply AI Colors
+              </button>
+            </div>
+          )}
+        </div>
+      </SlideTray>
+
+      {/* Top-right action cluster */}
+      <ActionCluster
+        isRecording={isRecording}
+        onToggleRecording={toggleRecording}
+        micStatus={micStatus}
+        onToggleMicReactivity={toggleMicReactivity}
+        onToggleLibrary={() => setShowLibrary(v => !v)}
+        onToggleRadial={toggleRadial}
+        showRadial={showRadial}
+        onSavePreset={handleSavePreset}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+        isProjecting={isProjecting}
+        onToggleProjection={handleToggleProjection}
+      />
+
+      {/* Mini player */}
+      <MiniPlayer
+        isPlaying={isPlaying}
+        onPlayPause={togglePlay}
+        onFileUpload={handleFileUpload}
+        trackName={audioFileName}
+        currentTime={currentTime}
+        duration={duration}
+        onSeek={handleSeek}
+        volume={volume}
+        onVolumeChange={handleVolumeChange}
+        onPreviousTrack={handlePreviousTrack}
+        onNextTrack={handleNextTrack}
+        hasLibraryTracks={savedTracks.length > 0}
+      />
+
+      {/* RadialSystem overlay (Settings button opens this) */}
+      {showRadial && (
+        <RadialSystem
+          activeTab={activeTab}
+          settings={settings}
+          setSettings={setSettings}
+          colorSettings={colorSettings}
+          setColorSettings={setColorSettings}
+          zoom={visualizationZoom}
+          onZoomChange={setVisualizationZoom}
+          fractalSpecs={fractalSpecs}
+          fractalMacros={fractalMacros}
+          fractalUniforms={fractalUniforms}
+          onFractalUniformChange={setFractalUniform}
+          adaptiveQualityTier={adaptiveQualityTier}
+          micStatus={micStatus}
+          onToggleMicReactivity={toggleMicReactivity}
+          openRequestToken={radialOpenRequestToken}
+          closeRequestToken={radialCloseRequestToken}
         />
       )}
 
-      {/* SoundCloud Panel (shared, renders as overlay) */}
+      {/* SessionStats */}
+      <SessionStats isPlaying={isPlaying} presetName={settings.presetName} getAudioData={getReactiveAudioData} />
+
+      {/* ProjectionButton */}
+      <ProjectionButton isProjecting={isProjecting} onToggle={handleToggleProjection} />
+
+      {/* SoundCloud Panel */}
       <SoundCloudPanel
         isOpen={showSoundCloud}
         onClose={() => setShowSoundCloud(false)}
         onPlayTrack={handleSoundCloudTrack}
       />
 
-      {/* Track Library Panel (shared overlay for Command Center mode) */}
-      {layoutMode === "command" && (
-        <AnimatePresence>
-          {showLibrary && (
-            <TrackLibrary
-              tracks={savedTracks}
-              onLoadTrack={handleLoadTrack}
-              onDeleteTrack={handleDeleteTrack}
-              onClose={() => setShowLibrary(false)}
-            />
-          )}
-        </AnimatePresence>
-      )}
+      {/* Track Library overlay */}
+      <AnimatePresence>
+        {showLibrary && (
+          <TrackLibrary
+            tracks={savedTracks}
+            onLoadTrack={handleLoadTrack}
+            onDeleteTrack={handleDeleteTrack}
+            onClose={() => setShowLibrary(false)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Command Palette (Cmd+K) */}
       <CommandPalette
         open={commandPaletteOpen}
         onOpenChange={setCommandPaletteOpen}
-        onSelectPreset={(name) => setSettings((s) => ({ ...s, presetName: name }))}
+        onSelectPreset={(name) => setSettings((s: typeof settings) => ({ ...s, presetName: name }))}
         onTogglePlay={togglePlay}
         onSavePreset={handleSavePreset}
-        onToggleTrails={() => setSettings((s) => ({ ...s, trailsOn: !s.trailsOn }))}
-        onToggleDarkOverlay={() => setSettings((s) => ({ ...s, darkOverlay: !s.darkOverlay }))}
+        onToggleTrails={() => setSettings((s: typeof settings) => ({ ...s, trailsOn: !s.trailsOn }))}
+        onToggleDarkOverlay={() => setSettings((s: typeof settings) => ({ ...s, darkOverlay: !s.darkOverlay }))}
         onToggleLibrary={() => setShowLibrary((v) => !v)}
         isPlaying={isPlaying}
         trailsOn={settings.trailsOn}
         darkOverlay={settings.darkOverlay}
-        layoutMode={layoutMode}
-        onSwitchMode={cycleLayoutMode}
         isProjecting={isProjecting}
         onToggleProjection={handleToggleProjection}
       />

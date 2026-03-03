@@ -88,8 +88,8 @@ export const Afterimage = forwardRef<AfterimageEffectImpl | null, Props>(
 
     useImperativeHandle(ref, () => effectRef.current as AfterimageEffectImpl, [effect]);
 
-    if (!enabled) return null;
-
+    // Always render the primitive — removing it from EffectComposer children
+    // forces a pass pipeline rebuild that can crash during rapid setting changes.
     return <primitive object={effect} />;
   }
 );
