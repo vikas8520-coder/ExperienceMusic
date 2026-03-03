@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { convertAudioForButterchurn, MILKDROP_PRESET_NAMES } from "@/engine/milkdrop/MilkdropBridge";
+import {
+  convertAudioForButterchurn,
+  MILKDROP_PRESET_NAMES,
+  MILKDROP_PRESET_MAP,
+  isMilkdropPreset,
+  resolveButterchurnPresetKey,
+} from "@/engine/milkdrop/MilkdropBridge";
 import type { AudioData } from "@/hooks/use-audio-analyzer";
 
 function createMockAudioData(overrides: Partial<AudioData> = {}): AudioData {
@@ -39,7 +45,7 @@ describe("MilkdropBridge — Audio Conversion", () => {
     const { waveformData } = convertAudioForButterchurn(audioData);
 
     expect(waveformData).toBeInstanceOf(Uint8Array);
-    expect(waveformData.length).toBe(512);
+    expect(waveformData.length).toBe(1024);
   });
 
   it("handles empty frequency data gracefully", () => {
@@ -49,7 +55,7 @@ describe("MilkdropBridge — Audio Conversion", () => {
 
     const { frequencyData, waveformData } = convertAudioForButterchurn(audioData);
     expect(frequencyData.length).toBe(512);
-    expect(waveformData.length).toBe(512);
+    expect(waveformData.length).toBe(1024);
     // With no frequency data, all bins should be 0
     expect(frequencyData.every((v) => v === 0)).toBe(true);
   });
@@ -91,5 +97,53 @@ describe("MilkDrop Preset Names", () => {
       expect(typeof name).toBe("string");
       expect(name.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("MILKDROP_PRESET_MAP", () => {
+  it("maps 5 UI preset names to butterchurn keys", () => {
+    expect(Object.keys(MILKDROP_PRESET_MAP).length).toBe(5);
+  });
+
+  it("all keys start with 'MilkDrop:'", () => {
+    for (const key of Object.keys(MILKDROP_PRESET_MAP)) {
+      expect(key.startsWith("MilkDrop:")).toBe(true);
+    }
+  });
+
+  it("all values are present in MILKDROP_PRESET_NAMES", () => {
+    for (const value of Object.values(MILKDROP_PRESET_MAP)) {
+      expect(MILKDROP_PRESET_NAMES).toContain(value);
+    }
+  });
+});
+
+describe("isMilkdropPreset", () => {
+  it("returns true for MilkDrop: prefixed names", () => {
+    expect(isMilkdropPreset("MilkDrop: Bass Kicks")).toBe(true);
+    expect(isMilkdropPreset("MilkDrop: Cosmic Dust")).toBe(true);
+    expect(isMilkdropPreset("MilkDrop: Unknown")).toBe(true);
+  });
+
+  it("returns false for non-MilkDrop names", () => {
+    expect(isMilkdropPreset("Energy Rings")).toBe(false);
+    expect(isMilkdropPreset("Psy Tunnel")).toBe(false);
+    expect(isMilkdropPreset("")).toBe(false);
+  });
+});
+
+describe("resolveButterchurnPresetKey", () => {
+  it("resolves known UI names to butterchurn keys", () => {
+    expect(resolveButterchurnPresetKey("MilkDrop: Bass Kicks")).toBe(
+      "Flexi - smashing fractals [acid etching mix]",
+    );
+    expect(resolveButterchurnPresetKey("MilkDrop: Fractopia")).toBe(
+      "flexi - patternton, district of media, capitol of the united abstractions of fractopia",
+    );
+  });
+
+  it("returns undefined for unknown names", () => {
+    expect(resolveButterchurnPresetKey("MilkDrop: Unknown")).toBeUndefined();
+    expect(resolveButterchurnPresetKey("Energy Rings")).toBeUndefined();
   });
 });
