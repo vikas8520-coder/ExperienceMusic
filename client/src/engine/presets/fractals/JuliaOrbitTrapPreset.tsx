@@ -568,7 +568,7 @@ const JuliaOrbitTrapRender: React.FC<{ uniforms: UniformValues; state: any }> = 
     const midMorph = num(uniforms.u_midMorph, 0);
     const trebleShimmer = num(uniforms.u_trebleShimmer, 0);
     const beatPunch = num(uniforms.u_beatPunch, 0);
-    const juliaMorph = num(uniforms.u_juliaMorph, 0.85);
+    const juliaMorph = num(uniforms.u_juliaMorph, 1);
     const zoomValue = num(uniforms.u_zoom, 1.2);
     const zoomExpValue = num(uniforms.u_zoomExp, Math.log2(Math.max(1e-12, zoomValue)));
     const [centerX, centerY] = vec2Or(uniforms.u_center, -0.5, 0);
@@ -762,7 +762,7 @@ export const JuliaOrbitTrapPreset: FractalPreset = {
     { key: "u_rotation", label: "Rotation", type: "float", group: "Fractal", min: -3.14, max: 3.14, step: 0.001, default: 0 },
     { key: "u_iterations", label: "Iterations", type: "int", group: "Fractal", min: 50, max: 400, step: 1, default: 200 },
 
-    { key: "u_juliaMorph", label: "Julia Morph", type: "float", group: "Julia", min: 0, max: 1, step: 0.001, default: 0.85, macro: true },
+    { key: "u_juliaMorph", label: "Julia Morph", type: "float", group: "Julia", min: 0, max: 1, step: 0.001, default: 1.0, macro: true },
     { key: "u_juliaC", label: "Julia Seed", type: "vec2", group: "Julia", default: [-0.74543, 0.11301],
       visibleIf: (u: UniformValues) => (u.u_juliaMorph as number) > 0.01 },
 

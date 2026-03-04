@@ -430,7 +430,7 @@ const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     const midMorph = num(uniforms.u_midMorph, 0);
     const trebleShimmer = num(uniforms.u_trebleShimmer, 0);
     const beatPunch = num(uniforms.u_beatPunch, 0);
-    const juliaMorph = num(uniforms.u_juliaMorph, 0);
+    const juliaMorph = num(uniforms.u_juliaMorph, 1);
     const zoomValue = num(uniforms.u_zoom, 1.8);
     const zoomExpValue = num(uniforms.u_zoomExp, Math.log2(Math.max(1e-12, zoomValue)));
     const [centerX, centerY] = vec2Or(uniforms.u_center, -0.5, 0);
@@ -614,7 +614,7 @@ export const MandelbrotPreset: FractalPreset = {
     { key: "u_edgeDetail", label: "Edge Detail", type: "float", group: "Fractal", min: 0, max: 1, step: 0.01, default: 0.5 },
     { key: "u_warpAmount", label: "Warp", type: "float", group: "Fractal", min: 0, max: 1, step: 0.01, default: 0.0 },
 
-    { key: "u_juliaMorph", label: "Julia Morph", type: "float", group: "Julia", min: 0, max: 1, step: 0.001, default: 0.0, macro: true },
+    { key: "u_juliaMorph", label: "Julia Morph", type: "float", group: "Julia", min: 0, max: 1, step: 0.001, default: 1.0, macro: true },
     { key: "u_juliaC", label: "Julia Seed", type: "vec2", group: "Julia", default: [-0.4, 0.6],
       visibleIf: (u: UniformValues) => (u.u_juliaMorph as number) > 0.01 },
 
