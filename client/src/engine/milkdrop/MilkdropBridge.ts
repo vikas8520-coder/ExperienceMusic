@@ -92,6 +92,11 @@ export const MILKDROP_PRESET_NAMES = [
   "Flexi - intensive shader fractal",
   "Flexi - Julia fractal",
   "martin + flexi - mandelbox explorer - high speed oversustained bipolar",
+  "mstress - Scattered gravity (Smoked mix)",
+  "geiss + mstress - Cleaning a path - Painterly Crossfire (Crisp Emboss Mix)",
+  "_geiss + mstress - Cleaning a path - Painterly Crossfire (Crisp Emboss Mix)",
+  "Fumbling_Foo & Flexi, Martin, Orb, Unchained - Star Nova v7b",
+  "Mstress - Acoustic Nerve Impulses",
 ] as const;
 
 export type MilkdropPresetName = typeof MILKDROP_PRESET_NAMES[number];
@@ -128,6 +133,11 @@ export const MILKDROP_PRESET_MAP: Record<string, string> = {
   "MilkDrop: Shader Fractal": "Flexi - intensive shader fractal",
   "MilkDrop: Julia Fractal": "Flexi - Julia fractal",
   "MilkDrop: Mandelbox Bipolar": "martin + flexi - mandelbox explorer - high speed oversustained bipolar",
+  "MilkDrop: Scattered Gravity": "mstress - Scattered gravity (Smoked mix)",
+  "MilkDrop: Painterly Crossfire": "geiss + mstress - Cleaning a path - Painterly Crossfire (Crisp Emboss Mix)",
+  "MilkDrop: Crisp Emboss": "_geiss + mstress - Cleaning a path - Painterly Crossfire (Crisp Emboss Mix)",
+  "MilkDrop: Star Nova": "Fumbling_Foo & Flexi, Martin, Orb, Unchained - Star Nova v7b",
+  "MilkDrop: Nerve Impulses": "Mstress - Acoustic Nerve Impulses",
 };
 
 export function isMilkdropPreset(name: string): boolean {
