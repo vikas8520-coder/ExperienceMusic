@@ -25,6 +25,7 @@ const JSON_PRESET_LOADERS: Record<string, () => Promise<any>> = {
   "Flexi - smashing fractals 2.0": () => import("butterchurn-presets/presets/converted/Flexi - smashing fractals 2.0.json"),
   "Flexi - intensive shader fractal": () => import("butterchurn-presets/presets/converted/Flexi - intensive shader fractal.json"),
   "Flexi - Julia fractal": () => import("butterchurn-presets/presets/converted/Flexi - Julia fractal.json"),
+  "martin + flexi - mandelbox explorer - high speed oversustained bipolar": () => import("butterchurn-presets/presets/converted/martin + flexi - mandelbox explorer - high speed oversustained bipolar.json"),
 };
 
 const CANVAS_WIDTH = 1280;
