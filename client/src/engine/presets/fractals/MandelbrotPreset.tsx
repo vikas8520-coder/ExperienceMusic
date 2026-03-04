@@ -552,7 +552,7 @@ const MandelbrotRender: React.FC<{ uniforms: UniformValues; state: any }> = ({ u
     u_midMorph: { value: 0 },
     u_trebleShimmer: { value: 0 },
     u_beatPunch: { value: 0 },
-    u_juliaMorph: { value: 0 },
+    u_juliaMorph: { value: 1 },
     u_juliaC: { value: new THREE.Vector2(-0.4, 0.6) },
     u_glowIntensity: { value: 0.8 },
     u_orbitTrap: { value: 0.5 },

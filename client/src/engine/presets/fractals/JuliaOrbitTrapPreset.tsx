@@ -692,7 +692,7 @@ const JuliaOrbitTrapRender: React.FC<{ uniforms: UniformValues; state: any }> = 
     u_infiniteZoom: { value: false },
     u_rotation: { value: 0 },
     u_iterations: { value: 200 },
-    u_juliaMorph: { value: 0.85 },
+    u_juliaMorph: { value: 1 },
     u_juliaC: { value: new THREE.Vector2(-0.74543, 0.11301) },
     u_trapRadius: { value: 0.35 },
     u_trapLineAngle: { value: 0.78 },
