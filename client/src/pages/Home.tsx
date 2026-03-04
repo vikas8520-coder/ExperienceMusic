@@ -1649,6 +1649,7 @@ export default function Home() {
           onToggleMicReactivity={toggleMicReactivity}
           openRequestToken={radialOpenRequestToken}
           closeRequestToken={radialCloseRequestToken}
+          onDismiss={() => setShowRadial(false)}
           autoEvolveConfig={autoEvolveConfig}
           setAutoEvolveConfig={setAutoEvolveConfig}
           autoEvolveOutput={autoEvolveOutput}

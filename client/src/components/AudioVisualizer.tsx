@@ -5479,30 +5479,6 @@ export function AudioVisualizer({
           Babylon failed for this preset, switched to Three fallback.
         </div>
       )}
-      {!useWebGPU && (
-        <div
-          style={{
-            position: "absolute",
-            top: 12,
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 6,
-            pointerEvents: "none",
-            padding: "6px 12px",
-            borderRadius: 999,
-            border: "1px solid rgba(168, 85, 247, 0.55)",
-            background: "rgba(8, 8, 14, 0.82)",
-            color: "#d7c8ff",
-            fontSize: 12,
-            letterSpacing: "0.02em",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {webGPUAvailable
-            ? "WebGPU disabled, using compatibility mode."
-            : "WebGPU not available, using compatibility mode."}
-        </div>
-      )}
     </>
   );
 }

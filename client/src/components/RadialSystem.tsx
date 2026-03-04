@@ -136,6 +136,7 @@ type RadialSystemProps = {
   onVisibilityStateChange?: (state: { radialMounted: boolean; settingsPanelOpen: boolean; isPinned: boolean }) => void;
   openRequestToken?: number;
   closeRequestToken?: number;
+  onDismiss?: () => void;
   autoEvolveConfig?: AutoEvolveConfig;
   setAutoEvolveConfig?: (next: AutoEvolveConfig | ((prev: AutoEvolveConfig) => AutoEvolveConfig)) => void;
   autoEvolveOutput?: AutoEvolveOutput;
@@ -931,6 +932,7 @@ export function RadialSystem({
   onVisibilityStateChange,
   openRequestToken = 0,
   closeRequestToken = 0,
+  onDismiss,
   autoEvolveConfig,
   setAutoEvolveConfig,
   autoEvolveOutput,
@@ -1775,8 +1777,10 @@ export function RadialSystem({
       setIsDocking(false);
       setIsDocked(true);
       dockTimerRef.current = null;
+      // Notify parent so showRadial syncs with visual state
+      onDismiss?.();
     }, 220);
-  }, []);
+  }, [onDismiss]);
 
   const handleRestoreRadial = useCallback(() => {
     if (dockTimerRef.current !== null) {
