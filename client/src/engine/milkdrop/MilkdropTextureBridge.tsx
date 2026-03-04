@@ -12,6 +12,12 @@ const JSON_PRESET_LOADERS: Record<string, () => Promise<any>> = {
   "Flexi - molten neon fire spirit": () => import("butterchurn-presets/presets/converted/Flexi - molten neon fire spirit.json"),
   "Flexi - gold plated maelstrom of chaos": () => import("butterchurn-presets/presets/converted/Flexi - gold plated maelstrom of chaos.json"),
   "martin - golden mirror": () => import("butterchurn-presets/presets/converted/martin - golden mirror.json"),
+  "Geiss - Cosmic Dust 2": () => import("butterchurn-presets/presets/converted/Geiss - Cosmic Dust 2.json"),
+  "Geiss - Reaction Diffusion 3": () => import("butterchurn-presets/presets/converted/Geiss - Reaction Diffusion 3.json"),
+  "Geiss - Aurora 2": () => import("butterchurn-presets/presets/converted/Geiss - Aurora 2.json"),
+  "Geiss - Cosmic Dust 2 - Trails 7": () => import("butterchurn-presets/presets/converted/Geiss - Cosmic Dust 2 - Trails 7.json"),
+  "Goody - Aurora Totalis": () => import("butterchurn-presets/presets/converted/Goody - Aurora Totalis.json"),
+  "Rovastar - Cosmic Echoes 2": () => import("butterchurn-presets/presets/converted/Rovastar - Cosmic Echoes 2.json"),
 };
 
 const CANVAS_WIDTH = 1280;

@@ -78,6 +78,12 @@ export const MILKDROP_PRESET_NAMES = [
   "Flexi - gold plated maelstrom of chaos",
   "martin - golden mirror",
   "martin + flexi - diamond cutter [prismaticvortex.com] - camille - i wish i wish i wish i was constrained",
+  "Geiss - Cosmic Dust 2",
+  "Geiss - Reaction Diffusion 3",
+  "Geiss - Aurora 2",
+  "Geiss - Cosmic Dust 2 - Trails 7",
+  "Goody - Aurora Totalis",
+  "Rovastar - Cosmic Echoes 2",
 ] as const;
 
 export type MilkdropPresetName = typeof MILKDROP_PRESET_NAMES[number];
@@ -100,6 +106,12 @@ export const MILKDROP_PRESET_MAP: Record<string, string> = {
   "MilkDrop: Gold Maelstrom": "Flexi - gold plated maelstrom of chaos",
   "MilkDrop: Golden Mirror": "martin - golden mirror",
   "MilkDrop: Diamond Cutter": "martin + flexi - diamond cutter [prismaticvortex.com] - camille - i wish i wish i wish i was constrained",
+  "MilkDrop: Cosmic Dust II": "Geiss - Cosmic Dust 2",
+  "MilkDrop: Reaction Diffusion": "Geiss - Reaction Diffusion 3",
+  "MilkDrop: Aurora": "Geiss - Aurora 2",
+  "MilkDrop: Cosmic Trails": "Geiss - Cosmic Dust 2 - Trails 7",
+  "MilkDrop: Aurora Totalis": "Goody - Aurora Totalis",
+  "MilkDrop: Cosmic Echoes": "Rovastar - Cosmic Echoes 2",
 };
 
 export function isMilkdropPreset(name: string): boolean {

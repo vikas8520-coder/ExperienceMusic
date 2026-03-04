@@ -232,6 +232,12 @@ export const presets = [
   "MilkDrop: Gold Maelstrom",
   "MilkDrop: Golden Mirror",
   "MilkDrop: Diamond Cutter",
+  "MilkDrop: Cosmic Dust II",
+  "MilkDrop: Reaction Diffusion",
+  "MilkDrop: Aurora",
+  "MilkDrop: Cosmic Trails",
+  "MilkDrop: Aurora Totalis",
+  "MilkDrop: Cosmic Echoes",
 ] as const;
 
 export type PresetName = typeof presets[number];
@@ -292,6 +298,12 @@ export const presetCategories = [
       { name: "MilkDrop: Gold Maelstrom" as PresetName, icon: "milkdrop", shortName: "Gold" },
       { name: "MilkDrop: Golden Mirror" as PresetName, icon: "milkdrop", shortName: "Mirror" },
       { name: "MilkDrop: Diamond Cutter" as PresetName, icon: "milkdrop", shortName: "Diamond" },
+      { name: "MilkDrop: Cosmic Dust II" as PresetName, icon: "milkdrop", shortName: "CosmicII" },
+      { name: "MilkDrop: Reaction Diffusion" as PresetName, icon: "milkdrop", shortName: "Reaction" },
+      { name: "MilkDrop: Aurora" as PresetName, icon: "milkdrop", shortName: "Aurora" },
+      { name: "MilkDrop: Cosmic Trails" as PresetName, icon: "milkdrop", shortName: "Trails" },
+      { name: "MilkDrop: Aurora Totalis" as PresetName, icon: "milkdrop", shortName: "Totalis" },
+      { name: "MilkDrop: Cosmic Echoes" as PresetName, icon: "milkdrop", shortName: "Echoes" },
     ],
   },
 ] as const;
