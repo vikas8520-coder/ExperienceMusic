@@ -92,6 +92,11 @@ export const MILKDROP_PRESET_NAMES = [
   "Flexi - intensive shader fractal",
   "Flexi - Julia fractal",
   "martin + flexi - mandelbox explorer - high speed oversustained bipolar",
+  "random mash-up round 47",
+  "ShadowHarlequin - Fitting Butterfly - v4 - [Loadus & Geiss - FractalDrop 22] v2v2v2v2newcolorsv2v2-22v2-NEWv222v2 bennett",
+  "Flexi + fiShbRaiN - operation fatcap II",
+  "martin - elusive impressions mix2 - flacc mess proph nz+2",
+  "ORB - Magma Pool",
 ] as const;
 
 export type MilkdropPresetName = typeof MILKDROP_PRESET_NAMES[number];
@@ -128,6 +133,11 @@ export const MILKDROP_PRESET_MAP: Record<string, string> = {
   "MilkDrop: Shader Fractal": "Flexi - intensive shader fractal",
   "MilkDrop: Julia Fractal": "Flexi - Julia fractal",
   "MilkDrop: Mandelbox Bipolar": "martin + flexi - mandelbox explorer - high speed oversustained bipolar",
+  "MilkDrop: Random Mashup": "random mash-up round 47",
+  "MilkDrop: Fractal Butterfly": "ShadowHarlequin - Fitting Butterfly - v4 - [Loadus & Geiss - FractalDrop 22] v2v2v2v2newcolorsv2v2-22v2-NEWv222v2 bennett",
+  "MilkDrop: Operation Fatcap": "Flexi + fiShbRaiN - operation fatcap II",
+  "MilkDrop: Elusive Impressions": "martin - elusive impressions mix2 - flacc mess proph nz+2",
+  "MilkDrop: Magma Pool": "ORB - Magma Pool",
 };
 
 export function isMilkdropPreset(name: string): boolean {

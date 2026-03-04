@@ -246,6 +246,11 @@ export const presets = [
   "MilkDrop: Shader Fractal",
   "MilkDrop: Julia Fractal",
   "MilkDrop: Mandelbox Bipolar",
+  "MilkDrop: Random Mashup",
+  "MilkDrop: Fractal Butterfly",
+  "MilkDrop: Operation Fatcap",
+  "MilkDrop: Elusive Impressions",
+  "MilkDrop: Magma Pool",
 ] as const;
 
 export type PresetName = typeof presets[number];
@@ -320,6 +325,11 @@ export const presetCategories = [
       { name: "MilkDrop: Shader Fractal" as PresetName, icon: "milkdrop", shortName: "Shader" },
       { name: "MilkDrop: Julia Fractal" as PresetName, icon: "milkdrop", shortName: "Julia" },
       { name: "MilkDrop: Mandelbox Bipolar" as PresetName, icon: "milkdrop", shortName: "Bipolar" },
+      { name: "MilkDrop: Random Mashup" as PresetName, icon: "milkdrop", shortName: "Mashup" },
+      { name: "MilkDrop: Fractal Butterfly" as PresetName, icon: "milkdrop", shortName: "Butterfly" },
+      { name: "MilkDrop: Operation Fatcap" as PresetName, icon: "milkdrop", shortName: "Fatcap" },
+      { name: "MilkDrop: Elusive Impressions" as PresetName, icon: "milkdrop", shortName: "Elusive" },
+      { name: "MilkDrop: Magma Pool" as PresetName, icon: "milkdrop", shortName: "MagmaPool" },
     ],
   },
 ] as const;
