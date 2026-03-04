@@ -223,6 +223,15 @@ export const presets = [
   "MilkDrop: Drain to Heaven",
   "MilkDrop: Chasers",
   "MilkDrop: Fractopia",
+  "MilkDrop: Mandelbox",
+  "MilkDrop: Extreme Heat",
+  "MilkDrop: Tokamak",
+  "MilkDrop: Neon Tokyo",
+  "MilkDrop: Neon Fire",
+  "MilkDrop: Neon Grafitti",
+  "MilkDrop: Gold Maelstrom",
+  "MilkDrop: Golden Mirror",
+  "MilkDrop: Diamond Cutter",
 ] as const;
 
 export type PresetName = typeof presets[number];
@@ -274,9 +283,25 @@ export const presetCategories = [
       { name: "MilkDrop: Drain to Heaven" as PresetName, icon: "milkdrop", shortName: "Drain" },
       { name: "MilkDrop: Chasers" as PresetName, icon: "milkdrop", shortName: "Chasers" },
       { name: "MilkDrop: Fractopia" as PresetName, icon: "milkdrop", shortName: "Fractopia" },
+      { name: "MilkDrop: Mandelbox" as PresetName, icon: "milkdrop", shortName: "Mandelbox" },
+      { name: "MilkDrop: Extreme Heat" as PresetName, icon: "milkdrop", shortName: "Heat" },
+      { name: "MilkDrop: Tokamak" as PresetName, icon: "milkdrop", shortName: "Tokamak" },
+      { name: "MilkDrop: Neon Tokyo" as PresetName, icon: "milkdrop", shortName: "NeonTokyo" },
+      { name: "MilkDrop: Neon Fire" as PresetName, icon: "milkdrop", shortName: "NeonFire" },
+      { name: "MilkDrop: Neon Grafitti" as PresetName, icon: "milkdrop", shortName: "Grafitti" },
+      { name: "MilkDrop: Gold Maelstrom" as PresetName, icon: "milkdrop", shortName: "Gold" },
+      { name: "MilkDrop: Golden Mirror" as PresetName, icon: "milkdrop", shortName: "Mirror" },
+      { name: "MilkDrop: Diamond Cutter" as PresetName, icon: "milkdrop", shortName: "Diamond" },
     ],
   },
 ] as const;
+
+export const categoryColors: Record<string, [string, string]> = {
+  Fractals: ["#7c3aed", "#3b82f6"],   // violet → blue
+  Base:     ["#ec4899", "#06b6d4"],   // magenta → cyan
+  Cymatics: ["#14b8a6", "#f59e0b"],   // teal → amber
+  MilkDrop: ["#e879f9", "#facc15"],   // pink → yellow
+};
 
 export type PresetEvolutionConfig = {
   preset: EvolutionPreset;

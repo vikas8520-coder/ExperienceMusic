@@ -5,6 +5,15 @@ import type { AudioData } from "@/hooks/use-audio-analyzer";
 import { convertAudioForButterchurn, resolveButterchurnPresetKey } from "./MilkdropBridge";
 import type { ImageFilterId } from "@/lib/visualizer-presets";
 
+// Presets not in the base butterchurn bundle — must be imported explicitly for Vite
+const JSON_PRESET_LOADERS: Record<string, () => Promise<any>> = {
+  "Geiss - Tokamak Plus 3": () => import("butterchurn-presets/presets/converted/Geiss - Tokamak Plus 3.json"),
+  "ShadowHarlequin - mashup - Satin Sunburst (Neon Tokyo Megamix) v1": () => import("butterchurn-presets/presets/converted/ShadowHarlequin - mashup - Satin Sunburst (Neon Tokyo Megamix) v1.json"),
+  "Flexi - molten neon fire spirit": () => import("butterchurn-presets/presets/converted/Flexi - molten neon fire spirit.json"),
+  "Flexi - gold plated maelstrom of chaos": () => import("butterchurn-presets/presets/converted/Flexi - gold plated maelstrom of chaos.json"),
+  "martin - golden mirror": () => import("butterchurn-presets/presets/converted/martin - golden mirror.json"),
+};
+
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = 720;
 
@@ -79,7 +88,15 @@ export function MilkdropTextureBridge({
 
         const allPresets = butterchurnPresets.default.getPresets();
         const key = resolveButterchurnPresetKey(presetName);
-        const presetData = (key && allPresets[key]) || Object.values(allPresets)[0];
+        let presetData = key ? allPresets[key] : undefined;
+        // Fallback: load individual JSON for presets not in the base bundle
+        if (!presetData && key && JSON_PRESET_LOADERS[key]) {
+          try {
+            const json = await JSON_PRESET_LOADERS[key]();
+            presetData = json.default || json;
+          } catch { /* preset not found, fall through to default */ }
+        }
+        if (!presetData) presetData = Object.values(allPresets)[0];
         if (presetData) {
           visualizer.loadPreset(presetData, 0);
         }
@@ -128,7 +145,14 @@ export function MilkdropTextureBridge({
         const butterchurnPresets = await import("butterchurn-presets");
         const allPresets = butterchurnPresets.default.getPresets();
         const key = resolveButterchurnPresetKey(presetName);
-        const presetData = (key && allPresets[key]) || Object.values(allPresets)[0];
+        let presetData = key ? allPresets[key] : undefined;
+        if (!presetData && key && JSON_PRESET_LOADERS[key]) {
+          try {
+            const json = await JSON_PRESET_LOADERS[key]();
+            presetData = json.default || json;
+          } catch { /* preset not found */ }
+        }
+        if (!presetData) presetData = Object.values(allPresets)[0];
         if (presetData) {
           visualizerRef.current.loadPreset(presetData, 1.0);
         }

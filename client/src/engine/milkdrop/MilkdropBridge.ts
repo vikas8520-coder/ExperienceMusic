@@ -69,6 +69,15 @@ export const MILKDROP_PRESET_NAMES = [
   "martin - castle in the air",
   "martin - disco mix 4",
   "martin - witchcraft reloaded",
+  "martin - mandelbox explorer - high speed demo version",
+  "martin - extreme heat",
+  "Geiss - Tokamak Plus 3",
+  "ShadowHarlequin - mashup - Satin Sunburst (Neon Tokyo Megamix) v1",
+  "Flexi - molten neon fire spirit",
+  "flexi + fishbrain - neon mindblob grafitti",
+  "Flexi - gold plated maelstrom of chaos",
+  "martin - golden mirror",
+  "martin + flexi - diamond cutter [prismaticvortex.com] - camille - i wish i wish i wish i was constrained",
 ] as const;
 
 export type MilkdropPresetName = typeof MILKDROP_PRESET_NAMES[number];
@@ -82,6 +91,15 @@ export const MILKDROP_PRESET_MAP: Record<string, string> = {
   "MilkDrop: Drain to Heaven": "Cope - The Neverending Explosion of Red Liquid Fire",
   "MilkDrop: Chasers": "Phat+fiShbRaiN+Eo.S_Mandala_Chasers_remix",
   "MilkDrop: Fractopia": "flexi - patternton, district of media, capitol of the united abstractions of fractopia",
+  "MilkDrop: Mandelbox": "martin - mandelbox explorer - high speed demo version",
+  "MilkDrop: Extreme Heat": "martin - extreme heat",
+  "MilkDrop: Tokamak": "Geiss - Tokamak Plus 3",
+  "MilkDrop: Neon Tokyo": "ShadowHarlequin - mashup - Satin Sunburst (Neon Tokyo Megamix) v1",
+  "MilkDrop: Neon Fire": "Flexi - molten neon fire spirit",
+  "MilkDrop: Neon Grafitti": "flexi + fishbrain - neon mindblob grafitti",
+  "MilkDrop: Gold Maelstrom": "Flexi - gold plated maelstrom of chaos",
+  "MilkDrop: Golden Mirror": "martin - golden mirror",
+  "MilkDrop: Diamond Cutter": "martin + flexi - diamond cutter [prismaticvortex.com] - camille - i wish i wish i wish i was constrained",
 };
 
 export function isMilkdropPreset(name: string): boolean {
