@@ -92,6 +92,8 @@ export const MILKDROP_PRESET_NAMES = [
   "Flexi - intensive shader fractal",
   "Flexi - Julia fractal",
   "martin + flexi - mandelbox explorer - high speed oversustained bipolar",
+  "LuxXx - GrindFace  225 mg dose  ",
+  "fiShbRaiN + Flexi - witchcraft unleashed",
 ] as const;
 
 export type MilkdropPresetName = typeof MILKDROP_PRESET_NAMES[number];
@@ -128,6 +130,8 @@ export const MILKDROP_PRESET_MAP: Record<string, string> = {
   "MilkDrop: Shader Fractal": "Flexi - intensive shader fractal",
   "MilkDrop: Julia Fractal": "Flexi - Julia fractal",
   "MilkDrop: Mandelbox Bipolar": "martin + flexi - mandelbox explorer - high speed oversustained bipolar",
+  "MilkDrop: Intense Grind": "LuxXx - GrindFace  225 mg dose  ",
+  "MilkDrop: Unleashed Witch": "fiShbRaiN + Flexi - witchcraft unleashed",
 };
 
 export function isMilkdropPreset(name: string): boolean {
