@@ -26,6 +26,8 @@ const JSON_PRESET_LOADERS: Record<string, () => Promise<any>> = {
   "Flexi - intensive shader fractal": () => import("butterchurn-presets/presets/converted/Flexi - intensive shader fractal.json"),
   "Flexi - Julia fractal": () => import("butterchurn-presets/presets/converted/Flexi - Julia fractal.json"),
   "martin + flexi - mandelbox explorer - high speed oversustained bipolar": () => import("butterchurn-presets/presets/converted/martin + flexi - mandelbox explorer - high speed oversustained bipolar.json"),
+  "mstress - Scattered gravity (Smoked mix)": () => import("butterchurn-presets/presets/converted/mstress - Scattered gravity (Smoked mix).json"),
+  "Fumbling_Foo & Flexi, Martin, Orb, Unchained - Star Nova v7b": () => import("butterchurn-presets/presets/converted/Fumbling_Foo & Flexi, Martin, Orb, Unchained - Star Nova v7b.json"),
 };
 
 const CANVAS_WIDTH = 1280;

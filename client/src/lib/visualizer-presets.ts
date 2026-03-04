@@ -246,6 +246,8 @@ export const presets = [
   "MilkDrop: Shader Fractal",
   "MilkDrop: Julia Fractal",
   "MilkDrop: Mandelbox Bipolar",
+  "MilkDrop: Scattered Gravity",
+  "MilkDrop: Star Nova",
 ] as const;
 
 export type PresetName = typeof presets[number];
@@ -320,6 +322,8 @@ export const presetCategories = [
       { name: "MilkDrop: Shader Fractal" as PresetName, icon: "milkdrop", shortName: "Shader" },
       { name: "MilkDrop: Julia Fractal" as PresetName, icon: "milkdrop", shortName: "Julia" },
       { name: "MilkDrop: Mandelbox Bipolar" as PresetName, icon: "milkdrop", shortName: "Bipolar" },
+      { name: "MilkDrop: Scattered Gravity" as PresetName, icon: "milkdrop", shortName: "Gravity" },
+      { name: "MilkDrop: Star Nova" as PresetName, icon: "milkdrop", shortName: "StarNova" },
     ],
   },
 ] as const;
