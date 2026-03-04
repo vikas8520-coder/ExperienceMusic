@@ -35,7 +35,6 @@ import { startVirtualCamera, stopVirtualCamera } from "@/lib/virtualCamera";
 import { SlideTray } from "@/components/layout/SlideTray";
 import { ActionCluster } from "@/components/layout/ActionCluster";
 import { MiniPlayer } from "@/components/player/MiniPlayer";
-import { ProjectionButton } from "@/components/layout/ProjectionButton";
 import { useProjection } from "@/hooks/useProjection";
 import { useAutoEvolve } from "@/hooks/use-auto-evolve";
 import type { EvolutionSignals } from "@/engine/evolution/types";
@@ -1659,8 +1658,6 @@ export default function Home() {
       {/* SessionStats */}
       <SessionStats isPlaying={isPlaying} presetName={settings.presetName} getAudioData={getReactiveAudioData} />
 
-      {/* ProjectionButton */}
-      <ProjectionButton isProjecting={isProjecting} onToggle={handleToggleProjection} />
 
       {/* SoundCloud Panel */}
       <SoundCloudPanel
