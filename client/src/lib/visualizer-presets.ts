@@ -238,6 +238,13 @@ export const presets = [
   "MilkDrop: Cosmic Trails",
   "MilkDrop: Aurora Totalis",
   "MilkDrop: Cosmic Echoes",
+  "MilkDrop: Mandelbulb",
+  "MilkDrop: Infinity",
+  "MilkDrop: Fractal Descent",
+  "MilkDrop: Reality Tunnel",
+  "MilkDrop: Smashing Fractals",
+  "MilkDrop: Shader Fractal",
+  "MilkDrop: Julia Fractal",
 ] as const;
 
 export type PresetName = typeof presets[number];
@@ -304,6 +311,13 @@ export const presetCategories = [
       { name: "MilkDrop: Cosmic Trails" as PresetName, icon: "milkdrop", shortName: "Trails" },
       { name: "MilkDrop: Aurora Totalis" as PresetName, icon: "milkdrop", shortName: "Totalis" },
       { name: "MilkDrop: Cosmic Echoes" as PresetName, icon: "milkdrop", shortName: "Echoes" },
+      { name: "MilkDrop: Mandelbulb" as PresetName, icon: "milkdrop", shortName: "Mandelbulb" },
+      { name: "MilkDrop: Infinity" as PresetName, icon: "milkdrop", shortName: "Infinity" },
+      { name: "MilkDrop: Fractal Descent" as PresetName, icon: "milkdrop", shortName: "Descent" },
+      { name: "MilkDrop: Reality Tunnel" as PresetName, icon: "milkdrop", shortName: "Tunnel" },
+      { name: "MilkDrop: Smashing Fractals" as PresetName, icon: "milkdrop", shortName: "Smashing" },
+      { name: "MilkDrop: Shader Fractal" as PresetName, icon: "milkdrop", shortName: "Shader" },
+      { name: "MilkDrop: Julia Fractal" as PresetName, icon: "milkdrop", shortName: "Julia" },
     ],
   },
 ] as const;

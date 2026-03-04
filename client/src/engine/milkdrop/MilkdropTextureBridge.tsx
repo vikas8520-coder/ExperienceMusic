@@ -18,6 +18,13 @@ const JSON_PRESET_LOADERS: Record<string, () => Promise<any>> = {
   "Geiss - Cosmic Dust 2 - Trails 7": () => import("butterchurn-presets/presets/converted/Geiss - Cosmic Dust 2 - Trails 7.json"),
   "Goody - Aurora Totalis": () => import("butterchurn-presets/presets/converted/Goody - Aurora Totalis.json"),
   "Rovastar - Cosmic Echoes 2": () => import("butterchurn-presets/presets/converted/Rovastar - Cosmic Echoes 2.json"),
+  "martin - mandelbulb slideshow": () => import("butterchurn-presets/presets/converted/martin - mandelbulb slideshow.json"),
+  "Flexi - working with infinity": () => import("butterchurn-presets/presets/converted/Flexi - working with infinity.json"),
+  "flexi - fractal descent": () => import("butterchurn-presets/presets/converted/flexi - fractal descent.json"),
+  "Flexi - reality tunnel": () => import("butterchurn-presets/presets/converted/Flexi - reality tunnel.json"),
+  "Flexi - smashing fractals 2.0": () => import("butterchurn-presets/presets/converted/Flexi - smashing fractals 2.0.json"),
+  "Flexi - intensive shader fractal": () => import("butterchurn-presets/presets/converted/Flexi - intensive shader fractal.json"),
+  "Flexi - Julia fractal": () => import("butterchurn-presets/presets/converted/Flexi - Julia fractal.json"),
 };
 
 const CANVAS_WIDTH = 1280;

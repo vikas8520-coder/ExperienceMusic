@@ -84,6 +84,13 @@ export const MILKDROP_PRESET_NAMES = [
   "Geiss - Cosmic Dust 2 - Trails 7",
   "Goody - Aurora Totalis",
   "Rovastar - Cosmic Echoes 2",
+  "martin - mandelbulb slideshow",
+  "Flexi - working with infinity",
+  "flexi - fractal descent",
+  "Flexi - reality tunnel",
+  "Flexi - smashing fractals 2.0",
+  "Flexi - intensive shader fractal",
+  "Flexi - Julia fractal",
 ] as const;
 
 export type MilkdropPresetName = typeof MILKDROP_PRESET_NAMES[number];
@@ -112,6 +119,13 @@ export const MILKDROP_PRESET_MAP: Record<string, string> = {
   "MilkDrop: Cosmic Trails": "Geiss - Cosmic Dust 2 - Trails 7",
   "MilkDrop: Aurora Totalis": "Goody - Aurora Totalis",
   "MilkDrop: Cosmic Echoes": "Rovastar - Cosmic Echoes 2",
+  "MilkDrop: Mandelbulb": "martin - mandelbulb slideshow",
+  "MilkDrop: Infinity": "Flexi - working with infinity",
+  "MilkDrop: Fractal Descent": "flexi - fractal descent",
+  "MilkDrop: Reality Tunnel": "Flexi - reality tunnel",
+  "MilkDrop: Smashing Fractals": "Flexi - smashing fractals 2.0",
+  "MilkDrop: Shader Fractal": "Flexi - intensive shader fractal",
+  "MilkDrop: Julia Fractal": "Flexi - Julia fractal",
 };
 
 export function isMilkdropPreset(name: string): boolean {

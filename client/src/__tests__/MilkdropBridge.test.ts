@@ -89,7 +89,7 @@ describe("MilkdropBridge — Audio Conversion", () => {
 
 describe("MilkDrop Preset Names", () => {
   it("has at least 20 curated presets", () => {
-    expect(MILKDROP_PRESET_NAMES.length).toBe(35);
+    expect(MILKDROP_PRESET_NAMES.length).toBe(42);
   });
 
   it("all entries are non-empty strings", () => {
@@ -102,7 +102,7 @@ describe("MilkDrop Preset Names", () => {
 
 describe("MILKDROP_PRESET_MAP", () => {
   it("maps 5 UI preset names to butterchurn keys", () => {
-    expect(Object.keys(MILKDROP_PRESET_MAP).length).toBe(20);
+    expect(Object.keys(MILKDROP_PRESET_MAP).length).toBe(27);
   });
 
   it("all keys start with 'MilkDrop:'", () => {
