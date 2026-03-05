@@ -8,14 +8,14 @@ import {
 
 interface ColorsPanelProps {
   colorSettings: ColorSettings;
-  setColorSettings: (s: ColorSettings) => void;
+  setColorSettings: (s: ColorSettings | ((prev: ColorSettings) => ColorSettings)) => void;
   colorPalette: string[];
 }
 
 export function ColorsPanel({ colorSettings, setColorSettings, colorPalette }: ColorsPanelProps) {
   const updateColorSetting = useCallback(<K extends keyof ColorSettings>(key: K, value: ColorSettings[K]) => {
-    setColorSettings({ ...colorSettings, [key]: value });
-  }, [colorSettings, setColorSettings]);
+    setColorSettings(prev => ({ ...prev, [key]: value }));
+  }, [setColorSettings]);
 
   return (
     <div className="space-y-3" data-testid="panel-colors">

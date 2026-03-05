@@ -23,7 +23,7 @@ export function LibraryPanel({
   const [tab, setTab] = useState<"library" | "soundcloud">("library");
 
   return (
-    <div className="space-y-3" data-testid="panel-library-settings">
+    <div className="space-y-3" data-testid="panel-library">
       <div className="flex gap-1">
         <button
           onClick={() => setTab("library")}

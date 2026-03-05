@@ -9,7 +9,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { presets, presetCategories, type PresetName } from "@/lib/visualizer-presets";
-import { Music, Play, Pause, Save, Eye, EyeOff, Library, Monitor, Layers, ExternalLink } from "lucide-react";
+import { Music, Play, Pause, Save, Eye, EyeOff, Library, ExternalLink } from "lucide-react";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -23,8 +23,6 @@ interface CommandPaletteProps {
   isPlaying?: boolean;
   trailsOn?: boolean;
   darkOverlay?: boolean;
-  layoutMode?: "zen" | "command";
-  onSwitchMode?: () => void;
   isProjecting?: boolean;
   onToggleProjection?: () => void;
 }
@@ -41,8 +39,6 @@ export function CommandPalette({
   isPlaying,
   trailsOn,
   darkOverlay,
-  layoutMode,
-  onSwitchMode,
   isProjecting,
   onToggleProjection,
 }: CommandPaletteProps) {
@@ -71,15 +67,12 @@ export function CommandPalette({
         case "action:library":
           onToggleLibrary?.();
           break;
-        case "action:switch-mode":
-          onSwitchMode?.();
-          break;
         case "action:toggle-projection":
           onToggleProjection?.();
           break;
       }
     },
-    [onOpenChange, onSelectPreset, onTogglePlay, onSavePreset, onToggleTrails, onToggleDarkOverlay, onToggleLibrary, onSwitchMode, onToggleProjection],
+    [onOpenChange, onSelectPreset, onTogglePlay, onSavePreset, onToggleTrails, onToggleDarkOverlay, onToggleLibrary, onToggleProjection],
   );
 
   return (
@@ -109,15 +102,6 @@ export function CommandPalette({
           <CommandItem value="action:library" onSelect={handleSelect}>
             <Library className="mr-2 h-4 w-4" />
             Toggle Library
-          </CommandItem>
-          <CommandItem value="action:switch-mode" onSelect={handleSelect}>
-            {layoutMode === "zen" ? (
-              <Layers className="mr-2 h-4 w-4" />
-            ) : (
-              <Monitor className="mr-2 h-4 w-4" />
-            )}
-            {layoutMode === "zen" ? "Switch to Command Center" : "Switch to Zen Mode"}
-            <CommandShortcut>Ctrl+Shift+L</CommandShortcut>
           </CommandItem>
           <CommandItem value="action:toggle-projection" onSelect={handleSelect}>
             <ExternalLink className="mr-2 h-4 w-4" />

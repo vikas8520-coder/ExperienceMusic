@@ -802,6 +802,9 @@ export default function Home() {
       if (hideTimerRef.current !== null) {
         window.clearTimeout(hideTimerRef.current);
       }
+      if (ambientTimerRef.current !== null) {
+        window.clearTimeout(ambientTimerRef.current);
+      }
       window.removeEventListener("mousemove", onActivity);
       window.removeEventListener("mousedown", onActivity);
       window.removeEventListener("wheel", onActivity);

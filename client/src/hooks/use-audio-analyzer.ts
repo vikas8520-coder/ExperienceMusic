@@ -21,6 +21,9 @@ export interface AudioData {
   bassPresence: number; // Smoothed bass energy
 }
 
+// Reusable empty buffer — avoids allocating new Uint8Array(0) every frame
+const EMPTY_FREQ_DATA = new Uint8Array(0);
+
 // Smooth value with EMA (exponential moving average)
 function ema(current: number, previous: number, alpha: number): number {
   return alpha * current + (1 - alpha) * previous;
@@ -80,7 +83,7 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
         kick: s.kick,
         dominantFreq: s.dominantFreq,
         modeIndex: s.modeIndex,
-        frequencyData: new Uint8Array(0),
+        frequencyData: EMPTY_FREQ_DATA,
         bpm: s.bpm,
         beatPhase,
         bpmSin1: Math.sin(2 * Math.PI * beatPhase),
@@ -254,23 +257,23 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
     if (!audioElement || !audioSrc) return;
 
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    
+
     // Check if we need to create a new connection
     const needsNewSource = audioElement !== lastAudioElementRef.current;
     const needsNewContext = !audioContextRef.current || audioContextRef.current.state === 'closed';
-    
+
     // Create new context if needed
     if (needsNewContext) {
       audioContextRef.current = new AudioContextClass();
     }
-    
+
     const ctx = audioContextRef.current!;
 
     // Create new analyzer with higher FFT for better frequency resolution
     const analyzer = ctx.createAnalyser();
     analyzer.fftSize = 2048;
     analyzer.smoothingTimeConstant = 0.6; // Less smoothing in analyzer, we do our own EMA
-    
+
     // Disconnect old analyzer if exists
     if (analyzerRef.current) {
       try {
@@ -279,7 +282,7 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
         // Already disconnected
       }
     }
-    
+
     analyzerRef.current = analyzer;
     const bufferLength = analyzer.frequencyBinCount;
     dataArrayRef.current = new Uint8Array(bufferLength);
@@ -292,7 +295,7 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
         sourceNodeRef.current = source;
         lastAudioElementRef.current = audioElement;
       }
-      
+
       // Create new destination for recording
       const dest = ctx.createMediaStreamDestination();
       destNodeRef.current = dest;
@@ -305,7 +308,7 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
         } catch (e) {
           // Not connected
         }
-        
+
         sourceNodeRef.current.connect(analyzer);
         analyzer.connect(ctx.destination);
         analyzer.connect(dest);
@@ -313,6 +316,11 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
     } catch (e) {
       console.error("Audio connection error:", e);
     }
+
+    return () => {
+      // Disconnect analyzer to prevent orphan nodes accumulating
+      try { analyzer.disconnect(); } catch {}
+    };
   }, [audioElement, audioSrc]);
 
   // Resume audio context on user interaction
@@ -332,9 +340,21 @@ export function useAudioAnalyzer(audioElement: HTMLAudioElement | null, audioSrc
     };
   }, []);
 
-  return { 
-    getAudioData, 
-    audioContext: audioContextRef.current, 
-    destNode: destNodeRef.current 
+  // Close AudioContext when hook unmounts to prevent leaked browser audio resources
+  useEffect(() => {
+    return () => {
+      try { analyzerRef.current?.disconnect(); } catch {}
+      try { sourceNodeRef.current?.disconnect(); } catch {}
+      try { destNodeRef.current?.disconnect(); } catch {}
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(() => {});
+      }
+    };
+  }, []);
+
+  return {
+    getAudioData,
+    audioContext: audioContextRef.current,
+    destNode: destNodeRef.current
   };
 }

@@ -1,7 +1,7 @@
 import { EffectComposer, Bloom, ChromaticAberration, Noise, Vignette } from "@react-three/postprocessing";
 import { BlendFunction, KernelSize } from "postprocessing";
 import * as THREE from "three";
-import { useMemo, useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Kaleidoscope } from "./KaleidoscopeEffect";
 import { Afterimage } from "./AfterimageEffect";
@@ -136,11 +136,11 @@ export function Effects({
   const bloomLuminanceThreshold = 0.2 + (1 - sh) * 0.25;
   
   // Chromatic aberration: Driven by highs for sparkle/glitch effect
-  // Kick adds extra punch on beats
-  const chromaOffset = useMemo(() => {
-    const amt = (0.001 + h * 0.012 + kick * 0.005) * intensity;
-    return new THREE.Vector2(amt, -amt * 0.85);
-  }, [h, kick, intensity]);
+  // Kick adds extra punch on beats — use persistent ref to avoid allocations every frame
+  const chromaOffsetRef = useRef(new THREE.Vector2(0, 0));
+  const chromaAmt = (0.001 + h * 0.012 + kick * 0.005) * intensity;
+  chromaOffsetRef.current.set(chromaAmt, -chromaAmt * 0.85);
+  const chromaOffset = chromaOffsetRef.current;
 
   // Noise: Driven by highs for texture, sub for subtle body
   const noiseAmount = 0.02 + sh * 0.06 + ssub * 0.02;
