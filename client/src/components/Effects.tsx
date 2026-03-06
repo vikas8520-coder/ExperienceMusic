@@ -53,10 +53,26 @@ export function Effects({
   // Guard against WebGL context loss.
   // The postprocessing library calls renderer.getContext().getContextAttributes().alpha
   // in both EffectComposerImpl constructor and addPass(). When the WebGL context is
-  // lost (GPU pressure from rapid setting changes), getContext() returns null and crashes.
-  // We monkey-patch it to return a safe fallback object instead.
+  // lost, getContext() returns null and crashes. We patch it on every gl change.
   const { gl } = useThree();
   const [contextLost, setContextLost] = useState(false);
+  const lastPatchedGl = useRef<any>(null);
+
+  // Patch SYNCHRONOUSLY on every new gl instance — runs before JSX (EffectComposer)
+  if (gl && gl !== lastPatchedGl.current) {
+    if (!(gl as any).__safePatched) {
+      const orig = gl.getContext.bind(gl);
+      gl.getContext = () => {
+        try {
+          const ctx = orig();
+          if (ctx) return ctx;
+        } catch (_) { /* swallow */ }
+        return { getContextAttributes: () => ({ alpha: true }) } as any;
+      };
+      (gl as any).__safePatched = true;
+    }
+    lastPatchedGl.current = gl;
+  }
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -71,21 +87,9 @@ export function Effects({
     };
     canvas.addEventListener("webglcontextlost", onLost);
     canvas.addEventListener("webglcontextrestored", onRestored);
-
-    // Patch getContext to never return null — the postprocessing library doesn't guard it.
-    const origGetContext = gl.getContext.bind(gl);
-    const safeGetContext = () => {
-      const ctx = origGetContext();
-      if (ctx) return ctx;
-      // Return a minimal stand-in so getContextAttributes().alpha doesn't crash.
-      return { getContextAttributes: () => ({ alpha: true }) } as any;
-    };
-    gl.getContext = safeGetContext;
-
     return () => {
       canvas.removeEventListener("webglcontextlost", onLost);
       canvas.removeEventListener("webglcontextrestored", onRestored);
-      gl.getContext = origGetContext;
     };
   }, [gl]);
 

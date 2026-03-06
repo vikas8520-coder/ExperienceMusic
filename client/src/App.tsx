@@ -5,12 +5,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Home from "@/pages/Home";
+import WallpaperStudio from "@/pages/WallpaperStudio";
 import NotFound from "@/pages/not-found";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/wallpaper" component={WallpaperStudio} />
       <Route component={NotFound} />
     </Switch>
   );

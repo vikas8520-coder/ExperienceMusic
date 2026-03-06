@@ -3,6 +3,7 @@ import { JuliaOrbitTrapPreset } from "./fractals/JuliaOrbitTrapPreset";
 import { BurningShipPreset, MultibrotPreset, PhoenixPreset, NewtonPreset } from "./fractals/EscapeFamilyPresets";
 import { LivingTunnelPreset } from "./fractals/LivingTunnelPreset";
 import { GrayScottPreset, CurlFlowPreset } from "./fractals/SimulationFieldPresets";
+import { PsyTemplePreset } from "./fractals/PsyTemplePreset";
 import type { FractalPreset } from "./types";
 
 export const fractalPresets: Record<string, FractalPreset> = {
@@ -15,6 +16,7 @@ export const fractalPresets: Record<string, FractalPreset> = {
   "Living Tunnel": LivingTunnelPreset,
   "Gray Scott": GrayScottPreset,
   "Curl Flow": CurlFlowPreset,
+  "Psy Temple": PsyTemplePreset,
 };
 
 export function isFractalPreset(presetName: string): boolean {

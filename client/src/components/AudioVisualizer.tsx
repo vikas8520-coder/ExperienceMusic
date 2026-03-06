@@ -7,6 +7,13 @@ import { Mesh, Vector3 } from "three";
 import { Effects } from "./Effects";
 import { PsyTunnel as PsyTunnelShader } from "./PsyTunnel";
 import { PremiumField } from "./PremiumField";
+import { TapestryParallax } from "./TapestryParallax";
+import { TapestryParallaxII } from "./TapestryParallaxII";
+import { McKennaMachine } from "./McKennaMachine";
+import { PsyDomainWarp } from "./PsyDomainWarp";
+import { PsyMandala } from "./PsyMandala";
+import { PsyFractalFlame } from "./PsyFractalFlame";
+import { PsyVoronoi } from "./PsyVoronoi";
 import BabylonVisualizer from "./BabylonVisualizer";
 import { type AudioData } from "@/hooks/use-audio-analyzer";
 import { usePresetTransition } from "@/hooks/use-preset-transition";
@@ -5204,6 +5211,13 @@ function ThreeScene({
     if (resolvedPresetName === "Chladni Geometry") return <ChladniGeometry getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
     if (resolvedPresetName === "Resonant Field Lines") return <ResonantFieldLines getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
     if (resolvedPresetName === "Premium Field") return <PremiumField getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Tapestry Parallax") return <TapestryParallax getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Tapestry Zoom") return <TapestryParallaxII getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "McKenna Machine") return <McKennaMachine getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Domain Warp") return <PsyDomainWarp getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Psy Mandala") return <PsyMandala getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Fractal Flame") return <PsyFractalFlame getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
+    if (resolvedPresetName === "Psy Voronoi") return <PsyVoronoi getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
 
     if (isFractalPreset(resolvedPresetName)) {
       const fp = getFractalPreset(resolvedPresetName);
@@ -5246,23 +5260,40 @@ function ThreeScene({
         key={useWebGPUForThisFrame ? "backend-webgpu" : "backend-webgl"}
         gl={async (props) => {
           if (!useWebGPUForThisFrame) {
-            const renderer = new THREE.WebGLRenderer({
-              canvas: props.canvas as HTMLCanvasElement,
-              antialias: renderProfile !== "mobile60",
-              powerPreference: "high-performance",
-              alpha: false,
-              stencil: false,
-              depth: true,
-            });
-            renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.outputColorSpace = THREE.SRGBColorSpace;
-            renderer.toneMappingExposure =
-              renderProfile === "exportQuality"
-                ? 1.06
-                : renderProfile === "desktopCinematic"
-                  ? 1.03
-                  : 1.0;
-            return renderer;
+            try {
+              const renderer = new THREE.WebGLRenderer({
+                canvas: props.canvas as HTMLCanvasElement,
+                antialias: renderProfile !== "mobile60",
+                powerPreference: "high-performance",
+                alpha: false,
+                stencil: false,
+                depth: true,
+              });
+              renderer.toneMapping = THREE.ACESFilmicToneMapping;
+              renderer.outputColorSpace = THREE.SRGBColorSpace;
+              renderer.toneMappingExposure =
+                renderProfile === "exportQuality"
+                  ? 1.06
+                  : renderProfile === "desktopCinematic"
+                    ? 1.03
+                    : 1.0;
+              return renderer;
+            } catch (e) {
+              console.error("[AudioVisualizer] WebGL context creation failed, retrying...", e);
+              // Wait briefly for GPU to recover, then retry with minimal settings
+              await new Promise((r) => setTimeout(r, 500));
+              const renderer = new THREE.WebGLRenderer({
+                canvas: props.canvas as HTMLCanvasElement,
+                antialias: false,
+                powerPreference: "default",
+                alpha: false,
+                stencil: false,
+                depth: true,
+              });
+              renderer.toneMapping = THREE.ACESFilmicToneMapping;
+              renderer.outputColorSpace = THREE.SRGBColorSpace;
+              return renderer;
+            }
           }
 
           const renderer = new WebGPURenderer({
