@@ -28,6 +28,8 @@ import type { AudioFrame, EvolutionSignals } from "@/engine/evolution/types";
 import { hasBabylonPreset } from "@/babylon/registry";
 import { MilkdropTextureBridge } from "@/engine/milkdrop/MilkdropTextureBridge";
 import { isMilkdropPreset } from "@/engine/milkdrop/MilkdropBridge";
+import { GPUComputeParticles } from "./gpu-particles/GPUComputeParticles";
+import { getAttractorType } from "./gpu-particles/attractors";
 
 interface AudioVisualizerProps {
   getAudioData: () => AudioData;
@@ -4880,7 +4882,8 @@ function AudioReactiveEffects({ getAudioData, settings }: { getAudioData: () => 
   });
   
   const { sub, bass, mid, high, kick } = audioDataRef.current;
-  
+  const isGPUPreset = settings.presetName?.startsWith?.("GPU:");
+
   return (
     <Effects
       sub={sub}
@@ -4889,10 +4892,10 @@ function AudioReactiveEffects({ getAudioData, settings }: { getAudioData: () => 
       high={high}
       kick={kick}
       intensity={settings.intensity}
-      glowIntensity={settings.glowIntensity ?? 1.0}
-      bloomOn={settings.glowEnabled ?? true}
-      chromaOn={true}
-      noiseOn={true}
+      glowIntensity={isGPUPreset ? 0.15 : (settings.glowIntensity ?? 1.0)}
+      bloomOn={isGPUPreset ? false : (settings.glowEnabled ?? true)}
+      chromaOn={!isGPUPreset}
+      noiseOn={!isGPUPreset}
       vignetteOn={true}
       kaleidoOn={settings.presetName === "Geometric Kaleidoscope"}
       afterimageOn={(settings.trailsOn ?? false) || (settings.darkOverlay ?? false)}
@@ -5219,6 +5222,12 @@ function ThreeScene({
     if (resolvedPresetName === "Fractal Flame") return <PsyFractalFlame getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
     if (resolvedPresetName === "Psy Voronoi") return <PsyVoronoi getAudioData={getEvolvedAudioData} settings={blendedSettings} />;
 
+    // GPU Particle attractor presets
+    const gpuAttractor = getAttractorType(resolvedPresetName);
+    if (gpuAttractor) {
+      return <GPUComputeParticles getAudioData={getEvolvedAudioData} attractorType={gpuAttractor} settings={blendedSettings} />;
+    }
+
     if (isFractalPreset(resolvedPresetName)) {
       const fp = getFractalPreset(resolvedPresetName);
       if (!fp) return null;
@@ -5350,9 +5359,9 @@ function ThreeScene({
         />
       ))}
       
-      <ambientLight intensity={0.5} />
-      <pointLight position={[10, 10, 10]} intensity={1} />
-      <pointLight position={[-10, -10, -10]} intensity={0.5} color="#ff00ff" />
+      <ambientLight intensity={settings.presetName.startsWith("GPU:") ? 0.05 : 0.5} />
+      <pointLight position={[10, 10, 10]} intensity={settings.presetName.startsWith("GPU:") ? 0.1 : 1} />
+      <pointLight position={[-10, -10, -10]} intensity={settings.presetName.startsWith("GPU:") ? 0.05 : 0.5} color={settings.colorPalette?.[1] || "#7928ca"} />
       
       <ZoomableScene zoom={sceneZoom}>
         <PresetTransition

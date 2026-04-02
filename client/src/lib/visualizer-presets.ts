@@ -254,6 +254,17 @@ export const presets = [
   "MilkDrop: Shader Fractal",
   "MilkDrop: Julia Fractal",
   "MilkDrop: Mandelbox Bipolar",
+  // GPU Particle Attractors
+  "GPU: Lorenz",
+  "GPU: Black Hole",
+  "GPU: Halvorsen",
+  "GPU: Thomas",
+  "GPU: Aizawa",
+  "GPU: DNA Helix",
+  "GPU: Galaxy",
+  "GPU: Tesseract",
+  "GPU: Tornado",
+  "GPU: Interference",
 ] as const;
 
 export type PresetName = typeof presets[number];
@@ -338,6 +349,21 @@ export const presetCategories = [
       { name: "MilkDrop: Mandelbox Bipolar" as PresetName, icon: "milkdrop", shortName: "Bipolar" },
     ],
   },
+  {
+    name: "GPU Particles",
+    presets: [
+      { name: "GPU: Lorenz" as PresetName, icon: "gpu", shortName: "Lorenz" },
+      { name: "GPU: Black Hole" as PresetName, icon: "gpu", shortName: "BlackHole" },
+      { name: "GPU: Halvorsen" as PresetName, icon: "gpu", shortName: "Halvorsen" },
+      { name: "GPU: Thomas" as PresetName, icon: "gpu", shortName: "Thomas" },
+      { name: "GPU: Aizawa" as PresetName, icon: "gpu", shortName: "Aizawa" },
+      { name: "GPU: DNA Helix" as PresetName, icon: "gpu", shortName: "DNA" },
+      { name: "GPU: Galaxy" as PresetName, icon: "gpu", shortName: "Galaxy" },
+      { name: "GPU: Tesseract" as PresetName, icon: "gpu", shortName: "4D Cube" },
+      { name: "GPU: Tornado" as PresetName, icon: "gpu", shortName: "Tornado" },
+      { name: "GPU: Interference" as PresetName, icon: "gpu", shortName: "Waves" },
+    ],
+  },
 ] as const;
 
 export const categoryColors: Record<string, [string, string]> = {
@@ -345,6 +371,7 @@ export const categoryColors: Record<string, [string, string]> = {
   Base:     ["#ec4899", "#06b6d4"],   // magenta → cyan
   Cymatics: ["#14b8a6", "#f59e0b"],   // teal → amber
   MilkDrop: ["#e879f9", "#facc15"],   // pink → yellow
+  "GPU Particles": ["#f97316", "#ef4444"], // orange → red
 };
 
 export type PresetEvolutionConfig = {

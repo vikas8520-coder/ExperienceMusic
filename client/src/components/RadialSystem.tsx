@@ -47,6 +47,28 @@ const RENDER_HEAVY_DIAL_IDS = new Set([
 
 type TabId = "listen" | "create" | "perform" | "record";
 
+export type GPUParticleSettings = {
+  particleDensity: number;    // 0.3–1.0 (scales TEX dimensions)
+  orbitSpeed: number;         // 0–2 camera orbit speed
+  attractorStrength: number;  // 0.5–3 force multiplier
+  trailLength: number;        // 0–0.98 afterimage decay
+  pointBrightness: number;    // 0.5–3 particle glow
+  turbulence: number;         // 0–2 curl noise amount
+  colorMode: "heat" | "palette" | "rainbow";
+  cameraAutoOrbit: boolean;
+};
+
+export const defaultGPUSettings: GPUParticleSettings = {
+  particleDensity: 1.0,
+  orbitSpeed: 0.5,
+  attractorStrength: 1.0,
+  trailLength: 0.0,
+  pointBrightness: 1.0,
+  turbulence: 1.0,
+  colorMode: "heat",
+  cameraAutoOrbit: true,
+};
+
 type UISettings = {
   intensity: number;
   speed: number;
@@ -66,9 +88,10 @@ type UISettings = {
   trailsAmount?: number;
   glowEnabled?: boolean;
   glowIntensity?: number;
+  gpuSettings?: GPUParticleSettings;
 };
 
-type RadialVariant = "base" | "fractal" | "performance";
+type RadialVariant = "base" | "fractal" | "gpu" | "performance";
 type FractalPrecisionTab = "structure" | "motion" | "color" | "audio" | "julia" | "effects";
 type FractalSettingsTileOrder = "ai-first" | "precision-first";
 
@@ -939,7 +962,8 @@ export function RadialSystem({
 }: RadialSystemProps) {
   const isCreateOrPerform = activeTab === "create" || activeTab === "perform";
   const isFractal = isFractalPreset(settings.presetName);
-  const variant: RadialVariant = activeTab === "perform" ? "performance" : isFractal ? "fractal" : "base";
+  const isGPU = settings.presetName.startsWith("GPU:");
+  const variant: RadialVariant = activeTab === "perform" ? "performance" : isFractal ? "fractal" : isGPU ? "gpu" : "base";
   const fps = useFps(500);
 
   const [isPinned, setIsPinned] = useState(false);
@@ -1477,6 +1501,105 @@ export function RadialSystem({
     ];
   }, [micStatus, onToggleMicReactivity, settings.presetEnabled, settings.trailsOn, settings.evolutionEnabled, updateSetting, setSettings]);
 
+  // === GPU Particle settings ===
+  const gpu = settings.gpuSettings ?? defaultGPUSettings;
+  const updateGPU = useCallback(
+    (key: keyof GPUParticleSettings, value: any) =>
+      setSettings((prev: UISettings) => ({
+        ...prev,
+        gpuSettings: { ...(prev.gpuSettings ?? defaultGPUSettings), [key]: value },
+      })),
+    [setSettings],
+  );
+
+  const gpuOrbitDial = dialFromSetting("gpu-orbit", "Orbit", gpu.orbitSpeed, 0, 2, 0.01, (v) => updateGPU("orbitSpeed", v), (v) => `${Math.round(v * 100)}%`);
+  const gpuStrengthDial = dialFromSetting("gpu-strength", "Strength", gpu.attractorStrength, 0.2, 3, 0.01, (v) => updateGPU("attractorStrength", v), (v) => `${v.toFixed(1)}x`);
+  const gpuTrailDial = dialFromSetting("gpu-trail", "Trails", gpu.trailLength, 0, 0.98, 0.01, (v) => {
+    updateGPU("trailLength", v);
+    // Sync with main trails system so the Afterimage effect activates
+    setSettings((prev: UISettings) => ({ ...prev, trailsOn: v > 0.01, trailsAmount: v }));
+  }, (v) => `${Math.round(v * 100)}%`);
+  const gpuBrightnessDial = dialFromSetting("gpu-bright", "Glow", gpu.pointBrightness, 0.3, 3, 0.01, (v) => updateGPU("pointBrightness", v), (v) => `${Math.round(v * 100)}%`);
+  const gpuTurbDial = dialFromSetting("gpu-turb", "Turbulence", gpu.turbulence, 0, 2, 0.01, (v) => updateGPU("turbulence", v), (v) => `${Math.round(v * 100)}%`);
+  const gpuDensityDial = dialFromSetting("gpu-density", "Density", gpu.particleDensity, 0.3, 1, 0.01, (v) => updateGPU("particleDensity", v), (v) => `${Math.round(v * 100)}%`);
+
+  const gpuWedges: PrimaryWedge[] = useMemo(
+    () => [
+      {
+        id: "physics",
+        label: "Physics",
+        items: [
+          { id: "gpu-strength", kind: "dial", label: "Strength", dial: gpuStrengthDial },
+          { id: "gpu-turb", kind: "dial", label: "Turbulence", dial: gpuTurbDial },
+          { id: "gpu-density", kind: "dial", label: "Density", dial: gpuDensityDial },
+        ] as RingItem[],
+      },
+      {
+        id: "motion",
+        label: "Motion",
+        items: [
+          { id: "m-intensity", kind: "dial", label: "Intensity", dial: intensityDial },
+          { id: "m-speed", kind: "dial", label: "Speed", dial: speedDial },
+          { id: "gpu-orbit", kind: "dial", label: "Orbit", dial: gpuOrbitDial },
+          {
+            id: "gpu-cam-toggle",
+            kind: "action",
+            label: gpu.cameraAutoOrbit ? "Orbit On" : "Orbit Off",
+            active: gpu.cameraAutoOrbit,
+            onSelect: () => updateGPU("cameraAutoOrbit", !gpu.cameraAutoOrbit),
+          },
+        ] as RingItem[],
+      },
+      {
+        id: "visuals",
+        label: "Visuals",
+        items: [
+          { id: "gpu-bright", kind: "dial", label: "Glow", dial: gpuBrightnessDial },
+          { id: "gpu-trail", kind: "dial", label: "Trails", dial: gpuTrailDial },
+          {
+            id: "gpu-color-heat",
+            kind: "action",
+            label: "Heat Map",
+            active: gpu.colorMode === "heat",
+            onSelect: () => updateGPU("colorMode", "heat"),
+          },
+          {
+            id: "gpu-color-palette",
+            kind: "action",
+            label: "Palette",
+            active: gpu.colorMode === "palette",
+            onSelect: () => updateGPU("colorMode", "palette"),
+          },
+          {
+            id: "gpu-color-rainbow",
+            kind: "action",
+            label: "Rainbow",
+            active: gpu.colorMode === "rainbow",
+            onSelect: () => updateGPU("colorMode", "rainbow"),
+          },
+        ] as RingItem[],
+      },
+      {
+        id: "color",
+        label: "Color",
+        items: [
+          { id: "c-cycle", kind: "dial", label: "Cycle", dial: spectrumSpeedDial },
+          ...colorModeActions.slice(0, 2),
+          ...moodActions.slice(0, 1),
+        ].slice(0, 5) as RingItem[],
+      },
+      { id: "audio", label: "Audio", items: baseAudioItems },
+      { id: "settings-panel", label: "Settings" },
+    ],
+    [
+      gpuStrengthDial, gpuTurbDial, gpuDensityDial,
+      intensityDial, speedDial, gpuOrbitDial, gpu.cameraAutoOrbit,
+      gpuBrightnessDial, gpuTrailDial, gpu.colorMode,
+      spectrumSpeedDial, colorModeActions, moodActions,
+      baseAudioItems, updateGPU,
+    ],
+  );
+
   const baseWedges: PrimaryWedge[] = useMemo(
     () => [
       {
@@ -1598,7 +1721,7 @@ export function RadialSystem({
     [intensityDial, zoomDial, cycleDial, spectrumSpeedDial, glowDial, beatPunchDial],
   );
 
-  const primaryWedges = variant === "performance" ? performanceWedges : variant === "fractal" ? fractalWedges : baseWedges;
+  const primaryWedges = variant === "performance" ? performanceWedges : variant === "fractal" ? fractalWedges : variant === "gpu" ? gpuWedges : baseWedges;
 
   const focusedPrimaryId = hoverPrimaryId ?? selectedPrimaryId;
   const selectedPrimary = primaryWedges.find((wedge) => wedge.id === focusedPrimaryId) ?? null;

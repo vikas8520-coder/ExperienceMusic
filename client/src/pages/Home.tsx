@@ -1437,7 +1437,7 @@ export default function Home() {
       />
 
       {/* Right-side trays */}
-      <SlideTray label="Presets" position={0} topOffset={trayOffsets[0]} availableHeight={trayHeights[0]} onToggle={handleTrayToggle} toggleChecked={settings.presetEnabled !== false} onToggleChange={(checked) => setSettings(s => ({ ...s, presetEnabled: checked }))}>
+      <SlideTray label="Presets" position={0} topOffset={trayOffsets[0]} availableHeight={trayHeights[0]} onToggle={handleTrayToggle} defaultOpen={true} toggleChecked={settings.presetEnabled !== false} onToggleChange={(checked) => setSettings(s => ({ ...s, presetEnabled: checked }))}>
         {presetCategories.map((cat) => {
           const colors = categoryColors[cat.name];
           return (
